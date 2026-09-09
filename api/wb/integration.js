@@ -1,5 +1,5 @@
 import { authenticatedUser, db, requireOwner } from '../_telegram.js'
-import { WbError, confirmCode, openSession, requestCode, sealSession, synchronize } from '../_wb.js'
+import { WbError, confirmCode, enrichSession, openSession, requestCode, sealSession, synchronize } from '../_wb.js'
 
 export const config = { maxDuration:60 }
 
@@ -33,7 +33,8 @@ export default async function handler(req, res) {
     }
     if (action === 'confirm_code') {
       if (!current?.encrypted_session) return res.status(409).json({ error:'Сначала запросите код WB' })
-      const session = await confirmCode(openSession(current.encrypted_session), req.body?.code)
+      const baseSession = await confirmCode(openSession(current.encrypted_session), req.body?.code)
+      const session = await enrichSession(baseSession)
       await db(`wb_integrations?organization_id=eq.${organizationId}`, { method:'PATCH', prefer:'return=minimal', body:JSON.stringify({ status:'CONNECTED', encrypted_session:sealSession(session), last_error:null, updated_at:new Date().toISOString() }) })
       return res.status(200).json({ ok:true })
     }

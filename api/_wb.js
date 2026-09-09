@@ -100,11 +100,33 @@ function wbHeaders(session) {
     'X-Language':'ru',
     'X-Token':session.token,
     Origin:'https://my-pvz.wb.ru',
+    Referer:'https://my-pvz.wb.ru/',
+    'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36',
+    'Accept-Language':'ru-RU,ru;q=0.9',
   }
 }
 
 async function wb(session, url, options = {}) {
   return json(url, { ...options, headers:{ ...wbHeaders(session), ...(options.headers || {}) } })
+}
+
+export async function enrichSession(session) {
+  const organizations = await wb(session, 'https://r-point.wb.ru/auth-api/v3/my-orgs')
+  const organization = list(organizations)[0]
+  if (!organization?.id) throw new WbError('В кабинете WB не найдена доступная организация', 403)
+  const enriched = await wb(session, 'https://r-point.wb.ru/auth-api/v3/enrich', {
+    method:'POST', body:{ org_id:organization.id, position:organization.position },
+  })
+  const token = enriched?.access?.token
+  if (!token) throw new WbError('WB не выдал доступ к выбранной организации', 502)
+  return {
+    ...session,
+    token,
+    clientId:tokenClientId(token),
+    refreshToken:enriched?.refresh?.token || null,
+    wbOrganizationId:organization.id,
+    wbOrganizationName:organization.org_name || null,
+  }
 }
 
 const list = value => Array.isArray(value) ? value : []
