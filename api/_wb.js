@@ -4,6 +4,23 @@ import { db, decryptToken, encryptToken } from './_telegram.js'
 const AUTH_ORIGIN = 'https://auth-my-pvz.wb.ru'
 const APP_TYPE = 'prod-my-pvz'
 const APP_VERSION = process.env.WB_APP_VERSION || 'v0.0.59'
+const WB_ORIGIN = 'https://my-pvz.wb.ru'
+const BROWSER_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36'
+
+const browserHeaders = () => ({
+  Origin:WB_ORIGIN,
+  Referer:`${WB_ORIGIN}/`,
+  'User-Agent':BROWSER_USER_AGENT,
+  'Accept-Language':'ru-RU,ru;q=0.9',
+  'Cache-Control':'no-cache',
+  Pragma:'no-cache',
+  'Sec-CH-UA':'"Chromium";v="152", "Not?A_Brand";v="24", "Google Chrome";v="152"',
+  'Sec-CH-UA-Mobile':'?0',
+  'Sec-CH-UA-Platform':'"Windows"',
+  'Sec-Fetch-Dest':'empty',
+  'Sec-Fetch-Mode':'cors',
+  'Sec-Fetch-Site':'same-site',
+})
 
 export class WbError extends Error {
   constructor(message, status = 500, data = null) { super(message); this.status = status; this.data = data }
@@ -23,6 +40,7 @@ function message(data, fallback) {
 
 function authHeaders(session) {
   return {
+    ...browserHeaders(),
     deviceId:session.deviceUuid,
     'wb-appversion':APP_VERSION,
     'X-Language':'ru',
@@ -94,15 +112,12 @@ export const openSession = payload => JSON.parse(decryptToken(payload))
 
 function wbHeaders(session) {
   return {
+    ...browserHeaders(),
     'X-App-Type':APP_TYPE,
     'X-App-Version':APP_VERSION,
     'X-Client-Id':String(session.clientId),
     'X-Language':'ru',
     'X-Token':session.token,
-    Origin:'https://my-pvz.wb.ru',
-    Referer:'https://my-pvz.wb.ru/',
-    'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/140.0.0.0 Safari/537.36',
-    'Accept-Language':'ru-RU,ru;q=0.9',
   }
 }
 
