@@ -47,6 +47,27 @@ function authHeaders(session) {
   }
 }
 
+function powChallenge(value) {
+  const match = String(value || '').match(/challenge=([^;]+)/i)
+  return match?.[1] || null
+}
+
+function solvePow(challenge) {
+  const parts = String(challenge).split(',')
+  const difficulty = Number(parts[0])
+  const salt = parts.slice(1).join(',')
+  if (!Number.isInteger(difficulty) || difficulty < 0 || difficulty > 30 || !salt) throw new WbError('WB вернул некорректную проверку X-Pow', 502)
+  const fullNibbles = Math.floor(difficulty / 4), remainingBits = difficulty % 4
+  const maxAttempts = 2 ** (difficulty + 6)
+  for (let nonce = 0; nonce < maxAttempts; nonce += 1) {
+    const digest = crypto.createHash('sha256').update(`${salt}${nonce}`).digest('hex')
+    const fullZeroes = digest.startsWith('0'.repeat(fullNibbles))
+    const nextNibble = Number.parseInt(digest[fullNibbles] || '0', 16)
+    if (fullZeroes && (remainingBits === 0 || nextNibble < 2 ** (4 - remainingBits))) return nonce
+  }
+  throw new WbError('Не удалось пройти проверку безопасности WB', 502)
+}
+
 function authPayload(result, fallback) {
   if (Number(result?.result) === 4) throw new WbError('Код уже отправлен. Подождите минуту перед повторной отправкой.', 429, result)
   if (Number(result?.result) === 6) throw new WbError('Неверный код WB. Проверьте цифры и попробуйте ещё раз.', 400, result)
@@ -75,6 +96,17 @@ async function json(url, { method = 'GET', headers = {}, body } = {}) {
   return data
 }
 
+async function authAttempt(session, body, challenge = null) {
+  const headers = authHeaders(session)
+  if (challenge) headers['X-Pow'] = `status=valid; nonce=${solvePow(challenge)}; challenge=${challenge}`
+  const response = await fetch(`${AUTH_ORIGIN}/v2/auth`, {
+    method:'POST', headers:{ Accept:'application/json', 'Content-Type':'application/json', ...headers },
+    body:JSON.stringify(body), signal:AbortSignal.timeout(30000),
+  })
+  const data = await response.json().catch(() => null)
+  return { response, data, challenge:powChallenge(response.headers.get('x-pow')) }
+}
+
 export async function requestCode(phone, previous = {}) {
   const normalized = normalizePhone(phone)
   const session = { phone:normalized, deviceUuid:previous.deviceUuid || crypto.randomUUID() }
@@ -91,11 +123,13 @@ export async function requestCode(phone, previous = {}) {
 export async function confirmCode(session, code) {
   const digits = String(code || '').replace(/\D/g, '')
   if (!session?.sticker || !/^\d{6}$/.test(digits)) throw new WbError('Введите 6-значный код из сообщения WB', 400)
-  const result = await json(`${AUTH_ORIGIN}/v2/auth`, {
-    method:'POST',
-    headers:authHeaders(session),
-    body:{ code:Number(digits), sticker:session.sticker },
-  })
+  const body = { code:Number(digits), sticker:session.sticker }
+  let attempt = await authAttempt(session, body)
+  if (attempt.challenge && (!attempt.response.ok || Number(attempt.data?.result) !== 0 || !attempt.data?.payload?.access_token)) {
+    attempt = await authAttempt(session, body, attempt.challenge)
+  }
+  if (!attempt.response.ok) throw new WbError(message(attempt.data, `WB вернул HTTP ${attempt.response.status}`), attempt.response.status, attempt.data)
+  const result = attempt.data
   const payload = authPayload(result, 'WB не подтвердил код')
   const accessToken = payload.access_token || payload.accessToken
   if (!accessToken) throw new WbError('WB не выдал рабочую сессию', 502)
@@ -118,6 +152,7 @@ function wbHeaders(session) {
     'X-Client-Id':String(session.clientId),
     'X-Language':'ru',
     'X-Token':session.token,
+    Deviceid:session.deviceUuid,
   }
 }
 
