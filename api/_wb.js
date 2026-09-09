@@ -79,13 +79,13 @@ function authPayload(result, fallback, stage) {
   return result.payload
 }
 
+function tokenClaims(token) {
+  try { return JSON.parse(Buffer.from(String(token).split('.')[1], 'base64url').toString('utf8')) } catch { return null }
+}
+
 function tokenClientId(token) {
-  try {
-    const payload = JSON.parse(Buffer.from(String(token).split('.')[1], 'base64url').toString('utf8'))
-    const value = String(payload.client_id || '').trim()
-    if (value) return value
-  } catch { /* checked below */ }
-  return 'my-pvz'
+  const value = String(tokenClaims(token)?.client_id || '').trim()
+  return value || 'my-pvz'
 }
 
 async function json(url, { method = 'GET', headers = {}, body, stage } = {}) {
@@ -137,6 +137,14 @@ export async function confirmCode(session, code) {
   const payload = authPayload(result, 'WB не подтвердил код', 'подтверждение кода')
   const accessToken = payload.access_token || payload.accessToken
   if (!accessToken) throw new WbError('WB не выдал рабочую сессию', 502, result, 'подтверждение кода')
+  // Какой именно токен отдал WB — единственный способ понять, почему его не принимает r-point.
+  const claims = tokenClaims(accessToken)
+  console.error('WB auth payload', JSON.stringify({
+    payloadKeys:Object.keys(payload),
+    claimKeys:claims ? Object.keys(claims) : null,
+    client_id:claims?.client_id ?? null, aud:claims?.aud ?? null, iss:claims?.iss ?? null,
+    exp:claims?.exp ?? null, user_id:claims?.user_id ?? claims?.sub ?? null,
+  }))
   return {
     phone:session.phone,
     deviceUuid:session.deviceUuid,
