@@ -11,7 +11,7 @@ const browserHeaders = () => ({
   Origin:WB_ORIGIN,
   Referer:`${WB_ORIGIN}/`,
   'User-Agent':BROWSER_USER_AGENT,
-  'Accept-Language':'ru-RU,ru;q=0.9',
+  'Accept-Language':'ru-RU,ru;q=0.9,en-US;q=0.8,en;q=0.7',
   'Cache-Control':'no-cache',
   Pragma:'no-cache',
   'Sec-CH-UA':'"Chromium";v="152", "Not?A_Brand";v="24", "Google Chrome";v="152"',
@@ -156,6 +156,7 @@ export async function confirmCode(session, code) {
 export const sealSession = session => encryptToken(JSON.stringify(session))
 export const openSession = payload => JSON.parse(decryptToken(payload))
 
+/** Ровно тот набор, что шлёт кабинет: deviceId уходит только на auth-хост, дальше его нет. */
 function wbHeaders(session) {
   return {
     ...browserHeaders(),
@@ -164,7 +165,6 @@ function wbHeaders(session) {
     'X-Client-Id':String(session.clientId),
     'X-Language':'ru',
     'X-Token':session.token,
-    Deviceid:session.deviceUuid,
   }
 }
 
@@ -173,18 +173,11 @@ async function wb(session, url, options = {}) {
 }
 
 /**
- * Выбор организации через r-point — единственный шаг на чужом для my-pvz хосте.
- * Если он не проходит, работаем базовым токеном: эндпоинты ПВЗ могут принять его как есть.
+ * Обязательный шаг: базовый токен из /v2/auth не несёт контекста организации,
+ * и без него pickpoint-ext-delivery отвечает «Нет доступа» (проверено 2026-09-09).
+ * Сейчас блокируется здесь: r-point отдаёт 401 «validation key is invalid»,
+ * хотя тот же токен на pickpoint проходит проверку подписи.
  */
-export async function enrichSessionIfPossible(session) {
-  try {
-    return await enrichSession(session)
-  } catch (error) {
-    console.error('WB enrich пропущен', error.message)
-    return session
-  }
-}
-
 export async function enrichSession(session) {
   const organizations = await wb(session, 'https://r-point.wb.ru/auth-api/v3/my-orgs', { stage:'список организаций' })
   const organization = list(organizations)[0]
@@ -210,12 +203,13 @@ const dateOrNow = value => value && !Number.isNaN(Date.parse(value)) ? new Date(
 const cleanPhone = value => value ? `+${String(value).replace(/\D/g, '')}` : null
 const norm = value => String(value || '').trim().toLocaleLowerCase('ru-RU')
 
+/** Кабинет ходит в v2 с page/page_size и читает offices, а не data. */
 async function allOffices(session) {
-  const result = [], limit = 100
-  for (let offset = 0; offset < 10000; offset += limit) {
-    const data = await wb(session, `https://pickpoint-ext-delivery.wb.ru/v3/my-pvz/offices?limit=${limit}&offset=${offset}`)
-    const page = list(data?.data); result.push(...page)
-    if (page.length < limit || result.length >= Number(data?.total || 0)) break
+  const result = [], pageSize = 100
+  for (let page = 1; page <= 100; page += 1) {
+    const data = await wb(session, `https://pickpoint-ext-delivery.wb.ru/v2/my-pvz/offices?page=${page}&page_size=${pageSize}`)
+    const items = list(data?.offices); result.push(...items)
+    if (items.length < pageSize || result.length >= Number(data?.total || 0)) break
   }
   return result
 }

@@ -1,5 +1,5 @@
 import { db, decryptToken, safeEqual, secretHash, telegram } from '../_telegram.js'
-import { WbError, confirmCode, enrichSessionIfPossible, openSession, requestCode, sealSession, synchronize } from '../_wb.js'
+import { WbError, confirmCode, enrichSession, openSession, requestCode, sealSession, synchronize } from '../_wb.js'
 
 /** Синхронизация WB обходит десятки эндпоинтов и не укладывается в дефолтные 10 секунд. */
 export const config = { maxDuration: 60 }
@@ -105,7 +105,7 @@ async function handleConnected(context, chat, text) {
   if (state.step === 'wb_code') {
     try { await telegram(context.botToken, 'deleteMessage', { chat_id:chat.telegram_chat_id, message_id:chat.current_message_id }) } catch { /* Telegram may not permit deletion */ }
     const baseSession = await confirmCode(openSession(state.encryptedSession), text)
-    const session = await enrichSessionIfPossible(baseSession)
+    const session = await enrichSession(baseSession)
     const now = new Date().toISOString()
     await db('wb_integrations?on_conflict=organization_id', {
       method:'POST', prefer:'resolution=merge-duplicates,return=minimal',
