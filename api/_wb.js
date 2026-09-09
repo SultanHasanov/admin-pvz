@@ -48,7 +48,32 @@ function authHeaders(session) {
     deviceId:session.deviceUuid,
     'wb-appversion':APP_VERSION,
     'X-Language':'ru',
+    ...wbCookieHeaders(session),
   }
+}
+
+const WB_COOKIE_NAMES = new Set(['wbx-validation-key', 'wbx-refresh'])
+
+function wbCookieHeaders(session) {
+  const cookies = session?.wbCookies || {}
+  const value = Object.entries(cookies)
+    .filter(([name, cookie]) => WB_COOKIE_NAMES.has(name) && cookie)
+    .map(([name, cookie]) => `${name}=${cookie}`)
+    .join('; ')
+  return value ? { Cookie:value } : {}
+}
+
+function captureWbCookies(session, response) {
+  const values = typeof response.headers.getSetCookie === 'function'
+    ? response.headers.getSetCookie()
+    : [response.headers.get('set-cookie')].filter(Boolean)
+  const cookies = { ...(session.wbCookies || {}) }
+  for (const value of values) {
+    const pattern = /(?:^|,\s*|;\s*)(wbx-(?:validation-key|refresh))=([^;,\s]+)/gi
+    let match
+    while ((match = pattern.exec(value)) !== null) cookies[match[1].toLowerCase()] = match[2]
+  }
+  session.wbCookies = cookies
 }
 
 function powChallenge(value) {
@@ -88,13 +113,14 @@ function tokenClientId(token) {
   return value || 'my-pvz'
 }
 
-async function json(url, { method = 'GET', headers = {}, body, stage } = {}) {
+async function json(url, { method = 'GET', headers = {}, body, stage, onResponse } = {}) {
   const response = await fetch(url, {
     method,
     headers: { Accept:'application/json', ...headers, ...(body === undefined ? {} : { 'Content-Type':'application/json' }) },
     body: body === undefined ? undefined : JSON.stringify(body),
     signal: AbortSignal.timeout(30000),
   })
+  if (onResponse) onResponse(response)
   const data = await response.json().catch(() => null)
   if (!response.ok) throw new WbError(message(data, `WB вернул HTTP ${response.status}`), response.status, data, stage || new URL(url).pathname)
   return data
@@ -105,16 +131,11 @@ async function json(url, { method = 'GET', headers = {}, body, stage } = {}) {
  * (проверено — из UA, deviceId и session_id он не выводится), поэтому единственное,
  * что может расходиться между выпуском токена и его проверкой, — исходящий адрес.
  */
-async function outboundIp(label) {
+async function outboundIp() {
   try {
     const response = await fetch('https://api.ipify.org?format=json', { signal:AbortSignal.timeout(5000) })
-    const data = await response.json()
-    console.error('WB исходящий IP', label, data?.ip)
-    return data?.ip || null
-  } catch (error) {
-    console.error('WB исходящий IP', label, 'не определён:', error.message)
-    return null
-  }
+    return (await response.json())?.ip || null
+  } catch { return null }
 }
 
 async function authAttempt(session, body, challenge = null) {
@@ -124,6 +145,7 @@ async function authAttempt(session, body, challenge = null) {
     method:'POST', headers:{ Accept:'application/json', 'Content-Type':'application/json', ...headers },
     body:JSON.stringify(body), signal:AbortSignal.timeout(30000),
   })
+  captureWbCookies(session, response)
   const data = await response.json().catch(() => null)
   return { response, data, challenge:powChallenge(response.headers.get('x-pow')) }
 }
@@ -135,6 +157,7 @@ export async function requestCode(phone, previous = {}) {
     method:'POST',
     headers:authHeaders(session),
     body:{ captcha_token:'', phone_number:normalized, save_push:true },
+    onResponse:response => captureWbCookies(session, response),
   })
   const payload = authPayload(result, 'WB не отправил код подтверждения', 'запрос кода')
   if (!payload.sticker) throw new WbError('WB не выдал токен подтверждения', 502, result, 'запрос кода')
@@ -156,7 +179,6 @@ export async function confirmCode(session, code) {
   if (!accessToken) throw new WbError('WB не выдал рабочую сессию', 502, result, 'подтверждение кода')
   // Какой именно токен отдал WB — единственный способ понять, почему его не принимает r-point.
   const claims = tokenClaims(accessToken)
-  await outboundIp('при выдаче токена')
   console.error('WB auth payload', JSON.stringify({
     payloadKeys:Object.keys(payload),
     claimKeys:claims ? Object.keys(claims) : null,
@@ -168,6 +190,7 @@ export async function confirmCode(session, code) {
     deviceUuid:session.deviceUuid,
     token:accessToken,
     clientId:tokenClientId(accessToken),
+    issuedFromIp:await outboundIp(),
   }
 }
 
@@ -183,6 +206,7 @@ function wbHeaders(session) {
     'X-Client-Id':String(session.clientId),
     'X-Language':'ru',
     'X-Token':session.token,
+    ...wbCookieHeaders(session),
   }
 }
 
@@ -197,9 +221,12 @@ async function wb(session, url, options = {}) {
  * хотя тот же токен на pickpoint проходит проверку подписи.
  */
 export async function enrichSession(session) {
-  await outboundIp('перед my-orgs')
+  const currentIp = await outboundIp()
+  console.error(`WB IP: выдача=${session.issuedFromIp || '?'} сейчас=${currentIp || '?'} совпадают=${session.issuedFromIp && session.issuedFromIp === currentIp ? 'да' : 'НЕТ'}`)
   const organizations = await wb(session, 'https://r-point.wb.ru/auth-api/v3/my-orgs', { stage:'список организаций' })
-  const organization = list(organizations)[0]
+  const organization = Array.isArray(organizations)
+    ? organizations[0]
+    : (Array.isArray(organizations?.organizations) ? organizations.organizations[0] : organizations)
   if (!organization?.id) throw new WbError('В кабинете WB не найдена доступная организация', 403, organizations, 'список организаций')
   const enriched = await wb(session, 'https://r-point.wb.ru/auth-api/v3/enrich', {
     method:'POST', body:{ org_id:organization.id, position:organization.position }, stage:'выбор организации',
