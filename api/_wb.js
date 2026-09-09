@@ -113,6 +113,12 @@ function tokenClientId(token) {
   return value || 'my-pvz'
 }
 
+function ensureValidationCookie(session, token) {
+  const validationKey = String(tokenClaims(token)?.validation_key || '').trim()
+  if (!validationKey || session.wbCookies?.['wbx-validation-key']) return
+  session.wbCookies = { ...(session.wbCookies || {}), 'wbx-validation-key':validationKey }
+}
+
 async function json(url, { method = 'GET', headers = {}, body, stage, onResponse } = {}) {
   const response = await fetch(url, {
     method,
@@ -177,6 +183,7 @@ export async function confirmCode(session, code) {
   const payload = authPayload(result, 'WB не подтвердил код', 'подтверждение кода')
   const accessToken = payload.access_token || payload.accessToken
   if (!accessToken) throw new WbError('WB не выдал рабочую сессию', 502, result, 'подтверждение кода')
+  ensureValidationCookie(session, accessToken)
   // Какой именно токен отдал WB — единственный способ понять, почему его не принимает r-point.
   const claims = tokenClaims(accessToken)
   console.error('WB auth payload', JSON.stringify({
@@ -184,6 +191,7 @@ export async function confirmCode(session, code) {
     claimKeys:claims ? Object.keys(claims) : null,
     client_id:claims?.client_id ?? null, aud:claims?.aud ?? null, iss:claims?.iss ?? null,
     exp:claims?.exp ?? null, user_id:claims?.user_id ?? claims?.sub ?? null,
+    has_validation_cookie:Boolean(session.wbCookies?.['wbx-validation-key']),
   }))
   return {
     phone:session.phone,
@@ -222,7 +230,13 @@ async function wb(session, url, options = {}) {
  */
 export async function enrichSession(session) {
   const currentIp = await outboundIp()
-  console.error(`WB IP: выдача=${session.issuedFromIp || '?'} сейчас=${currentIp || '?'} совпадают=${session.issuedFromIp && session.issuedFromIp === currentIp ? 'да' : 'НЕТ'}`)
+  console.error('WB auth context', JSON.stringify({
+    issuedIp:session.issuedFromIp || null,
+    currentIp:currentIp || null,
+    sameIp:Boolean(session.issuedFromIp && session.issuedFromIp === currentIp),
+    hasValidationCookie:Boolean(session.wbCookies?.['wbx-validation-key']),
+    hasRefreshCookie:Boolean(session.wbCookies?.['wbx-refresh']),
+  }))
   const organizations = await wb(session, 'https://r-point.wb.ru/auth-api/v3/my-orgs', { stage:'список организаций' })
   const organization = Array.isArray(organizations)
     ? organizations[0]
