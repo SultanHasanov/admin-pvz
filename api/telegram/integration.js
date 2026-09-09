@@ -24,8 +24,15 @@ export default async function handler(req, res) {
     }
 
     const botToken = tokenFrom(req.body)
-    if (!/^\d{5,}:[A-Za-z0-9_-]{20,}$/.test(botToken)) return res.status(400).json({ error:'Token бота имеет неверный формат' })
-    const bot = await telegram(botToken, 'getMe')
+    if (!botToken || /\s/.test(botToken) || !botToken.includes(':')) {
+      return res.status(400).json({ error:'Вставьте полный токен от BotFather в формате 123456789:AA...' })
+    }
+    let bot
+    try {
+      bot = await telegram(botToken, 'getMe')
+    } catch (error) {
+      return res.status(400).json({ error:error.message || 'Telegram не принял токен. Получите новый токен у BotFather.' })
+    }
     const now = new Date().toISOString()
     let integration = current
     if (integration) {
