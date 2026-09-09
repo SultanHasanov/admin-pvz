@@ -172,6 +172,19 @@ async function wb(session, url, options = {}) {
   return json(url, { ...options, headers:{ ...wbHeaders(session), ...(options.headers || {}) } })
 }
 
+/**
+ * Выбор организации через r-point — единственный шаг на чужом для my-pvz хосте.
+ * Если он не проходит, работаем базовым токеном: эндпоинты ПВЗ могут принять его как есть.
+ */
+export async function enrichSessionIfPossible(session) {
+  try {
+    return await enrichSession(session)
+  } catch (error) {
+    console.error('WB enrich пропущен', error.message)
+    return session
+  }
+}
+
 export async function enrichSession(session) {
   const organizations = await wb(session, 'https://r-point.wb.ru/auth-api/v3/my-orgs', { stage:'список организаций' })
   const organization = list(organizations)[0]
