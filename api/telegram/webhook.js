@@ -1,5 +1,8 @@
 import { db, decryptToken, safeEqual, secretHash, telegram } from '../_telegram.js'
-import { confirmCode, enrichSession, openSession, requestCode, sealSession, synchronize } from '../_wb.js'
+import { WbError, confirmCode, enrichSession, openSession, requestCode, sealSession, synchronize } from '../_wb.js'
+
+/** Синхронизация WB обходит десятки эндпоинтов и не укладывается в дефолтные 10 секунд. */
+export const config = { maxDuration: 60 }
 
 const mainKeyboard = [[{ text: '🔐 Подключить WB' }, { text: '🔄 Обновить данные WB' }], [{ text: '➕ Удержание' }, { text: '➕ Расход' }], [{ text: '👥 Сотрудники' }, { text: '📅 Смены' }], [{ text: '🔄 Главное меню' }]]
 const money = text => { const value = Number(String(text).replace(',', '.').replace(/[^\d.]/g, '')); return Number.isFinite(value) && value > 0 ? Math.round(value * 100) : null }
@@ -189,7 +192,16 @@ export default async function handler(req, res) {
     const chat = await getChat(context.id, message.chat.id)
     if (!chat) { await send(context.botToken, message.chat.id, 'Сначала создайте код подключения в админке и отправьте /start КОД.'); return res.status(200).json({ ok: true }) }
     chat.current_message_id = message.message_id
-    await handleConnected(context, chat, text)
+    try {
+      await handleConnected(context, chat, text)
+    } catch (error) {
+      // Пятисотка заставила бы Telegram ретраить апдейт и подвесить очередь чата,
+      // поэтому сбой сценария объясняем пользователю и подтверждаем доставку.
+      console.error('telegram scenario', error)
+      await setState(chat.id, { step: 'idle' }).catch(() => null)
+      const reason = error instanceof WbError ? error.message : 'Не удалось выполнить действие. Попробуйте ещё раз.'
+      await send(context.botToken, chat.telegram_chat_id, reason).catch(() => null)
+    }
     return res.status(200).json({ ok: true })
   } catch (error) {
     console.error('telegram webhook', error.message)
