@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, Pencil, RotateCcw } from 'lucide-react'
+import { Archive, Pencil, RefreshCw, RotateCcw, Unplug } from 'lucide-react'
 import type { ModuleKey } from '../entities/types'
 import { ErrorNote, Field, Loading, Title } from '../shared/ui'
 import { listEnabledModules, moduleTitles, getTaxSettings, saveTaxSettings, setModuleEnabled } from '../services/settings'
 import { getOrganization, renameOrganization } from '../services/org'
 import { listExpenseCategories, renameExpenseCategory, setExpenseCategoryArchived } from '../services/finance'
+import { confirmWbCode, disconnectWb, getWbStatus, requestWbCode, syncWb } from '../services/wb'
 
 const modules = Object.keys(moduleTitles) as ModuleKey[]
 
@@ -13,10 +14,60 @@ export function SettingsPage() {
   return <>
     <Title title="Настройки" subtitle="Организация, налог, модули и категории расходов"/>
     <div className="grid gap-4 sm:gap-5 lg:grid-cols-2">
-      <div className="grid gap-4 sm:gap-5"><OrganizationCard/><TaxCard/></div>
+      <div className="grid gap-4 sm:gap-5"><OrganizationCard/><WbIntegrationCard/><TaxCard/></div>
       <div className="grid gap-4 sm:gap-5"><ModulesCard/><CategoriesCard/></div>
     </div>
   </>
+}
+
+function WbIntegrationCard() {
+  const queryClient = useQueryClient()
+  const status = useQuery({ queryKey:['wb-integration'], queryFn:getWbStatus })
+  const [phone, setPhone] = useState('')
+  const [code, setCode] = useState('')
+  const [result, setResult] = useState('')
+  const refresh = () => { void queryClient.invalidateQueries({ queryKey:['wb-integration'] }) }
+  const reloadImported = () => {
+    for (const key of ['points','employees','deductions','salary']) void queryClient.invalidateQueries({ queryKey:[key] })
+  }
+  const request = useMutation({ mutationFn:() => requestWbCode(phone), onSuccess:() => { setCode(''); refresh() } })
+  const confirm = useMutation({ mutationFn:() => confirmWbCode(code), onSuccess:() => { setCode(''); refresh() } })
+  const sync = useMutation({
+    mutationFn:syncWb,
+    onSuccess:data => { setResult(`Загружено: ПВЗ — ${data.points}, сотрудников — ${data.employees}, удержаний — ${data.deductions}.`); refresh(); reloadImported() },
+  })
+  const disconnect = useMutation({ mutationFn:disconnectWb, onSuccess:() => { setResult(''); refresh() } })
+  const connected = status.data?.status === 'CONNECTED'
+  const waiting = status.data?.status === 'AWAIT_CODE'
+  const error = status.error ?? request.error ?? confirm.error ?? sync.error ?? disconnect.error
+
+  return <section className="card p-4 sm:p-5">
+    <div className="flex items-start justify-between gap-3">
+      <div><h2 className="font-semibold">Кабинет WB ПВЗ</h2><p className="mt-1 text-sm text-slate-500">Загружает ваши ПВЗ, сотрудников и удержания с привязкой к ответственному сотруднику.</p></div>
+      <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${connected ? 'bg-green-100 text-green-700' : waiting ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
+        {connected ? 'Подключён' : waiting ? 'Ожидается код' : 'Не подключён'}
+      </span>
+    </div>
+
+    {!connected && <div className="mt-4 grid gap-3">
+      <Field label="Телефон владельца WB"><input className="field" inputMode="tel" placeholder="+7 900 000-00-00" value={phone} onChange={event => setPhone(event.target.value)}/></Field>
+      <button className="btn btn-primary w-full sm:w-auto sm:justify-self-start" disabled={request.isPending || !phone.trim()} onClick={() => request.mutate()}>{request.isPending ? 'Отправляем код…' : waiting ? 'Отправить код ещё раз' : 'Получить код WB'}</button>
+      {waiting && <form className="grid gap-3" onSubmit={event => { event.preventDefault(); confirm.mutate() }}>
+        <Field label={`Код из сообщения WB${status.data?.phoneHint ? ` (${status.data.phoneHint})` : ''}`}><input className="field" required inputMode="numeric" autoComplete="one-time-code" value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 8))}/></Field>
+        <button className="btn btn-primary w-full sm:w-auto sm:justify-self-start" disabled={confirm.isPending || code.length < 4}>{confirm.isPending ? 'Проверяем…' : 'Подключить кабинет'}</button>
+      </form>}
+    </div>}
+
+    {connected && <div className="mt-4">
+      <div className="flex flex-wrap gap-2">
+        <button className="btn btn-primary" disabled={sync.isPending} onClick={() => sync.mutate()}><RefreshCw size={16} className={sync.isPending ? 'animate-spin' : ''}/>{sync.isPending ? 'Загружаем…' : 'Обновить данные WB'}</button>
+        <button className="btn" disabled={disconnect.isPending} onClick={() => disconnect.mutate()}><Unplug size={16}/>Отключить</button>
+      </div>
+      {status.data?.lastSyncAt && <p className="mt-2 text-xs text-slate-500">Последнее обновление: {new Date(status.data.lastSyncAt).toLocaleString('ru-RU')}</p>}
+      {result && <p className="mt-3 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">{result}</p>}
+    </div>}
+    <ErrorNote error={error}/>
+  </section>
 }
 
 function OrganizationCard() {

@@ -36,11 +36,26 @@ export function DeductionsPage() {
   const remove = useMutation({ mutationFn: deleteDeduction, onSuccess: invalidate })
 
   const total = (deductions.data ?? []).reduce((sum, item) => sum + item.amountKopecks, 0)
+  const byEmployee = [...(deductions.data ?? []).reduce((groups, item) => {
+    if (!item.employeeId || item.status === 'CANCELLED_BY_WB') return groups
+    const current = groups.get(item.employeeId) ?? { employeeId:item.employeeId, count:0, amount:0 }
+    current.count += 1
+    current.amount += item.amountKopecks
+    groups.set(item.employeeId, current)
+    return groups
+  }, new Map<string, { employeeId:string; count:number; amount:number }>()).values()].sort((a, b) => b.amount - a.amount)
 
   return <>
     <Title title="Удержания WB" subtitle={`${monthLabel(month)} · ${pointId ? pointName(pointId) : 'Все ПВЗ'}`}>
       <button className="btn btn-primary" onClick={() => setForm({})} disabled={!points.length}><Plus size={16}/>Добавить удержание</button>
     </Title>
+
+    {byEmployee.length > 0 && <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {byEmployee.map(item => <div key={item.employeeId} className="card p-4">
+        <p className="truncate text-sm text-slate-500">{nameOf(item.employeeId)}</p>
+        <div className="mt-1 flex items-end justify-between gap-3"><b className="text-lg">{rubles(item.amount)}</b><span className="text-xs text-slate-500">{item.count} шт.</span></div>
+      </div>)}
+    </div>}
 
     <div className="card overflow-hidden">
       {deductions.isLoading ? <Loading/> : !deductions.data?.length ? <EmptyState text="За этот месяц удержаний нет."/>
