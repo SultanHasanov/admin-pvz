@@ -23,7 +23,11 @@ const browserHeaders = () => ({
 })
 
 export class WbError extends Error {
-  constructor(message, status = 500, data = null) { super(message); this.status = status; this.data = data }
+  constructor(message, status = 500, data = null, stage = null) {
+    super(stage ? `${message} (шаг: ${stage})` : message)
+    this.status = status; this.data = data; this.stage = stage
+    if (stage) console.error('WB', stage, status, JSON.stringify(data ?? null).slice(0, 600))
+  }
 }
 
 const normalizePhone = value => {
@@ -68,10 +72,10 @@ function solvePow(challenge) {
   throw new WbError('Не удалось пройти проверку безопасности WB', 502)
 }
 
-function authPayload(result, fallback) {
-  if (Number(result?.result) === 4) throw new WbError('Код уже отправлен. Подождите минуту перед повторной отправкой.', 429, result)
-  if (Number(result?.result) === 6) throw new WbError('Неверный код WB. Проверьте цифры и попробуйте ещё раз.', 400, result)
-  if (Number(result?.result) !== 0 || !result?.payload) throw new WbError(message(result, fallback), 400, result)
+function authPayload(result, fallback, stage) {
+  if (Number(result?.result) === 4) throw new WbError('Код уже отправлен. Подождите минуту перед повторной отправкой.', 429, result, stage)
+  if (Number(result?.result) === 6) throw new WbError('Неверный код WB. Проверьте цифры и попробуйте ещё раз.', 400, result, stage)
+  if (Number(result?.result) !== 0 || !result?.payload) throw new WbError(message(result, fallback), 400, result, stage)
   return result.payload
 }
 
@@ -84,7 +88,7 @@ function tokenClientId(token) {
   return 'my-pvz'
 }
 
-async function json(url, { method = 'GET', headers = {}, body } = {}) {
+async function json(url, { method = 'GET', headers = {}, body, stage } = {}) {
   const response = await fetch(url, {
     method,
     headers: { Accept:'application/json', ...headers, ...(body === undefined ? {} : { 'Content-Type':'application/json' }) },
@@ -92,7 +96,7 @@ async function json(url, { method = 'GET', headers = {}, body } = {}) {
     signal: AbortSignal.timeout(30000),
   })
   const data = await response.json().catch(() => null)
-  if (!response.ok) throw new WbError(message(data, `WB вернул HTTP ${response.status}`), response.status, data)
+  if (!response.ok) throw new WbError(message(data, `WB вернул HTTP ${response.status}`), response.status, data, stage || new URL(url).pathname)
   return data
 }
 
@@ -115,8 +119,8 @@ export async function requestCode(phone, previous = {}) {
     headers:authHeaders(session),
     body:{ captcha_token:'', phone_number:normalized, save_push:true },
   })
-  const payload = authPayload(result, 'WB не отправил код подтверждения')
-  if (!payload.sticker) throw new WbError('WB не выдал токен подтверждения', 502)
+  const payload = authPayload(result, 'WB не отправил код подтверждения', 'запрос кода')
+  if (!payload.sticker) throw new WbError('WB не выдал токен подтверждения', 502, result, 'запрос кода')
   return { ...session, sticker:payload.sticker, codeLength:6 }
 }
 
@@ -128,11 +132,11 @@ export async function confirmCode(session, code) {
   if (attempt.challenge && (!attempt.response.ok || Number(attempt.data?.result) !== 0 || !attempt.data?.payload?.access_token)) {
     attempt = await authAttempt(session, body, attempt.challenge)
   }
-  if (!attempt.response.ok) throw new WbError(message(attempt.data, `WB вернул HTTP ${attempt.response.status}`), attempt.response.status, attempt.data)
+  if (!attempt.response.ok) throw new WbError(message(attempt.data, `WB вернул HTTP ${attempt.response.status}`), attempt.response.status, attempt.data, 'подтверждение кода')
   const result = attempt.data
-  const payload = authPayload(result, 'WB не подтвердил код')
+  const payload = authPayload(result, 'WB не подтвердил код', 'подтверждение кода')
   const accessToken = payload.access_token || payload.accessToken
-  if (!accessToken) throw new WbError('WB не выдал рабочую сессию', 502)
+  if (!accessToken) throw new WbError('WB не выдал рабочую сессию', 502, result, 'подтверждение кода')
   return {
     phone:session.phone,
     deviceUuid:session.deviceUuid,
@@ -161,14 +165,14 @@ async function wb(session, url, options = {}) {
 }
 
 export async function enrichSession(session) {
-  const organizations = await wb(session, 'https://r-point.wb.ru/auth-api/v3/my-orgs')
+  const organizations = await wb(session, 'https://r-point.wb.ru/auth-api/v3/my-orgs', { stage:'список организаций' })
   const organization = list(organizations)[0]
-  if (!organization?.id) throw new WbError('В кабинете WB не найдена доступная организация', 403)
+  if (!organization?.id) throw new WbError('В кабинете WB не найдена доступная организация', 403, organizations, 'список организаций')
   const enriched = await wb(session, 'https://r-point.wb.ru/auth-api/v3/enrich', {
-    method:'POST', body:{ org_id:organization.id, position:organization.position },
+    method:'POST', body:{ org_id:organization.id, position:organization.position }, stage:'выбор организации',
   })
   const token = enriched?.access?.token
-  if (!token) throw new WbError('WB не выдал доступ к выбранной организации', 502)
+  if (!token) throw new WbError('WB не выдал доступ к выбранной организации', 502, enriched, 'выбор организации')
   return {
     ...session,
     token,
