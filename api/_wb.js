@@ -100,6 +100,23 @@ async function json(url, { method = 'GET', headers = {}, body, stage } = {}) {
   return data
 }
 
+/**
+ * Диагностика: validation_key считается на стороне WB с серверным секретом
+ * (проверено — из UA, deviceId и session_id он не выводится), поэтому единственное,
+ * что может расходиться между выпуском токена и его проверкой, — исходящий адрес.
+ */
+async function outboundIp(label) {
+  try {
+    const response = await fetch('https://api.ipify.org?format=json', { signal:AbortSignal.timeout(5000) })
+    const data = await response.json()
+    console.error('WB исходящий IP', label, data?.ip)
+    return data?.ip || null
+  } catch (error) {
+    console.error('WB исходящий IP', label, 'не определён:', error.message)
+    return null
+  }
+}
+
 async function authAttempt(session, body, challenge = null) {
   const headers = authHeaders(session)
   if (challenge) headers['X-Pow'] = `status=valid; nonce=${solvePow(challenge)}; challenge=${challenge}`
@@ -139,6 +156,7 @@ export async function confirmCode(session, code) {
   if (!accessToken) throw new WbError('WB не выдал рабочую сессию', 502, result, 'подтверждение кода')
   // Какой именно токен отдал WB — единственный способ понять, почему его не принимает r-point.
   const claims = tokenClaims(accessToken)
+  await outboundIp('при выдаче токена')
   console.error('WB auth payload', JSON.stringify({
     payloadKeys:Object.keys(payload),
     claimKeys:claims ? Object.keys(claims) : null,
@@ -179,6 +197,7 @@ async function wb(session, url, options = {}) {
  * хотя тот же токен на pickpoint проходит проверку подписи.
  */
 export async function enrichSession(session) {
+  await outboundIp('перед my-orgs')
   const organizations = await wb(session, 'https://r-point.wb.ru/auth-api/v3/my-orgs', { stage:'список организаций' })
   const organization = list(organizations)[0]
   if (!organization?.id) throw new WbError('В кабинете WB не найдена доступная организация', 403, organizations, 'список организаций')
