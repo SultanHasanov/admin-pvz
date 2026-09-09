@@ -30,6 +30,8 @@ function authHeaders(session) {
 }
 
 function authPayload(result, fallback) {
+  if (Number(result?.result) === 4) throw new WbError('Код уже отправлен. Подождите минуту перед повторной отправкой.', 429, result)
+  if (Number(result?.result) === 6) throw new WbError('Неверный код WB. Проверьте цифры и попробуйте ещё раз.', 400, result)
   if (Number(result?.result) !== 0 || !result?.payload) throw new WbError(message(result, fallback), 400, result)
   return result.payload
 }
@@ -37,10 +39,10 @@ function authPayload(result, fallback) {
 function tokenClientId(token) {
   try {
     const payload = JSON.parse(Buffer.from(String(token).split('.')[1], 'base64url').toString('utf8'))
-    const value = Number(payload.client_id)
-    if (Number.isSafeInteger(value) && value > 0) return value
+    const value = String(payload.client_id || '').trim()
+    if (value) return value
   } catch { /* checked below */ }
-  throw new WbError('WB не вернул идентификатор кабинета', 502)
+  return 'my-pvz'
 }
 
 async function json(url, { method = 'GET', headers = {}, body } = {}) {
