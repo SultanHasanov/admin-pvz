@@ -1,9 +1,9 @@
 import crypto from 'node:crypto'
 import { db, decryptToken, encryptToken } from './_telegram.js'
 
-const AUTH_ORIGIN = 'https://r-point.wb.ru'
+const AUTH_ORIGIN = 'https://auth-my-pvz.wb.ru'
 const APP_TYPE = 'prod-my-pvz'
-const APP_VERSION = 'v0.0.59'
+const APP_VERSION = process.env.WB_APP_VERSION || 'v0.0.59'
 
 export class WbError extends Error {
   constructor(message, status = 500, data = null) { super(message); this.status = status; this.data = data }
@@ -21,6 +21,28 @@ function message(data, fallback) {
   return data?.error?.message || data?.message || (typeof data?.error === 'string' ? data.error : fallback)
 }
 
+function authHeaders(session) {
+  return {
+    deviceId:session.deviceUuid,
+    'wb-appversion':APP_VERSION,
+    'X-Language':'ru',
+  }
+}
+
+function authPayload(result, fallback) {
+  if (Number(result?.result) !== 0 || !result?.payload) throw new WbError(message(result, fallback), 400, result)
+  return result.payload
+}
+
+function tokenClientId(token) {
+  try {
+    const payload = JSON.parse(Buffer.from(String(token).split('.')[1], 'base64url').toString('utf8'))
+    const value = Number(payload.client_id)
+    if (Number.isSafeInteger(value) && value > 0) return value
+  } catch { /* checked below */ }
+  throw new WbError('WB не вернул идентификатор кабинета', 502)
+}
+
 async function json(url, { method = 'GET', headers = {}, body } = {}) {
   const response = await fetch(url, {
     method,
@@ -36,32 +58,32 @@ async function json(url, { method = 'GET', headers = {}, body } = {}) {
 export async function requestCode(phone, previous = {}) {
   const normalized = normalizePhone(phone)
   const session = { phone:normalized, deviceUuid:previous.deviceUuid || crypto.randomUUID() }
-  const result = await json(`${AUTH_ORIGIN}/api/v1/login`, {
+  const result = await json(`${AUTH_ORIGIN}/v2/code/wb-captcha`, {
     method:'POST',
-    headers:{ 'X-App-Type':APP_TYPE, 'X-App-Version':APP_VERSION, 'X-Language':'ru' },
-    body:{ phone:Number(normalized), resend:Boolean(previous.loginToken), device_uuid:session.deviceUuid },
+    headers:authHeaders(session),
+    body:{ captcha_token:'', phone_number:normalized, save_push:true },
   })
-  if (!result?.data) throw new WbError('WB не выдал токен подтверждения', 502)
-  return { ...session, loginToken:result.data, codeLength:Number(result.code_length) || 6 }
+  const payload = authPayload(result, 'WB не отправил код подтверждения')
+  if (!payload.sticker) throw new WbError('WB не выдал токен подтверждения', 502)
+  return { ...session, sticker:payload.sticker, codeLength:6 }
 }
 
 export async function confirmCode(session, code) {
   const digits = String(code || '').replace(/\D/g, '')
-  if (!session?.loginToken || !/^\d{4,8}$/.test(digits)) throw new WbError('Введите код из сообщения WB', 400)
-  const result = await json(`${AUTH_ORIGIN}/api/v2/validate`, {
+  if (!session?.sticker || !/^\d{6}$/.test(digits)) throw new WbError('Введите 6-значный код из сообщения WB', 400)
+  const result = await json(`${AUTH_ORIGIN}/v2/auth`, {
     method:'POST',
-    headers:{ 'X-App-Type':APP_TYPE, 'X-App-Version':APP_VERSION, 'X-Language':'ru' },
-    body:{ code:digits, app_version:APP_VERSION.slice(1), device_name:'PVZ Control', token:session.loginToken, device_type:null },
+    headers:authHeaders(session),
+    body:{ code:Number(digits), sticker:session.sticker },
   })
-  if (!result?.access?.token || !result?.user_id) throw new WbError('WB не выдал рабочую сессию', 502)
+  const payload = authPayload(result, 'WB не подтвердил код')
+  const accessToken = payload.access_token || payload.accessToken
+  if (!accessToken) throw new WbError('WB не выдал рабочую сессию', 502)
   return {
     phone:session.phone,
     deviceUuid:session.deviceUuid,
-    token:result.access.token,
-    tokenExpiresAt:Date.now() + Number(result.access.ttl || 0) * 1000,
-    refreshToken:result.refresh?.token || null,
-    refreshExpiresAt:Date.now() + Number(result.refresh?.ttl || 0) * 1000,
-    clientId:Number(result.user_id),
+    token:accessToken,
+    clientId:tokenClientId(accessToken),
   }
 }
 
