@@ -1,24 +1,31 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Alert, Button, Card, DatePicker, Form, Input, Space, Tabs, Typography } from 'antd'
+import type { TableProps } from 'antd'
+import dayjs from 'dayjs'
 import { Award, Ban, Lock, LockOpen, Wallet } from 'lucide-react'
 import { calculateSalarySheet } from '../entities/calculations'
 import type { SalaryPayment, SalarySheet } from '../entities/types'
 import { monthLabel, today } from '../shared/dates'
 import { isValidMoney, parseMoney, rubles } from '../shared/money'
-import { EmptyState, ErrorNote, Field, Loading, Modal, Title } from '../shared/ui'
+import { CardRow, EmptyState, ErrorNote, FormModal, ResponsiveTable, Title } from '../shared/ui'
 import { listEmployees, listSalaryRules } from '../services/employees'
 import { listShifts } from '../services/shifts'
 import { listDeductions } from '../services/deductions'
 import { closeSalaryPeriod, createBonus, createPenalty, createSalaryPayment, getSalaryPeriod, listBonuses, listPenalties, listSalaryPayments, reopenSalaryPeriod } from '../services/salary'
+import { SalaryRatesPanel } from './SalaryRates'
 import { useOrg } from '../app/OrgContext'
 
 type FormKind = 'BONUS' | 'PENALTY' | 'ADVANCE' | 'PAYMENT'
 const formTitles:Record<FormKind, string> = { BONUS: 'Премия', PENALTY: 'Штраф', ADVANCE: 'Аванс', PAYMENT: 'Выплата' }
 
+type Row = SalarySheet & { fullName:string }
+
 export function SalaryPage() {
   const queryClient = useQueryClient()
   const { month, pointId, pointName } = useOrg()
   const [form, setForm] = useState<{ kind:FormKind; employeeId:string }>()
+  const [tab, setTab] = useState('sheet')
 
   const employees = useQuery({ queryKey: ['employees', false], queryFn: () => listEmployees() })
   const [rules, shifts, bonuses, penalties, payments, deductions, period] = useQueries({
@@ -36,11 +43,14 @@ export function SalaryPage() {
   const loading = employees.isLoading || rules.isLoading || shifts.isLoading
   const staff = useMemo(() => (employees.data ?? []).filter(e => !pointId || e.pickupPointIds.includes(pointId)), [employees.data, pointId])
 
-  const sheets:SalarySheet[] = useMemo(() => staff.map(employee => calculateSalarySheet({
-    employeeId: employee.id, month,
-    shifts: shifts.data ?? [], rules: rules.data ?? [],
-    bonuses: bonuses.data ?? [], penalties: penalties.data ?? [],
-    deductions: deductions.data ?? [], payments: payments.data ?? [],
+  const sheets:Row[] = useMemo(() => staff.map(employee => ({
+    ...calculateSalarySheet({
+      employeeId: employee.id, month,
+      shifts: shifts.data ?? [], rules: rules.data ?? [],
+      bonuses: bonuses.data ?? [], penalties: penalties.data ?? [],
+      deductions: deductions.data ?? [], payments: payments.data ?? [],
+    }),
+    fullName: employee.fullName,
   })), [staff, month, shifts.data, rules.data, bonuses.data, penalties.data, deductions.data, payments.data])
 
   const closed = period.data?.status === 'CLOSED'
@@ -51,49 +61,84 @@ export function SalaryPage() {
 
   const totals = sheets.reduce((acc, sheet) => ({ accrued: acc.accrued + sheet.accrued, balance: acc.balance + sheet.balance }), { accrued: 0, balance: 0 })
 
-  return <>
-    <Title title="Зарплаты" subtitle={`${monthLabel(month)} · ${pointId ? pointName(pointId) : 'Все ПВЗ'}`}>
-      <button className="btn px-3 text-sm" disabled={close.isPending || !sheets.length} onClick={() => close.mutate()}>
-        {closed ? <><LockOpen size={15}/>Открыть период</> : <><Lock size={15}/>Закрыть период</>}
-      </button>
-    </Title>
+  const buttons = (employeeId:string) => <Space size={4} wrap>
+    <Button size="small" icon={<Award size={15}/>} onClick={() => setForm({ kind: 'BONUS', employeeId })}>Премия</Button>
+    <Button size="small" icon={<Ban size={15}/>} onClick={() => setForm({ kind: 'PENALTY', employeeId })}>Штраф</Button>
+    <Button size="small" icon={<Wallet size={15}/>} onClick={() => setForm({ kind: 'ADVANCE', employeeId })}>Аванс</Button>
+    <Button size="small" type="primary" icon={<Wallet size={15}/>} onClick={() => setForm({ kind: 'PAYMENT', employeeId })}>Выплатить</Button>
+  </Space>
 
-    {closed && <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">Период закрыт — расчёт сохранён в истории начислений. Новые записи всё ещё можно добавлять, но снимок не обновится, пока период не открыть заново.</div>}
+  const money = (value:number) => rubles(value)
+  const columns:TableProps<Row>['columns'] = [
+    { title: 'Сотрудник', dataIndex: 'fullName', key: 'name', render: value => <Typography.Text strong>{value}</Typography.Text> },
+    { title: 'Смен', dataIndex: 'shifts', key: 'shifts', align: 'right' },
+    { title: 'Начислено', dataIndex: 'accrued', key: 'accrued', align: 'right', render: money },
+    { title: 'Премии', dataIndex: 'bonuses', key: 'bonuses', align: 'right', render: money },
+    { title: 'Штрафы', dataIndex: 'penalties', key: 'penalties', align: 'right', render: money },
+    { title: 'Удержания WB', dataIndex: 'deductions', key: 'deductions', align: 'right', render: money },
+    { title: 'Выплачено', dataIndex: 'paid', key: 'paid', align: 'right', render: money },
+    { title: 'К выплате', dataIndex: 'balance', key: 'balance', align: 'right', render: value => <Typography.Text strong>{rubles(value)}</Typography.Text> },
+    { title: '', key: 'actions', align: 'right', render: (_, sheet) => buttons(sheet.employeeId) },
+  ]
 
-    <div className="card overflow-hidden">
-      <div className="hidden grid-cols-[1.3fr_repeat(6,1fr)_auto] gap-3 border-b bg-slate-50 px-5 py-3 text-xs font-semibold text-slate-500 lg:grid">
-        <span>Сотрудник</span><span>Смен</span><span>Начислено</span><span>Премии</span><span>Штрафы</span><span>Удержания WB</span><span>Выплачено</span><span>К выплате</span>
-      </div>
-      {loading ? <Loading/> : !sheets.length ? <EmptyState text="Нет сотрудников для расчёта."/>
-        : sheets.map(sheet => {
-          const employee = staff.find(e => e.id === sheet.employeeId)!
-          return <div key={sheet.employeeId} className="border-b px-4 py-4 last:border-0 sm:px-5">
-            <div className="grid gap-1.5 lg:grid-cols-[1.3fr_repeat(6,1fr)_auto] lg:items-center lg:gap-3">
-              <b className="min-w-0">{employee.fullName}</b>
-              <span className="text-sm"><i className="mr-1 not-italic text-slate-500 lg:hidden">Смен:</i>{sheet.shifts}</span>
-              <span className="text-sm"><i className="mr-1 not-italic text-slate-500 lg:hidden">Начислено:</i>{rubles(sheet.accrued)}</span>
-              <span className="text-sm"><i className="mr-1 not-italic text-slate-500 lg:hidden">Премии:</i>{rubles(sheet.bonuses)}</span>
-              <span className="text-sm"><i className="mr-1 not-italic text-slate-500 lg:hidden">Штрафы:</i>{rubles(sheet.penalties)}</span>
-              <span className="text-sm"><i className="mr-1 not-italic text-slate-500 lg:hidden">Удержания WB:</i>{rubles(sheet.deductions)}</span>
-              <span className="text-sm"><i className="mr-1 not-italic text-slate-500 lg:hidden">Выплачено:</i>{rubles(sheet.paid)}</span>
-              <span className="font-semibold"><i className="mr-1 text-sm font-normal not-italic text-slate-500 lg:hidden">К выплате:</i>{rubles(sheet.balance)}</span>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button className="btn px-3 text-sm" onClick={() => setForm({ kind: 'BONUS', employeeId: sheet.employeeId })}><Award size={15}/>Премия</button>
-              <button className="btn px-3 text-sm" onClick={() => setForm({ kind: 'PENALTY', employeeId: sheet.employeeId })}><Ban size={15}/>Штраф</button>
-              <button className="btn px-3 text-sm" onClick={() => setForm({ kind: 'ADVANCE', employeeId: sheet.employeeId })}><Wallet size={15}/>Аванс</button>
-              <button className="btn btn-primary px-3 text-sm" onClick={() => setForm({ kind: 'PAYMENT', employeeId: sheet.employeeId })}><Wallet size={15}/>Выплатить</button>
-            </div>
+  const sheetTab = <>
+    {closed && <Alert
+      className="mb-4" type="info" showIcon
+      message="Период закрыт — расчёт сохранён в истории начислений."
+      description="Новые записи всё ещё можно добавлять, но снимок не обновится, пока период не открыть заново."
+    />}
+
+    <Card variant="outlined" styles={{ body: { padding: 0 } }}>
+      <ResponsiveTable<Row>
+        rowKey="employeeId" columns={columns} dataSource={sheets} loading={loading}
+        locale={{ emptyText: <EmptyState text="Нет сотрудников для расчёта."/> }}
+        mobileCard={sheet => <>
+          <Typography.Text strong>{sheet.fullName}</Typography.Text>
+          <div className="mt-2">
+            <CardRow label="Смен">{sheet.shifts}</CardRow>
+            <CardRow label="Начислено">{rubles(sheet.accrued)}</CardRow>
+            <CardRow label="Премии">{rubles(sheet.bonuses)}</CardRow>
+            <CardRow label="Штрафы">{rubles(sheet.penalties)}</CardRow>
+            <CardRow label="Удержания WB">{rubles(sheet.deductions)}</CardRow>
+            <CardRow label="Выплачено">{rubles(sheet.paid)}</CardRow>
+            <CardRow label="К выплате"><Typography.Text strong>{rubles(sheet.balance)}</Typography.Text></CardRow>
           </div>
-        })}
-      {Boolean(sheets.length) && <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 px-4 py-3 text-sm sm:px-5">
-        <span className="text-slate-500">Итого начислено {rubles(totals.accrued)}</span>
-        <b>К выплате {rubles(totals.balance)}</b>
-      </div>}
-    </div>
+          <div className="mt-3">{buttons(sheet.employeeId)}</div>
+        </>}
+      />
+    </Card>
+
+    {Boolean(sheets.length) && <Card size="small" variant="outlined" className="mt-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Typography.Text type="secondary">Итого начислено {rubles(totals.accrued)}</Typography.Text>
+        <Typography.Text strong>К выплате {rubles(totals.balance)}</Typography.Text>
+      </div>
+    </Card>}
 
     <ErrorNote error={close.error ?? rules.error ?? shifts.error}/>
-    {form && <SalaryEntryForm kind={form.kind} employeeId={form.employeeId} employeeName={staff.find(e => e.id === form.employeeId)?.fullName ?? ''} onClose={() => setForm(undefined)}/>}
+  </>
+
+  return <>
+    <Title title="Зарплаты" subtitle={tab === 'rates' ? 'Справочник ставок' : `${monthLabel(month)} · ${pointId ? pointName(pointId) : 'Все ПВЗ'}`}>
+      {tab === 'sheet' && <Button
+        icon={closed ? <LockOpen size={15}/> : <Lock size={15}/>}
+        loading={close.isPending} disabled={!sheets.length} onClick={() => close.mutate()}
+      >{closed ? 'Открыть период' : 'Закрыть период'}</Button>}
+    </Title>
+
+    <Tabs
+      activeKey={tab} onChange={setTab}
+      items={[
+        { key: 'sheet', label: 'Расчёт за месяц', children: sheetTab },
+        { key: 'rates', label: 'Ставки', children: <SalaryRatesPanel/> },
+      ]}
+    />
+
+    {form && <SalaryEntryForm
+      kind={form.kind} employeeId={form.employeeId}
+      employeeName={staff.find(e => e.id === form.employeeId)?.fullName ?? ''}
+      onClose={() => setForm(undefined)}
+    />}
   </>
 }
 
@@ -118,21 +163,31 @@ function SalaryEntryForm({ kind, employeeId, employeeName, onClose }:{ kind:Form
     },
   })
 
-  return <Modal title={`${formTitles[kind]} · ${employeeName}`} onClose={onClose}>
-    <form className="grid gap-4" onSubmit={event => { event.preventDefault(); save.mutate() }}>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Сумма, ₽"><input autoFocus className="field" required inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)}/></Field>
-        <Field label="Дата"><input type="date" className="field" required value={date} onChange={e => setDate(e.target.value)}/></Field>
+  const ready = isValidMoney(amount) && (kind !== 'PENALTY' || Boolean(comment.trim()))
+
+  return <FormModal
+    title={`${formTitles[kind]} · ${employeeName}`} onClose={onClose}
+    footer={<Space wrap>
+      <Button type="primary" loading={save.isPending} disabled={!ready} onClick={() => save.mutate()}>Сохранить</Button>
+      <Button onClick={onClose}>Отмена</Button>
+    </Space>}
+  >
+    <Form layout="vertical" requiredMark={false}>
+      <div className="grid gap-x-4 sm:grid-cols-2">
+        <Form.Item label="Сумма, ₽" required>
+          <Input autoFocus inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} suffix="₽"/>
+        </Form.Item>
+        <Form.Item label="Дата" required>
+          <DatePicker style={{ width: '100%' }} format="DD.MM.YYYY" allowClear={false} value={dayjs(date)} onChange={value => value && setDate(value.format('YYYY-MM-DD'))}/>
+        </Form.Item>
       </div>
-      <Field label={kind === 'PENALTY' ? 'Причина' : 'Комментарий'}>
-        <input className="field" required={kind === 'PENALTY'} value={comment} onChange={e => setComment(e.target.value)} placeholder={kind === 'PENALTY' ? 'Например, опоздание' : 'Необязательно'}/>
-      </Field>
-      {kind === 'PENALTY' && <p className="text-xs text-slate-500">Штраф сразу уменьшает сумму к выплате. Статус можно изменить позже.</p>}
+      <Form.Item label={kind === 'PENALTY' ? 'Причина' : 'Комментарий'} required={kind === 'PENALTY'}>
+        <Input value={comment} onChange={e => setComment(e.target.value)} placeholder={kind === 'PENALTY' ? 'Например, опоздание' : 'Необязательно'}/>
+      </Form.Item>
+      {kind === 'PENALTY' && <Typography.Text type="secondary" className="text-xs">
+        Штраф сразу уменьшает сумму к выплате. Статус можно изменить позже.
+      </Typography.Text>}
       <ErrorNote error={save.error}/>
-      <div className="flex flex-wrap gap-2">
-        <button className="btn btn-primary flex-1 sm:flex-none" disabled={save.isPending || !isValidMoney(amount)}>{save.isPending ? 'Сохраняем…' : 'Сохранить'}</button>
-        <button type="button" className="btn flex-1 sm:flex-none" onClick={onClose}>Отмена</button>
-      </div>
-    </form>
-  </Modal>
+    </Form>
+  </FormModal>
 }

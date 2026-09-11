@@ -1,7 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { Navigate, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
-import { BarChart3, Building2, CalendarDays, CircleDollarSign, ClipboardList, LogOut, Menu, MessageCircle, PackageSearch, Settings, Users, Wallet, X } from 'lucide-react'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { Alert, Button, Card, Drawer, Form, Grid, Input, Layout, Menu, Select, Spin, Typography } from 'antd'
+import { BarChart3, Building2, CalendarDays, CircleDollarSign, ClipboardList, LogOut, Menu as MenuIcon, MessageCircle, PackageSearch, Settings, Users, Wallet } from 'lucide-react'
 import type { ModuleKey } from '../entities/types'
 import { monthLabel, monthOptions } from '../shared/dates'
 import { DashboardPage } from '../pages/Dashboard'
@@ -28,71 +29,168 @@ const links:{ to:string; title:string; icon:typeof BarChart3; module?:ModuleKey 
   { to: '/salary', title: 'Зарплаты', icon: CircleDollarSign, module: 'salary' },
   { to: '/deductions', title: 'Удержания WB', icon: ClipboardList, module: 'wb_deductions' },
   { to: '/telegram', title: 'Telegram', icon: MessageCircle, module: 'telegram' },
+  { to: '/valuable-items', title: 'Контроль товаров', icon: PackageSearch },
   { to: '/settings', title: 'Настройки', icon: Settings },
 ]
 
-const navClass = ({ isActive }:{ isActive:boolean }) => `flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium lg:py-2.5 ${isActive ? 'bg-brand-50 text-brand-600' : 'text-slate-600 hover:bg-slate-50'}`
+function Logo() {
+  return <div className="flex items-center gap-2 px-2 py-4 font-bold">
+    <img src="/brand/pvz-control-logo.png" width="32" height="32" alt="" className="h-8 w-8 rounded-lg"/>
+    PVZ Control
+  </div>
+}
 
+function Navigation({ onNavigate }:{ onNavigate?:() => void }) {
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const { isModuleEnabled } = useOrg()
+  const visible = links.filter(link => !link.module || isModuleEnabled(link.module))
+
+  return <div className="flex h-full flex-col">
+    <Menu
+      mode="inline" style={{ borderInlineEnd: 0, flex: 1 }}
+      selectedKeys={[visible.some(l => l.to === pathname) ? pathname : '/']}
+      onClick={({ key }) => { navigate(key); onNavigate?.() }}
+      items={visible.map(link => ({
+        key: link.to,
+        icon: <link.icon size={18}/>,
+        label: link.to === '/valuable-items' ? <span className="flex items-center gap-2">Контроль товаров <Typography.Text type="secondary" className="text-[10px]">Скоро</Typography.Text></span> : link.title,
+      }))}
+    />
+    <div className="p-2 safe-b">
+      <Button block type="text" icon={<LogOut size={16}/>} onClick={() => { resetOrganizationCache(); void supabase?.auth.signOut() }}>Выйти</Button>
+    </div>
+  </div>
+}
+
+/** Фильтры «ПВЗ» и «месяц» действуют на весь продукт, поэтому живут в шапке. */
 function Filters() {
   const { points, pointId, setPointId, month, setMonth } = useOrg()
-  return <div className="scroll-x ml-auto flex items-center gap-2 py-1">
-    {points.length > 1 && <select className="field w-auto py-2 text-sm" value={pointId} onChange={e => setPointId(e.target.value)} aria-label="Пункт выдачи">
-      <option value="">Все ПВЗ</option>
-      {points.map(point => <option key={point.id} value={point.id}>{point.name}</option>)}
-    </select>}
-    <select className="field w-auto py-2 text-sm" value={month} onChange={e => setMonth(e.target.value)} aria-label="Месяц">
-      {monthOptions().map(value => <option key={value} value={value}>{monthLabel(value)}</option>)}
-    </select>
+  return <div className="scroll-x ml-auto flex items-center gap-2">
+    {points.length > 1 && <Select
+      value={pointId} onChange={setPointId} style={{ minWidth: 130 }} aria-label="Пункт выдачи"
+      options={[{ value: '', label: 'Все ПВЗ' }, ...points.map(point => ({ value: point.id, label: point.name }))]}
+    />}
+    <Select
+      value={month} onChange={setMonth} style={{ minWidth: 140 }} aria-label="Месяц"
+      options={monthOptions().map(value => ({ value, label: monthLabel(value) }))}
+    />
   </div>
 }
 
 function Shell({ children }:{ children:ReactNode }) {
   const [open, setOpen] = useState(false)
-  const { isModuleEnabled } = useOrg()
-  const visible = links.filter(link => !link.module || isModuleEnabled(link.module))
+  const screens = Grid.useBreakpoint()
+  const desktop = Boolean(screens.lg)
 
-  return <div className="min-h-screen lg:grid lg:grid-cols-[248px_1fr]">
-    <aside className={`${open ? 'fixed inset-y-0 left-0 z-30 flex w-72 max-w-[85vw] overflow-y-auto' : 'hidden'} flex-col border-r border-slate-200 bg-white p-4 safe-b lg:sticky lg:top-0 lg:flex lg:h-screen lg:max-w-none`}>
-      <div className="mb-8 flex items-center justify-between px-2">
-        <div className="flex items-center gap-2 font-bold"><img src="/brand/pvz-control-logo.png" width="32" height="32" alt="PVZ Control" className="h-8 w-8 rounded-lg"/>PVZ Control</div>
-        <button aria-label="Закрыть меню" className="-m-2 p-2 lg:hidden" onClick={() => setOpen(false)}><X size={20}/></button>
-      </div>
-      <nav className="space-y-1">
-        {visible.map(link => <NavLink key={link.to} to={link.to} end={link.to === '/'} onClick={() => setOpen(false)} className={navClass}>
-          <link.icon size={18} className="shrink-0"/>{link.title}
-        </NavLink>)}
-        <NavLink to="/valuable-items" onClick={() => setOpen(false)} className={navClass}>
-          <PackageSearch size={18} className="shrink-0"/>Контроль товаров <span className="ml-auto rounded bg-slate-100 px-1.5 py-0.5 text-[10px]">Скоро</span>
-        </NavLink>
-      </nav>
-      <button className="mt-auto flex items-center gap-2 rounded-lg p-3 text-sm text-slate-600 hover:bg-slate-50" onClick={() => { resetOrganizationCache(); void supabase?.auth.signOut() }}><LogOut size={17}/>Выйти</button>
-    </aside>
+  return <Layout style={{ minHeight: '100vh' }}>
+    {desktop && <Layout.Sider width={248} theme="light" style={{ position: 'sticky', top: 0, height: '100vh', borderInlineEnd: '1px solid #e9edf0' }}>
+      <Logo/>
+      <Navigation/>
+    </Layout.Sider>}
 
-    {open && <button aria-label="Закрыть меню" className="fixed inset-0 z-20 bg-slate-900/30 lg:hidden" onClick={() => setOpen(false)}/>}
+    <Drawer
+      open={!desktop && open} onClose={() => setOpen(false)} placement="left"
+      width={280} closable={false} styles={{ body: { padding: 0 } }} title={<Logo/>}
+    >
+      <Navigation onNavigate={() => setOpen(false)}/>
+    </Drawer>
 
-    <main className="min-w-0">
-      <header className="sticky top-0 z-10 flex h-16 items-center gap-3 border-b border-slate-200 bg-white px-4 sm:px-7 lg:static">
-        <button aria-label="Открыть меню" className="-m-2 shrink-0 p-2 lg:hidden" onClick={() => setOpen(true)}><Menu/></button>
-        <span className="hidden text-sm text-slate-500 lg:block">Операционная система владельца ПВЗ</span>
+    <Layout>
+      <Layout.Header style={{ position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #e9edf0' }}>
+        {!desktop && <Button type="text" icon={<MenuIcon size={20}/>} aria-label="Открыть меню" onClick={() => setOpen(true)}/>}
+        {desktop && <Typography.Text type="secondary">Операционная система владельца ПВЗ</Typography.Text>}
         <Filters/>
-      </header>
-      <div className="mx-auto max-w-7xl p-4 safe-b sm:p-7">{children}</div>
-    </main>
-  </div>
+      </Layout.Header>
+      <Layout.Content className="safe-b">
+        <div className="mx-auto max-w-7xl p-4 sm:p-6">{children}</div>
+      </Layout.Content>
+    </Layout>
+  </Layout>
 }
 
-function Auth({ session }: { session: Session | null }) {
-  const navigate = useNavigate(), [register, setRegister] = useState(false), [email, setEmail] = useState(''), [password, setPassword] = useState(''), [message, setMessage] = useState(''), [busy, setBusy] = useState(false)
+function CenteredPage({ children }:{ children:ReactNode }) {
+  return <div className="grid min-h-screen place-items-center p-4"><div className="w-full max-w-md">{children}</div></div>
+}
+
+function Auth({ session }:{ session:Session | null }) {
+  const navigate = useNavigate()
+  const [register, setRegister] = useState(false)
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [form] = Form.useForm<{ email:string; password:string }>()
   if (session) return <Navigate to="/" replace/>
-  async function submit() { if (!supabase) return; setBusy(true); setMessage(''); const result = register ? await supabase.auth.signUp({ email, password }) : await supabase.auth.signInWithPassword({ email, password }); setBusy(false); if (result.error) setMessage(result.error.message); else if (register && !result.data.session) setMessage('Подтвердите регистрацию по ссылке в письме'); else navigate('/', { replace: true }) }
-  async function reset() { if (!supabase || !email) return setMessage('Введите email'); const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}/login` }); setMessage(error?.message ?? 'Ссылка отправлена на почту') }
-  return <div className="grid min-h-screen place-items-center bg-slate-50 p-4"><form className="card w-full max-w-md p-5 sm:p-6" onSubmit={e => { e.preventDefault(); void submit() }}><div className="mb-6 flex items-center gap-2 text-xl font-bold"><img src="/brand/pvz-control-logo.png" width="36" height="36" alt="PVZ Control" className="h-9 w-9 rounded-xl"/>PVZ Control</div><h1 className="text-xl font-semibold">{register ? 'Создать аккаунт' : 'Войти в аккаунт'}</h1><p className="mb-5 mt-1 text-sm text-slate-500">Управляйте ПВЗ в одном месте</p><label className="label">Email<input required type="email" className="field mt-1" value={email} onChange={e => setEmail(e.target.value)}/></label><label className="label mt-4">Пароль<input required minLength={6} type="password" className="field mt-1" value={password} onChange={e => setPassword(e.target.value)}/></label>{message && <p className="mt-3 text-sm text-brand-600">{message}</p>}<button disabled={busy} className="btn btn-primary mt-5 w-full">{busy ? 'Подождите…' : register ? 'Зарегистрироваться' : 'Войти'}</button><div className="mt-4 flex justify-between gap-3 text-sm"><button type="button" className="text-brand-600" onClick={() => setRegister(!register)}>{register ? 'Уже есть аккаунт' : 'Создать аккаунт'}</button>{!register && <button type="button" className="text-slate-500" onClick={() => void reset()}>Забыли пароль?</button>}</div></form></div>
+
+  async function submit({ email, password }:{ email:string; password:string }) {
+    if (!supabase) return
+    setBusy(true); setMessage('')
+    const result = register ? await supabase.auth.signUp({ email, password }) : await supabase.auth.signInWithPassword({ email, password })
+    setBusy(false)
+    if (result.error) setMessage(result.error.message)
+    else if (register && !result.data.session) setMessage('Подтвердите регистрацию по ссылке в письме')
+    else navigate('/', { replace: true })
+  }
+
+  async function reset() {
+    const email = form.getFieldValue('email')
+    if (!supabase || !email) return setMessage('Введите email')
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}/login` })
+    setMessage(error?.message ?? 'Ссылка отправлена на почту')
+  }
+
+  return <CenteredPage>
+    <Card variant="outlined">
+      <div className="mb-5 flex items-center gap-2 text-xl font-bold">
+        <img src="/brand/pvz-control-logo.png" width="36" height="36" alt="" className="h-9 w-9 rounded-xl"/>PVZ Control
+      </div>
+      <Typography.Title level={4} style={{ marginBottom: 4 }}>{register ? 'Создать аккаунт' : 'Войти в аккаунт'}</Typography.Title>
+      <Typography.Text type="secondary">Управляйте ПВЗ в одном месте</Typography.Text>
+      <Form form={form} layout="vertical" className="mt-5" onFinish={values => void submit(values)} requiredMark={false}>
+        <Form.Item name="email" label="Email" rules={[{ required: true, type: 'email', message: 'Введите email' }]}>
+          <Input autoComplete="email" inputMode="email"/>
+        </Form.Item>
+        <Form.Item name="password" label="Пароль" rules={[{ required: true, min: 6, message: 'Минимум 6 символов' }]}>
+          <Input.Password autoComplete="current-password"/>
+        </Form.Item>
+        {message && <Alert className="mb-3" type="info" showIcon message={message}/>}
+        <Button block type="primary" htmlType="submit" loading={busy}>{register ? 'Зарегистрироваться' : 'Войти'}</Button>
+      </Form>
+      <div className="mt-4 flex flex-wrap justify-between gap-3">
+        <Button type="link" style={{ padding: 0 }} onClick={() => setRegister(!register)}>{register ? 'Уже есть аккаунт' : 'Создать аккаунт'}</Button>
+        {!register && <Button type="text" onClick={() => void reset()}>Забыли пароль?</Button>}
+      </div>
+    </Card>
+  </CenteredPage>
 }
 
-function Onboarding({ done }: { done: () => void }) {
-  const [organization, setOrganization] = useState(''), [point, setPoint] = useState(''), [address, setAddress] = useState(''), [error, setError] = useState(''), [busy, setBusy] = useState(false)
-  async function create() { if (!supabase) return; setBusy(true); const { error: e } = await supabase.rpc('create_organization_with_owner', { p_name: organization, p_point_name: point, p_point_address: address, p_timezone: 'Europe/Moscow' }); setBusy(false); if (e) setError(e.message); else { resetOrganizationCache(); done() } }
-  return <div className="grid min-h-screen place-items-center bg-slate-50 p-4"><form className="card w-full max-w-lg p-5 sm:p-6" onSubmit={e => { e.preventDefault(); void create() }}><h1 className="text-xl font-semibold">Настроим вашу организацию</h1><p className="mb-5 mt-1 text-sm text-slate-500">Создайте организацию и первый пункт выдачи.</p><label className="label">Название организации<input required className="field mt-1" value={organization} onChange={e => setOrganization(e.target.value)}/></label><label className="label mt-4">Название ПВЗ<input required className="field mt-1" value={point} onChange={e => setPoint(e.target.value)}/></label><label className="label mt-4">Адрес ПВЗ<input required className="field mt-1" value={address} onChange={e => setAddress(e.target.value)}/></label>{error && <p className="mt-3 text-sm text-red-600">{error}</p>}<button disabled={busy} className="btn btn-primary mt-5 w-full">{busy ? 'Создаём…' : 'Начать работу'}</button></form></div>
+function Onboarding({ done }:{ done:() => void }) {
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function create(values:{ organization:string; point:string; address:string }) {
+    if (!supabase) return
+    setBusy(true)
+    const { error: failure } = await supabase.rpc('create_organization_with_owner', {
+      p_name: values.organization, p_point_name: values.point, p_point_address: values.address, p_timezone: 'Europe/Moscow',
+    })
+    setBusy(false)
+    if (failure) setError(failure.message)
+    else { resetOrganizationCache(); done() }
+  }
+
+  return <CenteredPage>
+    <Card variant="outlined">
+      <Typography.Title level={4} style={{ marginBottom: 4 }}>Настроим вашу организацию</Typography.Title>
+      <Typography.Text type="secondary">Создайте организацию и первый пункт выдачи.</Typography.Text>
+      <Form layout="vertical" className="mt-5" onFinish={values => void create(values)} requiredMark={false}>
+        <Form.Item name="organization" label="Название организации" rules={[{ required: true, message: 'Укажите название' }]}><Input/></Form.Item>
+        <Form.Item name="point" label="Название ПВЗ" rules={[{ required: true, message: 'Укажите название' }]}><Input/></Form.Item>
+        <Form.Item name="address" label="Адрес ПВЗ" rules={[{ required: true, message: 'Укажите адрес' }]}><Input/></Form.Item>
+        {error && <Alert className="mb-3" type="error" showIcon message={error}/>}
+        <Button block type="primary" htmlType="submit" loading={busy}>Начать работу</Button>
+      </Form>
+    </Card>
+  </CenteredPage>
 }
 
 function ProductRoutes() {
@@ -112,19 +210,25 @@ function ProductRoutes() {
 }
 
 function NotConfigured() {
-  return <div className="grid min-h-screen place-items-center bg-slate-50 p-4">
-    <div className="card max-w-lg p-6 text-center">
-      <h1 className="text-xl font-semibold">Подключите Supabase</h1>
-      <p className="mt-3 text-sm text-slate-500">Скопируйте <code>.env.example</code> в <code>.env.local</code>, заполните <code>VITE_SUPABASE_URL</code> и <code>VITE_SUPABASE_ANON_KEY</code>, затем перезапустите <code>npm run dev</code>.</p>
-    </div>
-  </div>
+  return <CenteredPage>
+    <Card variant="outlined">
+      <Typography.Title level={4}>Подключите Supabase</Typography.Title>
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+        Скопируйте <Typography.Text code>.env.example</Typography.Text> в <Typography.Text code>.env.local</Typography.Text>,
+        заполните <Typography.Text code>VITE_SUPABASE_URL</Typography.Text> и <Typography.Text code>VITE_SUPABASE_ANON_KEY</Typography.Text>,
+        затем перезапустите <Typography.Text code>npm run dev</Typography.Text>.
+      </Typography.Paragraph>
+    </Card>
+  </CenteredPage>
 }
+
+const Booting = () => <div className="grid min-h-screen place-items-center"><Spin size="large"/></div>
 
 export function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined)
   const [hasOrganization, setHasOrganization] = useState<boolean>()
 
-  async function checkOrganization(current: Session) {
+  async function checkOrganization(current:Session) {
     if (!supabase) return setHasOrganization(true)
     const { data, error } = await supabase.from('organization_members').select('organization_id').eq('user_id', current.user.id).limit(1)
     setHasOrganization(!error && Boolean(data?.length))
@@ -140,13 +244,13 @@ export function App() {
   useEffect(() => { if (session) void checkOrganization(session); else setHasOrganization(undefined) }, [session])
 
   if (!isSupabaseConfigured) return <NotConfigured/>
-  if (session === undefined) return <div className="grid min-h-screen place-items-center text-slate-400">Загрузка…</div>
+  if (session === undefined) return <Booting/>
 
   return <Routes>
     <Route path="/login" element={<Auth session={session}/>}/>
     <Route path="/*" element={
       !session ? <Navigate to="/login" replace/>
-        : hasOrganization === undefined ? <div className="grid min-h-screen place-items-center text-slate-400">Загрузка…</div>
+        : hasOrganization === undefined ? <Booting/>
           : !hasOrganization ? <Onboarding done={() => void checkOrganization(session)}/>
             : <ProductRoutes/>
     }/>

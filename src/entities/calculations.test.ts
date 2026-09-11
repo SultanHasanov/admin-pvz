@@ -2,13 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { accrueShifts, calculatePayroll, calculateSalarySheet, dailyTotals, ownerLosses, profit, rateForDate } from './calculations'
 import type { Bonus, Deduction, Employee, Penalty, SalaryPayment, SalaryRule, Shift, Transaction } from './types'
 
-const worker:Employee = { id: 'e', fullName: 'Иван', pickupPointIds: ['p'], paymentType: 'SHIFT', rateKopecks: 200000, monthlyNormDays: 22, status: 'ACTIVE' }
-const completed:Shift = { id: 's', employeeId: 'e', pickupPointId: 'p', startsAt: '2026-09-01T08:00:00+03:00', endsAt: '2026-09-01T22:00:00+03:00', status: 'COMPLETED' }
+const worker:Employee = { id: 'e', fullName: 'Иван', pickupPointIds: ['p'], paymentType: 'SHIFT', rateKopecks: 200000, monthlyNormDays: 22, salaryRateId: null, hourlyRateKopecks: null, status: 'ACTIVE' }
+const completed:Shift = { id: 's', employeeId: 'e', pickupPointId: 'p', startsAt: '2026-09-01T08:00:00+03:00', endsAt: '2026-09-01T22:00:00+03:00', payMode: 'FULL', status: 'COMPLETED' }
 const shiftOn = (id:string, date:string):Shift => ({ ...completed, id, startsAt: `${date}T08:00:00+03:00`, endsAt: `${date}T22:00:00+03:00` })
 
 const rules:SalaryRule[] = [
-  { id: 'r1', employeeId: 'e', paymentType: 'SHIFT', rateKopecks: 200000, effectiveFrom: '2026-01-01', monthlyNormDays: 22 },
-  { id: 'r2', employeeId: 'e', paymentType: 'SHIFT', rateKopecks: 250000, effectiveFrom: '2026-09-15', monthlyNormDays: 22 },
+  { id: 'r1', employeeId: 'e', paymentType: 'SHIFT', rateKopecks: 200000, effectiveFrom: '2026-01-01', monthlyNormDays: 22, salaryRateId: null, hourlyRateKopecks: 25000 },
+  { id: 'r2', employeeId: 'e', paymentType: 'SHIFT', rateKopecks: 250000, effectiveFrom: '2026-09-15', monthlyNormDays: 22, salaryRateId: null, hourlyRateKopecks: 25000 },
 ]
 
 describe('payroll calculations', () => {
@@ -21,6 +21,27 @@ describe('rateForDate', () => {
   it('switches to the newer rate from its effective date', () => expect(rateForDate(rules, '2026-09-20')?.rateKopecks).toBe(250000))
   it('falls back to the earliest rate for shifts before any rule', () => expect(rateForDate(rules, '2025-05-01')?.rateKopecks).toBe(200000))
   it('accrues each shift by its own rate', () => expect(accrueShifts([shiftOn('a', '2026-09-10'), shiftOn('b', '2026-09-20')], rules)).toBe(450000))
+})
+
+describe('режим оплаты смены', () => {
+  const half:Shift = { ...shiftOn('h', '2026-09-10'), payMode: 'HALF' }
+  const byHours:Shift = { ...shiftOn('t', '2026-09-10'), payMode: 'HOURS', actualStartsAt: '2026-09-10T08:00:00+03:00', actualEndsAt: '2026-09-10T12:00:00+03:00' }
+  const salaryRules:SalaryRule[] = [{ id: 'sr', employeeId: 'e', paymentType: 'SALARY', rateKopecks: 4400000, effectiveFrom: '2026-01-01', monthlyNormDays: 22, salaryRateId: null, hourlyRateKopecks: null }]
+
+  it('половина смены оплачивается вполовину', () => expect(accrueShifts([half], rules)).toBe(100000))
+  it('часовой режим считает по фактическому времени и часовой ставке', () => expect(accrueShifts([byHours], rules)).toBe(100000))
+  it('без часовой ставки часовой режим падает обратно на ставку за смену', () => {
+    const withoutHourly = rules.map(rule => ({ ...rule, hourlyRateKopecks: null }))
+    expect(accrueShifts([byHours], withoutHourly)).toBe(200000)
+  })
+  it('половина дня при окладе даёт половину дневной части', () => expect(accrueShifts([{ ...half, id: 'sh' }], salaryRules)).toBe(100000))
+  it('полная смена перебивает половину в тот же день при окладе', () => {
+    expect(accrueShifts([{ ...half, id: 'a' }, { ...shiftOn('b', '2026-09-10') }], salaryRules)).toBe(200000)
+  })
+  it('сотрудник с почасовой оплатой считается по часам и без режима', () => {
+    const hourlyRules:SalaryRule[] = [{ id: 'hr', employeeId: 'e', paymentType: 'HOURLY', rateKopecks: 25000, effectiveFrom: '2026-01-01', monthlyNormDays: null, salaryRateId: null, hourlyRateKopecks: null }]
+    expect(accrueShifts([shiftOn('a', '2026-09-10')], hourlyRules)).toBe(350000)
+  })
 })
 
 describe('calculateSalarySheet', () => {

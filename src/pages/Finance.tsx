@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Alert, AutoComplete, Button, Card, Checkbox, Col, DatePicker, Form, Input, List, Popconfirm, Row, Select, Space, Typography } from 'antd'
+import dayjs from 'dayjs'
 import { Bookmark, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { EntryKind, Transaction } from '../entities/types'
 import { dateLabel, monthLabel, today } from '../shared/dates'
 import { isValidMoney, moneyInput, parseMoney, rubles } from '../shared/money'
-import { EmptyState, ErrorNote, Field, Loading, Modal, Title, confirmAction } from '../shared/ui'
+import { EmptyState, ErrorNote, FormModal, Loading, Title } from '../shared/ui'
 import { createTransaction, deleteTransaction, listExpenseCategories, listTransactions, updateTransaction, type TransactionInput } from '../services/finance'
 import { listEntryPresets, rememberAmount } from '../services/presets'
 import { useOrg } from '../app/OrgContext'
@@ -24,20 +26,26 @@ export function FinancePage() {
   const expenses = (transactions.data ?? []).filter(x => x.kind === 'EXPENSE')
   const sum = (rows:Transaction[]) => rows.reduce((total, row) => total + row.amountKopecks, 0)
 
+  const list = (title:string, rows:Transaction[]) => <EntryList
+    title={title} total={sum(rows)} rows={rows} loading={transactions.isLoading} pointName={pointName}
+    onEdit={entry => setForm({ kind: entry.kind, entry })}
+    onDelete={entry => remove.mutate({ kind: entry.kind, id: entry.id })}
+  />
+
   return <>
     <Title title="Финансы" subtitle={`${monthLabel(month)} · ${pointId ? pointName(pointId) : 'Все ПВЗ'}`}>
-      <div className="flex flex-wrap gap-2">
-        <button className="btn px-3 text-sm" onClick={() => setForm({ kind: 'INCOME' })} disabled={!points.length}><Plus size={15}/>Доход</button>
-        <button className="btn btn-primary" onClick={() => setForm({ kind: 'EXPENSE' })} disabled={!points.length}><Plus size={16}/>Расход</button>
-      </div>
+      <Space wrap>
+        <Button icon={<Plus size={15}/>} onClick={() => setForm({ kind: 'INCOME' })} disabled={!points.length}>Доход</Button>
+        <Button type="primary" icon={<Plus size={16}/>} onClick={() => setForm({ kind: 'EXPENSE' })} disabled={!points.length}>Расход</Button>
+      </Space>
     </Title>
 
-    {!points.length && <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Сначала добавьте ПВЗ — записи привязываются к точке.</div>}
+    {!points.length && <Alert className="mb-4" type="warning" showIcon message="Сначала добавьте ПВЗ — записи привязываются к точке."/>}
 
-    <div className="grid gap-4 sm:gap-5 lg:grid-cols-2">
-      <EntryList title="Доходы" total={sum(income)} rows={income} loading={transactions.isLoading} pointName={pointName} onEdit={entry => setForm({ kind: entry.kind, entry })} onDelete={entry => confirmAction('Удалить запись?') && remove.mutate({ kind: entry.kind, id: entry.id })}/>
-      <EntryList title="Расходы" total={sum(expenses)} rows={expenses} loading={transactions.isLoading} pointName={pointName} onEdit={entry => setForm({ kind: entry.kind, entry })} onDelete={entry => confirmAction('Удалить запись?') && remove.mutate({ kind: entry.kind, id: entry.id })}/>
-    </div>
+    <Row gutter={[16, 16]}>
+      <Col xs={24} lg={12}>{list('Доходы', income)}</Col>
+      <Col xs={24} lg={12}>{list('Расходы', expenses)}</Col>
+    </Row>
 
     <ErrorNote error={transactions.error ?? remove.error}/>
     {form && <EntryForm kind={form.kind} entry={form.entry} onClose={() => setForm(undefined)}/>}
@@ -48,26 +56,32 @@ function EntryList({ title, total, rows, loading, pointName, onEdit, onDelete }:
   title:string; total:number; rows:Transaction[]; loading:boolean
   pointName:(id:string | null) => string; onEdit:(entry:Transaction) => void; onDelete:(entry:Transaction) => void
 }) {
-  return <section className="card min-w-0 p-4 sm:p-5">
-    <div className="flex items-center justify-between gap-3">
-      <h2 className="font-semibold">{title}</h2>
-      <span className="text-sm font-semibold">{rubles(total)}</span>
-    </div>
-    <div className="mt-2 divide-y">
-      {loading ? <Loading/> : !rows.length ? <EmptyState text="Записей за этот месяц нет."/>
-        : rows.map(entry => <div key={entry.id} className="flex items-center justify-between gap-3 py-3">
-          <div className="min-w-0">
-            <b className="text-sm">{entry.category}</b>
-            <p className="truncate text-xs text-slate-500">{dateLabel(entry.date)} · {pointName(entry.pickupPointId)}{entry.description ? ` · ${entry.description}` : ''}</p>
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <span className={`whitespace-nowrap text-sm font-semibold ${entry.kind === 'INCOME' ? 'text-brand-600' : ''}`}>{rubles(entry.amountKopecks)}</span>
-            <button aria-label="Изменить" className="p-1 text-slate-400" onClick={() => onEdit(entry)}><Pencil size={15}/></button>
-            <button aria-label="Удалить" className="p-1 text-slate-400" onClick={() => onDelete(entry)}><Trash2 size={15}/></button>
-          </div>
-        </div>)}
-    </div>
-  </section>
+  return <Card
+    variant="outlined" styles={{ body: { padding: rows.length ? 0 : undefined } }}
+    title={title} extra={<Typography.Text strong>{rubles(total)}</Typography.Text>}
+  >
+    {loading ? <Loading/> : !rows.length ? <EmptyState text="Записей за этот месяц нет."/>
+      : <List
+        dataSource={rows} rowKey="id"
+        renderItem={entry => <List.Item style={{ paddingInline: 16 }} actions={[
+          <Typography.Text key="sum" strong style={{ color: entry.kind === 'INCOME' ? '#16a34a' : undefined, whiteSpace: 'nowrap' }}>
+            {rubles(entry.amountKopecks)}
+          </Typography.Text>,
+          <Button key="edit" type="text" size="small" aria-label="Изменить" icon={<Pencil size={15}/>} onClick={() => onEdit(entry)}/>,
+          <Popconfirm
+            key="delete" title="Удалить запись?" okText="Удалить" cancelText="Отмена" okButtonProps={{ danger: true }}
+            onConfirm={() => onDelete(entry)}
+          ><Button type="text" size="small" aria-label="Удалить" icon={<Trash2 size={15}/>}/></Popconfirm>,
+        ]}>
+          <List.Item.Meta
+            title={<span className="text-sm">{entry.category}</span>}
+            description={<span className="text-xs">
+              {dateLabel(entry.date)} · {pointName(entry.pickupPointId)}{entry.description ? ` · ${entry.description}` : ''}
+            </span>}
+          />
+        </List.Item>}
+      />}
+  </Card>
 }
 
 function EntryForm({ kind, entry, onClose }:{ kind:EntryKind; entry?:Transaction; onClose:() => void }) {
@@ -103,49 +117,59 @@ function EntryForm({ kind, entry, onClose }:{ kind:EntryKind; entry?:Transaction
       if (remember && pickupPointId) await rememberAmount({ pickupPointId, kind, category, amountKopecks: parseMoney(amount) })
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['transactions'] })
-      void queryClient.invalidateQueries({ queryKey: ['presets'] })
-      void queryClient.invalidateQueries({ queryKey: ['expense-categories'] })
+      for (const key of ['transactions', 'presets', 'expense-categories']) void queryClient.invalidateQueries({ queryKey: [key] })
       onClose()
     },
   })
 
   const changedFromPreset = matched && parseMoney(amount) !== matched.amountKopecks
+  const ready = isValidMoney(amount) && Boolean(category.trim()) && Boolean(pickupPointId)
 
-  return <Modal title={`${entry ? 'Изменить' : 'Новый'} ${kind === 'INCOME' ? 'доход' : 'расход'}`} onClose={onClose}>
-    <form className="grid gap-4" onSubmit={event => { event.preventDefault(); save.mutate() }}>
-      <Field label="ПВЗ"><select className="field" required value={pickupPointId} onChange={e => setPoint(e.target.value)}>
-        <option value="">Выберите ПВЗ</option>
-        {points.map(point => <option key={point.id} value={point.id}>{point.name}</option>)}
-      </select></Field>
+  return <FormModal
+    title={`${entry ? 'Изменить' : 'Новый'} ${kind === 'INCOME' ? 'доход' : 'расход'}`} onClose={onClose}
+    footer={<Space wrap>
+      <Button type="primary" loading={save.isPending} disabled={!ready} icon={remember ? <Bookmark size={15}/> : undefined} onClick={() => save.mutate()}>
+        Сохранить{isValidMoney(amount) ? ` ${rubles(parseMoney(amount))}` : ''}
+      </Button>
+      <Button onClick={onClose}>Отмена</Button>
+    </Space>}
+  >
+    <Form layout="vertical" requiredMark={false}>
+      <Form.Item label="ПВЗ" required>
+        <Select
+          value={pickupPointId || undefined} onChange={setPoint} placeholder="Выберите ПВЗ"
+          options={points.map(point => ({ value: point.id, label: point.name }))}
+        />
+      </Form.Item>
 
-      <Field label="Категория" hint={matched ? `Запомнено для этого ПВЗ: ${rubles(matched.amountKopecks)}` : undefined}>
-        <input className="field" required list="known-categories" value={category} onChange={e => { setCategory(e.target.value); setTouched(false) }} placeholder={kind === 'INCOME' ? 'Например, Wildberries' : 'Например, Аренда'}/>
-        <datalist id="known-categories">{known.map(name => <option key={name} value={name}/>)}</datalist>
-      </Field>
+      <Form.Item label="Категория" required extra={matched ? `Запомнено для этого ПВЗ: ${rubles(matched.amountKopecks)}` : undefined}>
+        <AutoComplete
+          value={category} onChange={value => { setCategory(value); setTouched(false) }}
+          options={known.map(name => ({ value: name }))}
+          filterOption={(input, option) => String(option?.value ?? '').toLowerCase().includes(input.toLowerCase())}
+          placeholder={kind === 'INCOME' ? 'Например, Wildberries' : 'Например, Аренда'}
+        />
+      </Form.Item>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Сумма, ₽"><input className="field" required inputMode="decimal" value={amount} onChange={e => { setAmount(e.target.value); setTouched(true) }}/></Field>
-        <Field label="Дата"><input type="date" className="field" required value={date} onChange={e => setDate(e.target.value)}/></Field>
+      <div className="grid gap-x-4 sm:grid-cols-2">
+        <Form.Item label="Сумма, ₽" required>
+          <Input inputMode="decimal" value={amount} onChange={e => { setAmount(e.target.value); setTouched(true) }} suffix="₽"/>
+        </Form.Item>
+        <Form.Item label="Дата" required>
+          <DatePicker style={{ width: '100%' }} format="DD.MM.YYYY" allowClear={false} value={dayjs(date)} onChange={value => value && setDate(value.format('YYYY-MM-DD'))}/>
+        </Form.Item>
       </div>
 
-      <Field label="Комментарий"><input className="field" value={description ?? ''} onChange={e => setDescription(e.target.value)} placeholder="Необязательно"/></Field>
+      <Form.Item label="Комментарий">
+        <Input value={description ?? ''} onChange={e => setDescription(e.target.value)} placeholder="Необязательно"/>
+      </Form.Item>
 
-      <div className="flex items-start gap-2">
-        <input id="remember-amount" type="checkbox" className="mt-0.5 h-5 w-5 shrink-0 accent-green-600" checked={remember} onChange={e => setRemember(e.target.checked)}/>
-        <label htmlFor="remember-amount" className="text-sm text-slate-600">
-          {matched && changedFromPreset ? 'Запомнить новую сумму для этой категории и ПВЗ' : 'Запомнить сумму для этой категории и ПВЗ'}
-          <span className="block text-xs text-slate-400">В следующий раз она подставится автоматически.</span>
-        </label>
-      </div>
+      <Checkbox checked={remember} onChange={e => setRemember(e.target.checked)} style={{ alignItems: 'flex-start' }}>
+        {matched && changedFromPreset ? 'Запомнить новую сумму для этой категории и ПВЗ' : 'Запомнить сумму для этой категории и ПВЗ'}
+        <div><Typography.Text type="secondary" className="text-xs">В следующий раз она подставится автоматически.</Typography.Text></div>
+      </Checkbox>
 
       <ErrorNote error={save.error}/>
-      <div className="flex flex-wrap gap-2">
-        <button className="btn btn-primary flex-1 sm:flex-none" disabled={save.isPending || !isValidMoney(amount) || !category.trim() || !pickupPointId}>
-          {remember && <Bookmark size={15}/>}{save.isPending ? 'Сохраняем…' : `Сохранить ${isValidMoney(amount) ? rubles(parseMoney(amount)) : ''}`}
-        </button>
-        <button type="button" className="btn flex-1 sm:flex-none" onClick={onClose}>Отмена</button>
-      </div>
-    </form>
-  </Modal>
+    </Form>
+  </FormModal>
 }

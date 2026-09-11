@@ -1,13 +1,19 @@
 import dayjs from 'dayjs'
-import type { Bonus, DashboardSummary, Deduction, Employee, Penalty, SalaryPayment, SalaryRule, SalarySheet, Shift, Transaction } from './types'
+import type { Bonus, DashboardSummary, Deduction, Employee, PayMode, Penalty, SalaryPayment, SalaryRule, SalarySheet, Shift, Transaction } from './types'
 
 const day = (value:string) => value.slice(0, 10)
 const hours = (shift:Shift) => dayjs(shift.actualEndsAt ?? shift.endsAt).diff(dayjs(shift.actualStartsAt ?? shift.startsAt), 'minute') / 60
+/** Половина смены оплачивается вполовину; часовой режим считается отдельно, по фактическому времени. */
+const factor = (mode:PayMode | undefined) => mode === 'HALF' ? 0.5 : 1
 
 export function calculatePayroll(employee:Employee, shifts:Shift[], month:string, normDays:number):number {
   const worked = shifts.filter(s => s.employeeId === employee.id && s.status === 'COMPLETED' && s.startsAt.startsWith(month))
-  if (employee.paymentType === 'SHIFT') return worked.length * employee.rateKopecks
   if (employee.paymentType === 'HOURLY') return worked.reduce((sum, s) => sum + Math.round(hours(s) * employee.rateKopecks), 0)
+  if (employee.paymentType === 'SHIFT') {
+    return worked.reduce((sum, s) => sum + (s.payMode === 'HOURS' && employee.hourlyRateKopecks
+      ? Math.round(hours(s) * employee.hourlyRateKopecks)
+      : Math.round(employee.rateKopecks * factor(s.payMode))), 0)
+  }
   const days = new Set(worked.map(s => day(s.startsAt))).size
   return Math.round(employee.rateKopecks * days / normDays)
 }
@@ -21,17 +27,24 @@ export function rateForDate(rules:SalaryRule[], date:string):SalaryRule | undefi
   return applicable.length ? applicable[applicable.length - 1] : ordered[0]
 }
 
+/** Часовая ставка смены: у почасового сотрудника это его основная ставка, у остальных — дополнительная. */
+export const hourlyRateOf = (rule:SalaryRule) => rule.paymentType === 'HOURLY' ? rule.rateKopecks : rule.hourlyRateKopecks
+
 export function accrueShifts(worked:Shift[], rules:SalaryRule[]):number {
   let total = 0
-  const salaryDays = new Map<string, SalaryRule>()
+  const salaryDays = new Map<string, { rule:SalaryRule; part:number }>()
   for (const shift of worked) {
     const rule = rateForDate(rules, shift.startsAt)
     if (!rule) continue
-    if (rule.paymentType === 'SHIFT') total += rule.rateKopecks
-    else if (rule.paymentType === 'HOURLY') total += Math.round(hours(shift) * rule.rateKopecks)
-    else salaryDays.set(day(shift.startsAt), rule)
+    const hourly = hourlyRateOf(rule)
+    if (shift.payMode === 'HOURS' && hourly) { total += Math.round(hours(shift) * hourly); continue }
+    if (rule.paymentType === 'HOURLY') { total += Math.round(hours(shift) * rule.rateKopecks); continue }
+    if (rule.paymentType === 'SHIFT') { total += Math.round(rule.rateKopecks * factor(shift.payMode)); continue }
+    // Оклад платится за день, поэтому две смены в один день не удваивают сумму, а полный день перебивает половину.
+    const key = day(shift.startsAt), part = factor(shift.payMode), known = salaryDays.get(key)
+    if (!known || known.part < part) salaryDays.set(key, { rule, part })
   }
-  for (const rule of salaryDays.values()) total += Math.round(rule.rateKopecks / (rule.monthlyNormDays ?? 22))
+  for (const { rule, part } of salaryDays.values()) total += Math.round(rule.rateKopecks * part / (rule.monthlyNormDays ?? 22))
   return total
 }
 
