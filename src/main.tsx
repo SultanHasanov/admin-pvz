@@ -8,7 +8,20 @@ import { App } from './app/App'
 import { antdTheme } from './shared/theme'
 import './shared/styles.css'
 
-const queryClient = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30_000 } } })
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 30_000,
+      // Телефон уходит в фон и возвращается через час — данные должны подтянуться сами.
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+    },
+  },
+})
+
+// Позицию списков восстанавливает useScrollRestore — браузер не должен с ним спорить.
+if ('scrollRestoration' in history) history.scrollRestoration = 'manual'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

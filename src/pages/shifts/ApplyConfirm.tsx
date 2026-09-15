@@ -3,7 +3,7 @@ import { Alert, Button, Radio, Space, Typography } from 'antd'
 import type { ApplyPlan } from '../../entities/schedule'
 import type { ApplyResult } from '../../services/schedule'
 import { dateLabel } from '../../shared/dates'
-import { FormModal } from '../../shared/ui'
+import { FormModal, SheetFooter } from '../../shared/ui'
 
 const preview = (dates:string[]) => {
   const shown = dates.slice(0, 5).map(dateLabel).join(', ')
@@ -21,7 +21,7 @@ export function ApplyConfirm({ plan, pending, result, onApply, onClose }:{
   const [strategy, setStrategy] = useState<'skip' | 'replace'>('skip')
   const nothing = !plan.toAdd.length && !plan.conflicts.length
 
-  if (result) return <FormModal title="График применён" onClose={onClose} footer={<Button type="primary" onClick={onClose}>Понятно</Button>}>
+  if (result) return <FormModal title="График применён" onClose={onClose} footer={<SheetFooter><Button type="primary" onClick={onClose}>Понятно</Button></SheetFooter>}>
     <Space direction="vertical" size={4} style={{ display: 'flex' }}>
       <Typography.Text>Добавлено смен: <b>{result.added}</b></Typography.Text>
       {result.replaced > 0 && <Typography.Text>Переписано: <b>{result.replaced}</b></Typography.Text>}
@@ -36,10 +36,10 @@ export function ApplyConfirm({ plan, pending, result, onApply, onClose }:{
 
   return <FormModal
     title="Применить график" onClose={onClose}
-    footer={<Space wrap>
+    footer={<SheetFooter>
       <Button type="primary" loading={pending} disabled={nothing} onClick={() => onApply(strategy)}>Применить</Button>
       <Button onClick={onClose}>Отмена</Button>
-    </Space>}
+    </SheetFooter>}
   >
     <Space direction="vertical" size={6} style={{ display: 'flex' }}>
       <Typography.Text>Добавим смен: <b>{plan.toAdd.length}</b></Typography.Text>

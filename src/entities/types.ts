@@ -16,12 +16,14 @@ export interface Shift { id:string; employeeId:string; pickupPointId:string; sta
 export interface Transaction { id:string; kind:EntryKind; date:string; pickupPointId:string|null; category:string; amountKopecks:number; description?:string|null }
 export interface Bonus { id:string; employeeId:string; date:string; amountKopecks:number; comment?:string|null }
 export interface Penalty { id:string; employeeId:string; pickupPointId:string|null; date:string; amountKopecks:number; reason:string; comment?:string|null; status:PenaltyStatus }
-export interface SalaryPayment { id:string; employeeId:string; date:string; amountKopecks:number; kind:'ADVANCE'|'PAYMENT'|'ADJUSTMENT'; comment?:string|null }
+export interface SalaryPayment { id:string; employeeId:string; date:string; accrualMonth?:string; pickupPointId?:string|null; amountKopecks:number; kind:'ADVANCE'|'PAYMENT'|'ADJUSTMENT'; comment?:string|null }
 export interface Deduction { id:string; pickupPointId:string|null; employeeId:string|null; shiftId:string|null; eventAt:string|null; amountKopecks:number; reason:string; status:DeductionStatus; comment?:string|null; createdAt:string }
 export interface DeductionEvent { id:string; deductionId:string; eventType:string; note:string|null; createdAt:string }
 export interface EntryPreset { id:string; pickupPointId:string; kind:EntryKind; categoryName:string; amountKopecks:number; updatedAt:string }
 export interface SalaryRate { id:string; name:string|null; paymentType:PaymentType; rateKopecks:number; monthlyNormDays:number; isDefault:boolean; archivedAt:string|null }
 export interface ExpenseCategory { id:string; name:string; archivedAt:string|null }
+export interface RecurringExpense { id:string; pickupPointId:string; categoryId:string; category:string; amountKopecks:number; dayOfMonth:number; description:string|null; active:boolean }
+export interface RecurringExpenseOccurrence { id:string; recurringExpenseId:string; dueOn:string; status:'PENDING'|'PAID'|'SKIPPED'; expenseEntryId:string|null }
 export interface TaxSettings { rate:number; enabled:boolean }
 export interface DashboardSummary { income:number; expenses:number; payroll:number; tax:number; confirmedLosses:number; shifts:number }
 export interface SalarySheet { employeeId:string; accrued:number; bonuses:number; penalties:number; deductions:number; paid:number; balance:number; shifts:number }

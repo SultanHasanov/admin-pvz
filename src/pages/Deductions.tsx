@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Col, DatePicker, Form, Input, List, Popconfirm, Row, Select, Space, Statistic, Timeline, Tooltip, Typography } from 'antd'
+import { Button, Card, Col, DatePicker, Form, Input, List, Row, Select, Space, Statistic, Timeline, Typography } from 'antd'
 import dayjs from 'dayjs'
 import { History, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { Deduction, DeductionStatus } from '../entities/types'
 import { dateLabel, monthLabel, timeLabel } from '../shared/dates'
 import { isValidMoney, moneyInput, parseMoney, rubles } from '../shared/money'
-import { Badge, EmptyState, ErrorNote, FormModal, Loading, Title } from '../shared/ui'
+import { Badge, EmptyState, ErrorNote, FormModal, Loading, RowActions, SheetFooter, Title, useIsMobile } from '../shared/ui'
 import { createDeduction, deleteDeduction, listDeductionEvents, listDeductions, setDeductionStatus, updateDeduction, type DeductionInput } from '../services/deductions'
 import { listEmployees } from '../services/employees'
 import { listShifts } from '../services/shifts'
@@ -26,6 +26,7 @@ const statuses = Object.keys(deductionTitles) as DeductionStatus[]
 export function DeductionsPage() {
   const queryClient = useQueryClient()
   const { month, pointId, pointName, points } = useOrg()
+  const mobile = useIsMobile()
   const [form, setForm] = useState<{ entry?:Deduction }>()
   const [history, setHistory] = useState<Deduction>()
 
@@ -48,9 +49,10 @@ export function DeductionsPage() {
   }, new Map<string, { employeeId:string; count:number; amount:number }>()).values()].sort((a, b) => b.amount - a.amount)
 
   return <>
-    <Title title="Удержания WB" subtitle={`${monthLabel(month)} · ${pointId ? pointName(pointId) : 'Все ПВЗ'}`}>
-      <Button type="primary" icon={<Plus size={16}/>} onClick={() => setForm({})} disabled={!points.length}>Добавить удержание</Button>
-    </Title>
+    <Title
+      title="Удержания WB" subtitle={`${monthLabel(month)} · ${pointId ? pointName(pointId) : 'Все ПВЗ'}`}
+      action={{ label: 'Добавить удержание', icon: <Plus size={16}/>, onClick: () => setForm({}), disabled: !points.length }}
+    />
 
     {byEmployee.length > 0 && <Row gutter={[12, 12]} className="mb-4">
       {byEmployee.map(item => <Col key={item.employeeId} xs={12} md={8} xl={6}>
@@ -83,19 +85,17 @@ export function DeductionsPage() {
                   </Typography.Text>
                   {item.comment && <div><Typography.Text type="secondary" className="text-xs">{item.comment}</Typography.Text></div>}
                 </div>
-                <Space size={4} wrap>
-                  <Tooltip title="История"><Button size="small" icon={<History size={15}/>} onClick={() => setHistory(item)}/></Tooltip>
-                  <Tooltip title="Изменить"><Button size="small" icon={<Pencil size={15}/>} onClick={() => setForm({ entry: item })}/></Tooltip>
-                  <Popconfirm title="Удалить удержание?" okText="Удалить" cancelText="Отмена" okButtonProps={{ danger: true }} onConfirm={() => remove.mutate(item.id)}>
-                    <Tooltip title="Удалить"><Button size="small" icon={<Trash2 size={15}/>}/></Tooltip>
-                  </Popconfirm>
-                </Space>
+                <RowActions items={[
+                  { key: 'history', label: 'История', icon: <History size={15}/>, onClick: () => setHistory(item) },
+                  { key: 'edit', label: 'Изменить', icon: <Pencil size={15}/>, onClick: () => setForm({ entry: item }) },
+                  { key: 'delete', label: 'Удалить', icon: <Trash2 size={15}/>, danger: true, confirm: 'Удалить удержание?', onClick: () => remove.mutate(item.id) },
+                ]}/>
               </div>
 
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Typography.Text type="secondary" className="text-sm">Статус:</Typography.Text>
                 <Select
-                  value={item.status} style={{ minWidth: 200, maxWidth: '100%' }}
+                  value={item.status} style={mobile ? { width: '100%' } : { minWidth: 200, maxWidth: '100%' }}
                   onChange={next => status.mutate({ id: item.id, next })}
                   options={statuses.map(value => ({ value, label: deductionTitles[value] }))}
                 />
@@ -151,10 +151,11 @@ function DeductionForm({ entry, onClose }:{ entry?:Deduction; onClose:() => void
 
   return <FormModal
     title={entry ? 'Изменить удержание' : 'Новое удержание WB'} onClose={onClose}
-    footer={<Space wrap>
+    sheetHeight="90dvh"
+    footer={<SheetFooter>
       <Button type="primary" loading={save.isPending} disabled={!ready} onClick={() => save.mutate()}>Сохранить</Button>
       <Button onClick={onClose}>Отмена</Button>
-    </Space>}
+    </SheetFooter>}
   >
     <Form layout="vertical" requiredMark={false}>
       <div className="grid gap-x-4 sm:grid-cols-2">

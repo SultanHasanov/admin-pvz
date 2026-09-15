@@ -2,16 +2,18 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Card, Checkbox, Form, Input, Select, Space, Switch, Tooltip, Typography } from 'antd'
 import type { TableProps } from 'antd'
-import { Pencil, Plus } from 'lucide-react'
+import { MessageCircle, Pencil, Plus } from 'lucide-react'
 import type { Employee, PaymentType } from '../entities/types'
 import { formatPhone, formatTelegram } from '../shared/format'
 import { isValidMoney, moneyInput, parseMoney, rubles } from '../shared/money'
 import { paymentTitles, rateAmount, rateOption, rateTitle } from '../shared/salary'
 import { today } from '../shared/dates'
-import { Badge, CardRow, EmptyState, ErrorNote, FormModal, ResponsiveTable, SectionTitle, Title } from '../shared/ui'
+import { Badge, CardRow, EmptyState, ErrorNote, FormModal, ResponsiveTable, RowActions, SectionTitle, SheetFooter, Title } from '../shared/ui'
+import { color } from '../shared/tokens'
 import { createEmployee, listEmployees, saveRate, setEmployeeStatus, updateEmployee, type EmployeeInput } from '../services/employees'
 import { createSalaryRate, listSalaryRates } from '../services/rates'
 import { useOrg } from '../app/OrgContext'
+import { createTelegramPairingCode } from '../services/telegram'
 
 export function EmployeesPage() {
   const queryClient = useQueryClient()
@@ -19,6 +21,7 @@ export function EmployeesPage() {
   const [showArchived, setShowArchived] = useState(false)
   const [editing, setEditing] = useState<Employee | null>(null)
   const [creating, setCreating] = useState(false)
+  const [inviting, setInviting] = useState<Employee | null>(null)
   const employees = useQuery({ queryKey: ['employees', showArchived], queryFn: () => listEmployees(showArchived) })
   const rates = useQuery({ queryKey: ['salary-rates', true], queryFn: () => listSalaryRates(true) })
 
@@ -42,9 +45,10 @@ export function EmployeesPage() {
     />
   </Tooltip>
 
-  const actions = (employee:Employee) => <Space size={4}>
-    <Tooltip title="Изменить"><Button icon={<Pencil size={15}/>} onClick={() => setEditing(employee)}/></Tooltip>
-  </Space>
+  const actions = (employee:Employee) => <RowActions items={[
+    { key: 'invite', label: 'Пригласить в бот', icon: <MessageCircle size={15}/>, onClick: () => setInviting(employee) },
+    { key: 'edit', label: 'Изменить', icon: <Pencil size={15}/>, onClick: () => setEditing(employee) },
+  ]}/>
 
   const columns:TableProps<Employee>['columns'] = [
     {
@@ -68,11 +72,11 @@ export function EmployeesPage() {
   ]
 
   return <>
-    <Title title="Сотрудники" subtitle={pointId ? pointName(pointId) : 'Все ПВЗ'}>
-      <Space wrap>
-        <Button onClick={() => setShowArchived(!showArchived)}>{showArchived ? 'Только активные' : 'Показать отключённых'}</Button>
-        <Button type="primary" icon={<Plus size={16}/>} onClick={() => setCreating(true)} disabled={!points.length}>Добавить сотрудника</Button>
-      </Space>
+    <Title
+      title="Сотрудники" subtitle={pointId ? pointName(pointId) : 'Все ПВЗ'}
+      action={{ label: 'Добавить сотрудника', icon: <Plus size={16}/>, onClick: () => setCreating(true), disabled: !points.length }}
+    >
+      <Button onClick={() => setShowArchived(!showArchived)}>{showArchived ? 'Только активные' : 'Показать отключённых'}</Button>
     </Title>
 
     {!points.length && <Alert className="mb-4" type="warning" showIcon message="Сначала добавьте хотя бы один ПВЗ в разделе «ПВЗ»."/>}
@@ -98,8 +102,25 @@ export function EmployeesPage() {
     </Card>
 
     <ErrorNote error={employees.error ?? status.error}/>
-    {(creating || editing) && <EmployeeForm employee={editing} onClose={() => { setCreating(false); setEditing(null) }}/>}
+    {(creating || editing) && <EmployeeForm employee={editing} onClose={() => { setCreating(false); setEditing(null) }}/>
+    }
+    {inviting && <EmployeeBotInvite employee={inviting} points={points.filter(point => inviting.pickupPointIds.includes(point.id))} onClose={() => setInviting(null)}/>
+    }
   </>
+}
+
+function EmployeeBotInvite({ employee, points, onClose }:{ employee:Employee; points:{id:string;name:string}[]; onClose:() => void }) {
+  const [pointId,setPointId] = useState(points[0]?.id ?? '')
+  const [code,setCode] = useState('')
+  const create = useMutation({ mutationFn:() => createTelegramPairingCode(pointId,employee.id), onSuccess:setCode })
+  return <FormModal title={`Доступ в бот · ${employee.fullName}`} onClose={onClose} footer={<Button onClick={onClose}>Закрыть</Button>}>
+    <Typography.Paragraph type="secondary">Сотрудник сможет только смотреть свои смены и зарплату выбранного ПВЗ.</Typography.Paragraph>
+    <Form layout="vertical"><Form.Item label="ПВЗ"><Select value={pointId} onChange={setPointId} options={points.map(point => ({value:point.id,label:point.name}))}/></Form.Item></Form>
+    <Button type="primary" disabled={!pointId} loading={create.isPending} onClick={() => create.mutate()}>Создать приглашение</Button>
+    {code && <Alert className="mt-4" type="info" message="Отправьте сотруднику" description={<Typography.Text copyable strong>/start {code}</Typography.Text>}/>
+    }
+    <ErrorNote error={create.error}/>
+  </FormModal>
 }
 
 /** Значение селекта ставки: id из справочника либо «своя сумма». */
@@ -176,10 +197,12 @@ function EmployeeForm({ employee, onClose }:{ employee:Employee | null; onClose:
 
   return <FormModal
     title={employee ? 'Изменить сотрудника' : 'Новый сотрудник'} onClose={onClose}
-    footer={<Space wrap>
+    // Форма длинная и меняет высоту при выборе «своя сумма» — фиксируем лист, чтобы он не прыгал.
+    sheetHeight="90dvh"
+    footer={<SheetFooter>
       <Button type="primary" loading={save.isPending} disabled={Boolean(problem)} onClick={() => save.mutate()}>Сохранить</Button>
       <Button onClick={onClose}>Отмена</Button>
-    </Space>}
+    </SheetFooter>}
   >
     <Form layout="vertical" requiredMark={false} onSubmitCapture={event => { event.preventDefault(); if (!problem) save.mutate() }}>
       <SectionTitle first>Кто работает</SectionTitle>
@@ -209,7 +232,7 @@ function EmployeeForm({ employee, onClose }:{ employee:Employee | null; onClose:
           />
         </Form.Item>
 
-        {rateId === CUSTOM && <Card size="small" style={{ marginBottom: 16, background: '#fafafa' }}>
+        {rateId === CUSTOM && <Card size="small" style={{ marginBottom: 16, background: color.surfaceMuted }}>
           <div className="grid gap-x-4 sm:grid-cols-2">
             <Form.Item label="Тип оплаты" style={{ marginBottom: 12 }}>
               <Select value={paymentType} onChange={setPaymentType} options={Object.entries(paymentTitles).map(([value, label]) => ({ value, label }))}/>
@@ -260,7 +283,7 @@ function NewRateBox({ draft, onCancel, onCreated }:{ draft:SalaryRateDraft; onCa
     onSuccess: id => { void queryClient.invalidateQueries({ queryKey: ['salary-rates'] }); onCreated(id) },
   })
 
-  return <Card size="small" title="Новая ставка в справочнике" style={{ marginBottom: 16, borderColor: '#16a34a' }}>
+  return <Card size="small" title="Новая ставка в справочнике" style={{ marginBottom: 16, borderColor: color.brand }}>
     <div className="grid gap-x-4 sm:grid-cols-2">
       <Form.Item label="Тип оплаты" style={{ marginBottom: 12 }}>
         <Select value={paymentType} onChange={setPaymentType} options={Object.entries(paymentTitles).map(([value, label]) => ({ value, label }))}/>

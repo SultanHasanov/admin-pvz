@@ -2,11 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Card, Dropdown, Segmented, Select, Space, TimePicker, Typography } from 'antd'
 import dayjs from 'dayjs'
-import { CalendarRange, CopyPlus, Wand2 } from 'lucide-react'
+import { CalendarRange, CopyPlus, MoreHorizontal, Settings2, Wand2 } from 'lucide-react'
 import type { PayMode, Shift } from '../../entities/types'
 import { planApply, shiftDate, type ApplyPlan, type PlannedSlot } from '../../entities/schedule'
 import { monthEnd, monthStart, weekLabel, weekStartOf } from '../../shared/dates'
-import { EmptyState, ErrorNote, Loading } from '../../shared/ui'
+import { EmptyState, ErrorNote, FormModal, Loading, SheetFooter, useIsMobile } from '../../shared/ui'
 import { createShift, deleteShiftSafe, listShiftsRange, moveShift } from '../../services/shifts'
 import { applySchedule, type ApplyOptions, type ApplyResult } from '../../services/schedule'
 import { listScheduleTemplates, type ScheduleTemplate } from '../../services/scheduleTemplates'
@@ -34,8 +34,10 @@ const writeTemplate = (value:Template) => {
 export function ScheduleBoard({ onPay, onReplace }:{ onPay:(shift:Shift) => void; onReplace:(shift:Shift) => void }) {
   const queryClient = useQueryClient()
   const { month, setMonth, pointId, points, defaultPointId, pointName } = useOrg()
+  const mobile = useIsMobile()
 
   const [view, setView] = useState<'month' | 'week'>('month')
+  const [params, setParams] = useState(false)
   const [weekStart, setWeekStart] = useState(() => weekStartOf(
     month === dayjs().format('YYYY-MM') ? dayjs().format('YYYY-MM-DD') : monthStart(month)))
   const [template, setTemplate] = useState<Template>(readTemplate)
@@ -192,9 +194,51 @@ export function ScheduleBoard({ onPay, onReplace }:{ onPay:(shift:Shift) => void
       : 'Сначала добавьте сотрудников.'}/>
   </Card>
 
+  const pointLabel = targetPoint ? pointName(targetPoint) : 'Все ПВЗ'
+  const timeRange = `${template.startsAt}–${template.endsAt}`
+
+  const timePickers = <>
+    <TimePicker
+      value={dayjs(template.startsAt, TIME)} onChange={value => value && setTemplate({ ...template, startsAt: value.format(TIME) })}
+      format={TIME} minuteStep={5} allowClear={false} needConfirm={false}
+      // На телефоне нативная клавиатура воюет с панелью выбора — ввод только тапами.
+      inputReadOnly={mobile} style={mobile ? { width: '100%' } : { width: 88 }}
+    />
+    <TimePicker
+      value={dayjs(template.endsAt, TIME)} onChange={value => value && setTemplate({ ...template, endsAt: value.format(TIME) })}
+      format={TIME} minuteStep={5} allowClear={false} needConfirm={false}
+      inputReadOnly={mobile} style={mobile ? { width: '100%' } : { width: 88 }}
+    />
+  </>
+
+  const pointPicker = !pointId && points.length > 1 && <Select
+    value={targetPoint} onChange={setTargetPoint} style={mobile ? { width: '100%' } : { minWidth: 150 }}
+    options={points.map(point => ({ value: point.id, label: point.name }))}
+  />
+
   return <>
+    {/* На телефоне в тулбаре остаются только переключатель вида и главное действие,
+        остальное уезжает за чип «время · ПВЗ» и меню «⋯» — иначе панель рассыпается на пять строк. */}
     <Card size="small" variant="outlined" className="mb-3">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+      {mobile ? <div className="grid gap-2">
+        <Segmented
+          block value={view} onChange={value => setView(value as 'month' | 'week')}
+          options={[{ value: 'month', label: 'Месяц' }, { value: 'week', label: 'Неделя' }]}
+        />
+        <div className="flex items-center gap-2">
+          <Button className="min-w-0 flex-1" icon={<Settings2 size={15}/>} onClick={() => setParams(true)}>
+            <span className="truncate">{timeRange}{pointPicker ? ` · ${pointLabel}` : ''}</span>
+          </Button>
+          {Boolean(templates.data?.length) && <Dropdown
+            trigger={['click']} placement="bottomRight"
+            menu={{
+              items: templates.data!.map(item => ({ key: item.id, label: item.name, icon: <CalendarRange size={15}/> })),
+              onClick: ({ key }) => setWizard(templates.data!.find(t => t.id === key) ?? null),
+            }}
+          ><Button icon={<MoreHorizontal size={18}/>} aria-label="Мои графики"/></Dropdown>}
+        </div>
+        <Button block type="primary" icon={<Wand2 size={15}/>} onClick={() => setWizard(null)}>Задать график</Button>
+      </div> : <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <Segmented
           value={view} onChange={value => setView(value as 'month' | 'week')}
           options={[{ value: 'month', label: 'Месяц' }, { value: 'week', label: 'Неделя' }]}
@@ -202,21 +246,10 @@ export function ScheduleBoard({ onPay, onReplace }:{ onPay:(shift:Shift) => void
 
         <Space size={8} wrap>
           <Typography.Text type="secondary" className="text-xs">Смена</Typography.Text>
-          <TimePicker
-            value={dayjs(template.startsAt, TIME)} onChange={value => value && setTemplate({ ...template, startsAt: value.format(TIME) })}
-            format={TIME} minuteStep={5} allowClear={false} needConfirm={false} style={{ width: 88 }}
-          />
-          <Typography.Text type="secondary">–</Typography.Text>
-          <TimePicker
-            value={dayjs(template.endsAt, TIME)} onChange={value => value && setTemplate({ ...template, endsAt: value.format(TIME) })}
-            format={TIME} minuteStep={5} allowClear={false} needConfirm={false} style={{ width: 88 }}
-          />
+          {timePickers}
         </Space>
 
-        {!pointId && points.length > 1 && <Select
-          value={targetPoint} onChange={setTargetPoint} style={{ minWidth: 150 }}
-          options={points.map(point => ({ value: point.id, label: point.name }))}
-        />}
+        {pointPicker}
 
         <Space size={8} wrap className="ml-auto">
           {Boolean(templates.data?.length) && <Dropdown
@@ -227,8 +260,24 @@ export function ScheduleBoard({ onPay, onReplace }:{ onPay:(shift:Shift) => void
           ><Button icon={<CalendarRange size={15}/>}>Мои графики</Button></Dropdown>}
           <Button type="primary" icon={<Wand2 size={15}/>} onClick={() => setWizard(null)}>Задать график</Button>
         </Space>
-      </div>
+      </div>}
     </Card>
+
+    {params && <FormModal
+      title="Параметры смены" onClose={() => setParams(false)}
+      footer={<SheetFooter><Button type="primary" onClick={() => setParams(false)}>Готово</Button></SheetFooter>}
+    >
+      <div className="grid gap-4">
+        <div className="grid gap-1.5">
+          <Typography.Text type="secondary" className="text-xs">Начало и конец смены</Typography.Text>
+          <div className="grid grid-cols-2 gap-2">{timePickers}</div>
+        </div>
+        {pointPicker && <div className="grid gap-1.5">
+          <Typography.Text type="secondary" className="text-xs">ПВЗ для новых смен</Typography.Text>
+          {pointPicker}
+        </div>}
+      </div>
+    </FormModal>}
 
     {linked && <Alert
       className="mb-3" type="warning" showIcon closable onClose={() => setLinked(false)}
@@ -257,6 +306,7 @@ export function ScheduleBoard({ onPay, onReplace }:{ onPay:(shift:Shift) => void
         weekStart={weekStart} staff={staff} board={board} pending={pending}
         onToggle={toggle} onDelete={shift => remove.mutate(shift)}
         onMove={(shift, employeeId, date) => move.mutate({ shift, employeeId, date })}
+        onPay={onPay} onReplace={onReplace} onLinked={() => setLinked(true)}
       />
       <WeekTotals weekStart={weekStart} staff={staff} board={board}/>
     </>}

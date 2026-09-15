@@ -61,7 +61,7 @@ export function calculateSalarySheet(input:{
   const bonuses = input.bonuses.filter(b => b.employeeId === employeeId && inMonth(b.date, month)).reduce((s, b) => s + b.amountKopecks, 0)
   const penalties = input.penalties.filter(p => p.employeeId === employeeId && inMonth(p.date, month) && countedPenalty(p)).reduce((s, p) => s + p.amountKopecks, 0)
   const deductions = input.deductions.filter(d => d.employeeId === employeeId && d.status === 'EMPLOYEE_LIABILITY' && inMonth(d.eventAt ?? d.createdAt, month)).reduce((s, d) => s + d.amountKopecks, 0)
-  const paid = input.payments.filter(p => p.employeeId === employeeId && inMonth(p.date, month)).reduce((s, p) => s + p.amountKopecks, 0)
+  const paid = input.payments.filter(p => p.employeeId === employeeId && (p.accrualMonth ?? p.date).startsWith(month)).reduce((s, p) => s + p.amountKopecks, 0)
   return { employeeId, accrued, bonuses, penalties, deductions, paid, balance: accrued + bonuses - penalties - deductions - paid, shifts: worked.length }
 }
 

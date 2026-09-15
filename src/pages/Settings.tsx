@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Card, Checkbox, Col, Form, Input, List, Row, Space, Switch, Tag, Tooltip, Typography } from 'antd'
+import { Alert, Button, Card, Checkbox, Col, Form, Input, List, Row, Space, Switch, Tag, Typography } from 'antd'
 import { Archive, Pencil, RefreshCw, RotateCcw, Unplug } from 'lucide-react'
 import type { ModuleKey } from '../entities/types'
-import { ErrorNote, Loading, Title } from '../shared/ui'
+import { ErrorNote, Loading, RowActions, Title } from '../shared/ui'
 import { listEnabledModules, moduleTitles, getTaxSettings, saveTaxSettings, setModuleEnabled } from '../services/settings'
 import { getOrganization, renameOrganization } from '../services/org'
 import { listExpenseCategories, renameExpenseCategory, setExpenseCategoryArchived } from '../services/finance'
@@ -174,22 +174,25 @@ function CategoriesCard() {
           renderItem={category => <List.Item
             style={{ paddingInline: 24 }}
             actions={editing === category.id ? [] : [
-              <Tooltip key="rename" title="Переименовать">
-                <Button type="text" size="small" icon={<Pencil size={15}/>} onClick={() => { setEditing(category.id); setName(category.name) }}/>
-              </Tooltip>,
-              <Tooltip key="archive" title={category.archivedAt ? 'Вернуть' : 'В архив'}>
-                <Button
-                  type="text" size="small" icon={category.archivedAt ? <RotateCcw size={15}/> : <Archive size={15}/>}
-                  onClick={() => archive.mutate({ id: category.id, archived: !category.archivedAt })}
-                />
-              </Tooltip>,
+              <RowActions key="actions" items={[
+                {
+                  key: 'rename', label: 'Переименовать', icon: <Pencil size={15}/>,
+                  onClick: () => { setEditing(category.id); setName(category.name) },
+                },
+                category.archivedAt
+                  ? { key: 'restore', label: 'Вернуть', icon: <RotateCcw size={15}/>, onClick: () => archive.mutate({ id: category.id, archived: false }) }
+                  : { key: 'archive', label: 'В архив', icon: <Archive size={15}/>, onClick: () => archive.mutate({ id: category.id, archived: true }) },
+              ]}/>,
             ]}
           >
             {editing === category.id
-              ? <form className="flex flex-1 gap-2" onSubmit={event => { event.preventDefault(); rename.mutate({ id: category.id, value: name }) }}>
+              // Поле и две кнопки в один ряд на 360px не влезают — на телефоне ставим столбиком.
+              ? <form className="flex flex-1 flex-col gap-2 sm:flex-row" onSubmit={event => { event.preventDefault(); rename.mutate({ id: category.id, value: name }) }}>
                 <Input autoFocus value={name} onChange={e => setName(e.target.value)}/>
-                <Button type="primary" htmlType="submit" loading={rename.isPending}>ОК</Button>
-                <Button onClick={() => setEditing(undefined)}>Отмена</Button>
+                <div className="flex gap-2">
+                  <Button block type="primary" htmlType="submit" loading={rename.isPending}>ОК</Button>
+                  <Button block onClick={() => setEditing(undefined)}>Отмена</Button>
+                </div>
               </form>
               : <Typography.Text delete={Boolean(category.archivedAt)} type={category.archivedAt ? 'secondary' : undefined} className="truncate">
                 {category.name}

@@ -3,6 +3,7 @@ import dayjs from 'dayjs'
 import type { Employee, Shift } from '../../entities/types'
 import { monthEnd, monthStart } from '../../shared/dates'
 import { employeeTone, initials } from '../../shared/shifts'
+import { color } from '../../shared/tokens'
 import { useIsMobile } from '../../shared/ui'
 
 export interface DayEntry { employeeId:string; shift?:Shift; preview?:boolean }
@@ -33,13 +34,13 @@ export function MonthGrid({ month, entriesByDate, employees, selected, readOnly,
   const nameOf = (employeeId:string) => employees.find(e => e.id === employeeId)?.fullName ?? 'Сотрудник'
 
   // 1px зазор поверх серого фона даёт волосяные разделители, не переполняя клетки границами.
-  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 1, background: '#e9edf0', borderRadius: 10, overflow: 'hidden' }}>
-    {SHORT.map(day => <div key={day} style={{ background: '#fafafa', padding: '6px 0', textAlign: 'center' }}>
+  return <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: 1, background: color.line, borderRadius: 10, overflow: 'hidden' }}>
+    {SHORT.map(day => <div key={day} style={{ background: color.surfaceMuted, padding: '6px 0', textAlign: 'center' }}>
       <Typography.Text type="secondary" style={{ fontSize: 10 }}>{day}</Typography.Text>
     </div>)}
 
     {cells.map((day, index) => {
-      if (!day) return <div key={`gap-${index}`} style={{ background: '#fafafa', minHeight: 56 }}/>
+      if (!day) return <div key={`gap-${index}`} style={{ background: color.surfaceMuted, minHeight: 56 }}/>
       const date = day.format('YYYY-MM-DD')
       const entries = entriesByDate.get(date) ?? []
       const weekend = day.day() === 0 || day.day() === 6
@@ -51,31 +52,32 @@ export function MonthGrid({ month, entriesByDate, employees, selected, readOnly,
         key={date}
         onClick={() => !readOnly && onPickDay?.(date)}
         style={{
-          background: today ? '#f0fdf4' : '#fff', minHeight: 56, padding: '4px 3px',
+          background: today ? color.brandSoft : color.surface, minHeight: 56, padding: '4px 3px',
           cursor: readOnly ? 'default' : 'pointer',
-          outline: selected === date ? '2px solid #16a34a' : undefined, outlineOffset: -2,
+          outline: selected === date ? `2px solid ${color.brand}` : undefined, outlineOffset: -2,
           opacity: spent ? 0.55 : 1,
         }}
       >
-        <div style={{ fontSize: 12, fontWeight: 600, color: today ? '#15803d' : weekend ? '#94a3b8' : '#172026' }}>{day.date()}</div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: today ? color.brandDark : weekend ? color.muted : color.ink }}>{day.date()}</div>
         <div className="mt-1 flex flex-wrap gap-[3px]">
           {entries.slice(0, 3).map((entry, position) => <Marker
             key={`${entry.employeeId}-${position}`} mobile={mobile} entry={entry}
-            color={tone(entry.employeeId)} name={nameOf(entry.employeeId)}
+            tone={tone(entry.employeeId)} name={nameOf(entry.employeeId)}
             faded={Boolean(dimmed && dimmed !== entry.employeeId)}
           />)}
-          {entries.length > 3 && <span style={{ fontSize: 9, color: '#64748b', lineHeight: '10px' }}>+{entries.length - 3}</span>}
+          {entries.length > 3 && <span style={{ fontSize: 9, color: color.sub, lineHeight: '10px' }}>+{entries.length - 3}</span>}
         </div>
       </div>
     })}
   </div>
 }
 
-function Marker({ mobile, entry, color, name, faded }:{ mobile:boolean; entry:DayEntry; color:string; name:string; faded:boolean }) {
+// Проп называется tone, а не color: иначе он перекрывает импортированные токены.
+function Marker({ mobile, entry, tone, name, faded }:{ mobile:boolean; entry:DayEntry; tone:string; name:string; faded:boolean }) {
   const style = entry.preview
     // Предпросмотр в мастере: полая точка сразу отличает будущую смену от уже существующей.
-    ? { background: 'transparent', border: `1.5px dashed ${color}` }
-    : { background: color, border: `1px solid ${color}` }
+    ? { background: 'transparent', border: `1.5px dashed ${tone}` }
+    : { background: tone, border: `1px solid ${tone}` }
 
   if (mobile) return <Tooltip title={name}>
     <span style={{ width: 8, height: 8, borderRadius: 4, display: 'inline-block', opacity: faded ? 0.25 : 1, ...style }}/>
@@ -84,7 +86,7 @@ function Marker({ mobile, entry, color, name, faded }:{ mobile:boolean; entry:Da
   return <Tooltip title={name}>
     <span style={{
       fontSize: 10, fontWeight: 600, lineHeight: '14px', padding: '0 4px', borderRadius: 4,
-      color: entry.preview ? color : '#fff', opacity: faded ? 0.3 : 1, ...style,
+      color: entry.preview ? tone : color.surface, opacity: faded ? 0.3 : 1, ...style,
     }}>{initials(name)}</span>
   </Tooltip>
 }

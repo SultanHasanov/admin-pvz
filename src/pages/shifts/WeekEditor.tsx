@@ -1,10 +1,14 @@
-import { Button, Card, Space, Tooltip, Typography } from 'antd'
+import { useState } from 'react'
+import { Alert, Button, Card, Space, Tooltip, Typography } from 'antd'
 import dayjs from 'dayjs'
-import { Plus } from 'lucide-react'
+import { MoveHorizontal, Plus } from 'lucide-react'
 import type { Employee, Shift } from '../../entities/types'
-import { weekDays } from '../../shared/dates'
+import { shiftDate } from '../../entities/schedule'
+import { dateLabel, timeLabel, weekDays } from '../../shared/dates'
 import { statusColors, statusTitles } from '../../shared/shifts'
-import { useIsMobile } from '../../shared/ui'
+import { color } from '../../shared/tokens'
+import { Badge, FormModal, SheetFooter, useIsMobile } from '../../shared/ui'
+import { ShiftActions } from './ShiftActions'
 import { ShiftChip } from './ShiftChip'
 
 const SHORT = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб']
@@ -20,9 +24,9 @@ export function WeekdayStrip({ value, onChange, disabled }:{ value:number[]; onC
         onClick={() => onChange(active ? value.filter(d => d !== day) : [...value, day])}
         style={{
           height: 40, borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: disabled ? 'default' : 'pointer',
-          border: `1px solid ${active ? '#16a34a' : '#e9edf0'}`,
-          background: active ? '#f0fdf4' : '#fff',
-          color: active ? '#15803d' : '#94a3b8',
+          border: `1px solid ${active ? color.brand : color.line}`,
+          background: active ? color.brandSoft : color.surface,
+          color: active ? color.brandDark : color.muted,
           opacity: disabled ? 0.5 : 1,
         }}
       >{SHORT[day]}</button>
@@ -39,6 +43,9 @@ export interface WeekEditorProps {
   onToggle:(employeeId:string, date:string, shift?:Shift) => void
   onDelete:(shift:Shift) => void
   onMove:(shift:Shift, employeeId:string, date:string) => void
+  onPay:(shift:Shift) => void
+  onReplace:(shift:Shift) => void
+  onLinked?:() => void
 }
 
 const cellKey = (employeeId:string, date:string) => `${employeeId}|${date}`
@@ -49,48 +56,101 @@ export function WeekEditor(props:WeekEditorProps) {
   return useIsMobile() ? <MobileWeek {...props}/> : <DesktopWeek {...props}/>
 }
 
-function MobileWeek({ weekStart, staff, board, pending, onToggle }:WeekEditorProps) {
+/**
+ * Неделя на телефоне.
+ *
+ * Перетаскивания здесь нет — нативный HTML5-drag на тач-экране не работает, а жесты на
+ * кнопке 44px конфликтуют со скроллом страницы. Поэтому перенос сделан выбором: тап по
+ * смене открывает лист с действиями, «Перенести» переводит сетку в режим выбора дня.
+ */
+function MobileWeek({ weekStart, staff, board, pending, onToggle, onMove, onPay, onReplace, onLinked }:WeekEditorProps) {
   const days = weekDays(weekStart)
-  return <div className="grid gap-3">
-    {staff.map(employee => {
-      const total = days.filter(day => board.get(cellKey(employee.id, day.format('YYYY-MM-DD')))?.length).length
-      return <Card key={employee.id} size="small" variant="outlined" styles={{ body: { padding: 12 } }}>
-        <div className="mb-2 flex items-baseline justify-between gap-2">
-          <Typography.Text strong className="truncate">{employee.fullName}</Typography.Text>
-          <Typography.Text type="secondary" className="shrink-0 text-xs">{total ? `${total} смен` : 'без смен'}</Typography.Text>
-        </div>
-        {/* 7 колонок по ~43px помещаются в 328 доступных пикселей — горизонтального скролла нет. */}
-        <div className="grid grid-cols-7 gap-1">
-          {days.map(day => {
-            const date = day.format('YYYY-MM-DD')
-            const key = cellKey(employee.id, date)
-            const shift = board.get(key)?.[0]
-            const colors = shift ? statusColors[shift.status] : null
-            const busy = pending.has(key)
-            const fixed = locked(shift)
-            return <Tooltip key={date} title={fixed ? `${statusTitles[shift!.status]} — правится в «Списке»` : undefined}>
-              <button
-                type="button" disabled={busy || fixed}
-                onClick={() => onToggle(employee.id, date, shift)}
-                style={{
-                  height: 44, borderRadius: 8, padding: 0, cursor: busy || fixed ? 'default' : 'pointer',
-                  border: `1px solid ${colors?.border ?? '#e9edf0'}`,
-                  background: colors?.background ?? '#fff',
-                  color: colors?.color ?? '#94a3b8',
-                  opacity: busy ? 0.5 : 1,
-                }}
-              >
-                <div style={{ fontSize: 9, lineHeight: 1 }}>{SHORT[day.day()]}</div>
-                <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.4 }}>
-                  {shift ? dayjs(shift.startsAt).format('HH') : day.date()}
-                </div>
-              </button>
-            </Tooltip>
-          })}
-        </div>
-      </Card>
-    })}
-  </div>
+  const [sheet, setSheet] = useState<{ employee:Employee; date:string; shift:Shift } | null>(null)
+  const [moving, setMoving] = useState<Shift | null>(null)
+
+  function pick(employee:Employee, date:string, shift?:Shift) {
+    if (moving) {
+      // Целевая ячейка может быть занята — сервер разрулит так же, как при drop на десктопе.
+      if (moving.employeeId !== employee.id || shiftDate(moving) !== date) onMove(moving, employee.id, date)
+      setMoving(null)
+      return
+    }
+    if (shift) setSheet({ employee, date, shift })
+    else onToggle(employee.id, date, undefined)
+  }
+
+  return <>
+    {moving && <Alert
+      className="mb-3" type="info" showIcon
+      message="Выберите день, куда перенести смену"
+      action={<Button size="small" onClick={() => setMoving(null)}>Отмена</Button>}
+    />}
+
+    <div className="grid gap-3">
+      {staff.map(employee => {
+        const total = days.filter(day => board.get(cellKey(employee.id, day.format('YYYY-MM-DD')))?.length).length
+        return <Card key={employee.id} size="small" variant="outlined" styles={{ body: { padding: 12 } }}>
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <Typography.Text strong className="truncate">{employee.fullName}</Typography.Text>
+            <Typography.Text type="secondary" className="shrink-0 text-xs">{total ? `${total} смен` : 'без смен'}</Typography.Text>
+          </div>
+          {/* 7 колонок по ~43px помещаются в 328 доступных пикселей — горизонтального скролла нет. */}
+          <div className="grid grid-cols-7 gap-1">
+            {days.map(day => {
+              const date = day.format('YYYY-MM-DD')
+              const key = cellKey(employee.id, date)
+              const shift = board.get(key)?.[0]
+              const colors = shift ? statusColors[shift.status] : null
+              const busy = pending.has(key)
+              const fixed = locked(shift) && !moving
+              const target = Boolean(moving) && moving!.id !== shift?.id
+              return <Tooltip key={date} title={fixed ? `${statusTitles[shift!.status]} — правится в «Списке»` : undefined}>
+                <button
+                  type="button" disabled={busy || fixed}
+                  onClick={() => pick(employee, date, shift)}
+                  style={{
+                    height: 44, borderRadius: 8, padding: 0, cursor: busy || fixed ? 'default' : 'pointer',
+                    border: target ? `2px dashed ${color.brand}` : `1px solid ${colors?.border ?? color.line}`,
+                    background: colors?.background ?? color.surface,
+                    color: colors?.color ?? color.muted,
+                    opacity: busy ? 0.5 : 1,
+                  }}
+                >
+                  <div style={{ fontSize: 9, lineHeight: 1 }}>{SHORT[day.day()]}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.4 }}>
+                    {shift ? dayjs(shift.startsAt).format('HH') : day.date()}
+                  </div>
+                </button>
+              </Tooltip>
+            })}
+          </div>
+        </Card>
+      })}
+    </div>
+
+    {sheet && <FormModal
+      title={`${sheet.employee.fullName} · ${dateLabel(sheet.date)}`} onClose={() => setSheet(null)}
+      footer={<SheetFooter><Button onClick={() => setSheet(null)}>Закрыть</Button></SheetFooter>}
+    >
+      <Space size={8} wrap className="mb-3">
+        <Badge tone="slate">{statusTitles[sheet.shift.status]}</Badge>
+        <Typography.Text type="secondary" className="text-xs">
+          {timeLabel(sheet.shift.startsAt)}–{timeLabel(sheet.shift.endsAt)}
+        </Typography.Text>
+      </Space>
+      <Button
+        block icon={<MoveHorizontal size={15}/>}
+        onClick={() => { setMoving(sheet.shift); setSheet(null) }}
+      >Перенести на другой день</Button>
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <Typography.Text type="secondary" className="text-sm">Другие действия</Typography.Text>
+        <ShiftActions
+          shift={sheet.shift} onPay={onPay} onReplace={onReplace}
+          onLinked={() => { setSheet(null); onLinked?.() }}
+        />
+      </div>
+    </FormModal>}
+  </>
 }
 
 function DesktopWeek({ weekStart, staff, board, pending, onToggle, onDelete, onMove }:WeekEditorProps) {
@@ -99,20 +159,23 @@ function DesktopWeek({ weekStart, staff, board, pending, onToggle, onDelete, onM
   return <DesktopGrid columns={columns} days={days} staff={staff} board={board} pending={pending} onToggle={onToggle} onDelete={onDelete} onMove={onMove}/>
 }
 
+/** Действия смены на десктопе живут в «Списке» и шторке дня, сетке они не нужны. */
+type GridProps = Omit<WeekEditorProps, 'weekStart' | 'onPay' | 'onReplace' | 'onLinked'>
+
 function DesktopGrid({ columns, days, staff, board, pending, onToggle, onDelete, onMove }:{
   columns:string; days:dayjs.Dayjs[]
-} & Omit<WeekEditorProps, 'weekStart'>) {
+} & GridProps) {
   return <Card variant="outlined" styles={{ body: { padding: 0 } }}>
-    <div style={{ display: 'grid', gridTemplateColumns: columns, borderBottom: '1px solid #e9edf0' }}>
-      <div style={{ padding: '10px 12px', borderRight: '1px solid #e9edf0' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: columns, borderBottom: `1px solid ${color.line}` }}>
+      <div style={{ padding: '10px 12px', borderRight: `1px solid ${color.line}` }}>
         <Typography.Text type="secondary" className="text-xs font-semibold">Сотрудник</Typography.Text>
       </div>
       {days.map(day => {
         const weekend = day.day() === 0 || day.day() === 6
         const today = day.isSame(dayjs(), 'day')
-        return <div key={day.format('DD')} style={{ padding: '6px 4px', textAlign: 'center', background: today ? '#dcfce7' : weekend ? '#fafafa' : undefined }}>
-          <div className="text-sm font-semibold" style={{ color: weekend ? '#94a3b8' : undefined }}>{day.date()}</div>
-          <div className="text-[10px]" style={{ color: '#94a3b8' }}>{SHORT[day.day()]}</div>
+        return <div key={day.format('DD')} style={{ padding: '6px 4px', textAlign: 'center', background: today ? color.brandTint : weekend ? color.surfaceMuted : undefined }}>
+          <div className="text-sm font-semibold" style={{ color: weekend ? color.muted : undefined }}>{day.date()}</div>
+          <div className="text-[10px]" style={{ color: color.muted }}>{SHORT[day.day()]}</div>
         </div>
       })}
     </div>
@@ -126,10 +189,10 @@ function DesktopGrid({ columns, days, staff, board, pending, onToggle, onDelete,
 
 function DesktopRow({ columns, days, employee, board, pending, onToggle, onDelete, onMove }:{
   columns:string; days:dayjs.Dayjs[]; employee:Employee
-} & Omit<WeekEditorProps, 'weekStart' | 'staff'>) {
+} & Omit<GridProps, 'staff'>) {
   const total = days.filter(day => board.get(cellKey(employee.id, day.format('YYYY-MM-DD')))?.length).length
-  return <div style={{ display: 'grid', gridTemplateColumns: columns, borderBottom: '1px solid #f1f5f9' }}>
-    <div style={{ padding: '10px 12px', borderRight: '1px solid #e9edf0' }}>
+  return <div style={{ display: 'grid', gridTemplateColumns: columns, borderBottom: `1px solid ${color.lineSoft}` }}>
+    <div style={{ padding: '10px 12px', borderRight: `1px solid ${color.line}` }}>
       <div className="truncate text-sm font-medium">{employee.fullName}</div>
       <Typography.Text type="secondary" className="text-xs">{total ? `${total} смен` : 'без смен'}</Typography.Text>
     </div>
@@ -160,7 +223,7 @@ function Cell({ date, weekend, shift, busy, onCreate, onDelete, onDropShift }:{
         type="button" disabled={busy} onClick={onCreate} aria-label={`Поставить смену ${date}`}
         className="grid h-full w-full place-items-center opacity-0 transition-opacity hover:opacity-70"
         style={{ border: 0, background: 'transparent', cursor: busy ? 'default' : 'pointer' }}
-      ><Plus size={16} color="#94a3b8"/></button>}
+      ><Plus size={16} color={color.muted}/></button>}
   </DropZone>
 }
 
@@ -180,7 +243,7 @@ function DropZone({ weekend, children, onDropShift }:{ weekend:boolean; children
   return <div
     onDragOver={event => { if (dragged) event.preventDefault() }}
     onDrop={event => { event.preventDefault(); if (dragged) { onDropShift(dragged); dragged = null } }}
-    style={{ minHeight: 56, padding: 4, borderLeft: '1px solid #f1f5f9', background: weekend ? '#fafafa' : undefined }}
+    style={{ minHeight: 56, padding: 4, borderLeft: `1px solid ${color.lineSoft}`, background: weekend ? color.surfaceMuted : undefined }}
   >{children}</div>
 }
 

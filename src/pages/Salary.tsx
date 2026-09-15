@@ -8,7 +8,7 @@ import { calculateSalarySheet } from '../entities/calculations'
 import type { SalaryPayment, SalarySheet } from '../entities/types'
 import { monthLabel, today } from '../shared/dates'
 import { isValidMoney, parseMoney, rubles } from '../shared/money'
-import { CardRow, EmptyState, ErrorNote, FormModal, ResponsiveTable, Title } from '../shared/ui'
+import { CardRow, EmptyState, ErrorNote, FormModal, ResponsiveTable, SheetFooter, Title, useIsMobile } from '../shared/ui'
 import { listEmployees, listSalaryRules } from '../services/employees'
 import { listShifts } from '../services/shifts'
 import { listDeductions } from '../services/deductions'
@@ -24,10 +24,11 @@ type Row = SalarySheet & { fullName:string }
 export function SalaryPage() {
   const queryClient = useQueryClient()
   const { month, pointId, pointName } = useOrg()
+  const mobile = useIsMobile()
   const [form, setForm] = useState<{ kind:FormKind; employeeId:string }>()
   const [tab, setTab] = useState('sheet')
 
-  const employees = useQuery({ queryKey: ['employees', false], queryFn: () => listEmployees() })
+  const employees = useQuery({ queryKey: ['employees', true], queryFn: () => listEmployees(true) })
   const [rules, shifts, bonuses, penalties, payments, deductions, period] = useQueries({
     queries: [
       { queryKey: ['salary-rules'], queryFn: listSalaryRules },
@@ -61,12 +62,20 @@ export function SalaryPage() {
 
   const totals = sheets.reduce((acc, sheet) => ({ accrued: acc.accrued + sheet.accrued, balance: acc.balance + sheet.balance }), { accrued: 0, balance: 0 })
 
-  const buttons = (employeeId:string) => <Space size={4} wrap>
-    <Button size="small" icon={<Award size={15}/>} onClick={() => setForm({ kind: 'BONUS', employeeId })}>Премия</Button>
-    <Button size="small" icon={<Ban size={15}/>} onClick={() => setForm({ kind: 'PENALTY', employeeId })}>Штраф</Button>
-    <Button size="small" icon={<Wallet size={15}/>} onClick={() => setForm({ kind: 'ADVANCE', employeeId })}>Аванс</Button>
-    <Button size="small" type="primary" icon={<Wallet size={15}/>} onClick={() => setForm({ kind: 'PAYMENT', employeeId })}>Выплатить</Button>
-  </Space>
+  // На телефоне четыре кнопки встают сеткой 2×2 — рваный перенос читается хуже.
+  const buttons = (employeeId:string) => mobile
+    ? <div className="grid grid-cols-2 gap-2">
+      <Button disabled={closed} icon={<Award size={15}/>} onClick={() => setForm({ kind: 'BONUS', employeeId })}>Премия</Button>
+      <Button disabled={closed} icon={<Ban size={15}/>} onClick={() => setForm({ kind: 'PENALTY', employeeId })}>Штраф</Button>
+      <Button icon={<Wallet size={15}/>} onClick={() => setForm({ kind: 'ADVANCE', employeeId })}>Аванс</Button>
+      <Button type="primary" icon={<Wallet size={15}/>} onClick={() => setForm({ kind: 'PAYMENT', employeeId })}>Выплатить</Button>
+    </div>
+    : <Space size={4} wrap>
+      <Button disabled={closed} size="small" icon={<Award size={15}/>} onClick={() => setForm({ kind: 'BONUS', employeeId })}>Премия</Button>
+      <Button disabled={closed} size="small" icon={<Ban size={15}/>} onClick={() => setForm({ kind: 'PENALTY', employeeId })}>Штраф</Button>
+      <Button size="small" icon={<Wallet size={15}/>} onClick={() => setForm({ kind: 'ADVANCE', employeeId })}>Аванс</Button>
+      <Button size="small" type="primary" icon={<Wallet size={15}/>} onClick={() => setForm({ kind: 'PAYMENT', employeeId })}>Выплатить</Button>
+    </Space>
 
   const money = (value:number) => rubles(value)
   const columns:TableProps<Row>['columns'] = [
@@ -136,13 +145,14 @@ export function SalaryPage() {
 
     {form && <SalaryEntryForm
       kind={form.kind} employeeId={form.employeeId}
+      accrualMonth={month}
       employeeName={staff.find(e => e.id === form.employeeId)?.fullName ?? ''}
       onClose={() => setForm(undefined)}
     />}
   </>
 }
 
-function SalaryEntryForm({ kind, employeeId, employeeName, onClose }:{ kind:FormKind; employeeId:string; employeeName:string; onClose:() => void }) {
+function SalaryEntryForm({ kind, employeeId, employeeName, accrualMonth, onClose }:{ kind:FormKind; employeeId:string; employeeName:string; accrualMonth:string; onClose:() => void }) {
   const queryClient = useQueryClient()
   const { pointId } = useOrg()
   const [amount, setAmount] = useState('')
@@ -155,7 +165,7 @@ function SalaryEntryForm({ kind, employeeId, employeeName, onClose }:{ kind:Form
       if (kind === 'BONUS') return createBonus({ employeeId, date, amountKopecks, comment })
       if (kind === 'PENALTY') return createPenalty({ employeeId, pickupPointId: pointId || null, date, amountKopecks, reason: comment || 'Штраф', comment })
       const paymentKind:SalaryPayment['kind'] = kind === 'ADVANCE' ? 'ADVANCE' : 'PAYMENT'
-      return createSalaryPayment({ employeeId, date, amountKopecks, kind: paymentKind, comment })
+      return createSalaryPayment({ employeeId, date, accrualMonth, pickupPointId:pointId || null, amountKopecks, kind: paymentKind, comment })
     },
     onSuccess: () => {
       for (const key of ['bonuses', 'penalties', 'salary-payments']) void queryClient.invalidateQueries({ queryKey: [key] })
@@ -167,10 +177,10 @@ function SalaryEntryForm({ kind, employeeId, employeeName, onClose }:{ kind:Form
 
   return <FormModal
     title={`${formTitles[kind]} · ${employeeName}`} onClose={onClose}
-    footer={<Space wrap>
+    footer={<SheetFooter>
       <Button type="primary" loading={save.isPending} disabled={!ready} onClick={() => save.mutate()}>Сохранить</Button>
       <Button onClick={onClose}>Отмена</Button>
-    </Space>}
+    </SheetFooter>}
   >
     <Form layout="vertical" requiredMark={false}>
       <div className="grid gap-x-4 sm:grid-cols-2">

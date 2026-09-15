@@ -4,6 +4,7 @@ import { X } from 'lucide-react'
 import type { Shift } from '../../entities/types'
 import { timeLabel } from '../../shared/dates'
 import { statusColors, statusTitles } from '../../shared/shifts'
+import { color } from '../../shared/tokens'
 
 /** Плашка смены в недельной сетке на десктопе: её можно перетащить в другую клетку. */
 export function ShiftChip({ shift, dragging, onDragStart, onDragEnd, onDelete }:{
@@ -27,7 +28,7 @@ export function ShiftChip({ shift, dragging, onDragStart, onDragEnd, onDelete }:
           aria-label="Удалить смену" onClick={event => event.stopPropagation()}
           style={{
             position: 'absolute', top: -6, right: -6, width: 16, height: 16, borderRadius: 8,
-            border: `1px solid ${colors.border}`, background: '#fff', color: '#64748b',
+            border: `1px solid ${colors.border}`, background: color.surface, color: color.sub,
             display: 'grid', placeItems: 'center', cursor: 'pointer', padding: 0,
           }}
         ><X size={10}/></button>

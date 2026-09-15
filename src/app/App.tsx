@@ -1,10 +1,10 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { Alert, Button, Card, Drawer, Form, Grid, Input, Layout, Menu, Select, Spin, Typography } from 'antd'
-import { BarChart3, Building2, CalendarDays, CircleDollarSign, ClipboardList, LogOut, Menu as MenuIcon, MessageCircle, PackageSearch, Settings, Users, Wallet } from 'lucide-react'
-import type { ModuleKey } from '../entities/types'
-import { monthLabel, monthOptions } from '../shared/dates'
+import { Alert, Button, Card, Drawer, Form, Input, Layout, Menu, Spin, Typography } from 'antd'
+import { LogOut } from 'lucide-react'
+import { useIsDesktop, useIsMobile } from '../shared/ui'
+import { color } from '../shared/tokens'
 import { DashboardPage } from '../pages/Dashboard'
 import { PointsPage } from '../pages/Points'
 import { EmployeesPage } from '../pages/Employees'
@@ -17,36 +17,29 @@ import { TelegramPage } from '../pages/Telegram'
 import { ValuableItemsPage } from '../pages/ValuableItems'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { resetOrganizationCache } from '../services/org'
+import { Filters } from './Filters'
+import { MobileAppBar } from './MobileAppBar'
+import { MobileTabBar } from './MobileTabBar'
+import { links } from './navigation'
+import { useScrollRestore } from './useScrollRestore'
 import { OrgProvider, useOrg } from './OrgContext'
 
-/** Пункт меню виден, пока его модуль включён в настройках. */
-const links:{ to:string; title:string; icon:typeof BarChart3; module?:ModuleKey }[] = [
-  { to: '/', title: 'Главная', icon: BarChart3 },
-  { to: '/points', title: 'ПВЗ', icon: Building2 },
-  { to: '/employees', title: 'Сотрудники', icon: Users, module: 'employees' },
-  { to: '/shifts', title: 'Смены', icon: CalendarDays, module: 'shifts' },
-  { to: '/finance', title: 'Финансы', icon: Wallet, module: 'expenses' },
-  { to: '/salary', title: 'Зарплаты', icon: CircleDollarSign, module: 'salary' },
-  { to: '/deductions', title: 'Удержания WB', icon: ClipboardList, module: 'wb_deductions' },
-  { to: '/telegram', title: 'Telegram', icon: MessageCircle, module: 'telegram' },
-  { to: '/valuable-items', title: 'Контроль товаров', icon: PackageSearch },
-  { to: '/settings', title: 'Настройки', icon: Settings },
-]
-
-function Logo() {
+function Logo({ compact }:{ compact?:boolean }) {
   return <div className="flex items-center gap-2 px-2 py-4 font-bold">
-    <img src="/brand/pvz-control-logo.png" width="32" height="32" alt="" className="h-8 w-8 rounded-lg"/>
-    PVZ Control
+    <img src="/brand/pvz-control-logo.png" width="32" height="32" alt="" className="h-8 w-8 shrink-0 rounded-lg"/>
+    {!compact && 'PVZ Control'}
   </div>
 }
 
-function Navigation({ onNavigate }:{ onNavigate?:() => void }) {
+function Navigation({ onNavigate, collapsed }:{ onNavigate?:() => void; collapsed?:boolean }) {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const { isModuleEnabled } = useOrg()
   const visible = links.filter(link => !link.module || isModuleEnabled(link.module))
 
   return <div className="flex h-full flex-col">
+    {/* inlineCollapsed здесь не нужен и вызывает предупреждение: Menu берёт состояние
+        из контекста Layout.Sider, а collapsed используем только для подписей. */}
     <Menu
       mode="inline" style={{ borderInlineEnd: 0, flex: 1 }}
       selectedKeys={[visible.some(l => l.to === pathname) ? pathname : '/']}
@@ -54,54 +47,56 @@ function Navigation({ onNavigate }:{ onNavigate?:() => void }) {
       items={visible.map(link => ({
         key: link.to,
         icon: <link.icon size={18}/>,
-        label: link.to === '/valuable-items' ? <span className="flex items-center gap-2">Контроль товаров <Typography.Text type="secondary" className="text-[10px]">Скоро</Typography.Text></span> : link.title,
+        label: link.title,
       }))}
     />
     <div className="p-2 safe-b">
-      <Button block type="text" icon={<LogOut size={16}/>} onClick={() => { resetOrganizationCache(); void supabase?.auth.signOut() }}>Выйти</Button>
+      <Button
+        block type="text" icon={<LogOut size={16}/>}
+        onClick={() => { resetOrganizationCache(); void supabase?.auth.signOut() }}
+      >{collapsed ? '' : 'Выйти'}</Button>
     </div>
   </div>
 }
 
-/** Фильтры «ПВЗ» и «месяц» действуют на весь продукт, поэтому живут в шапке. */
-function Filters() {
-  const { points, pointId, setPointId, month, setMonth } = useOrg()
-  return <div className="scroll-x ml-auto flex items-center gap-2">
-    {points.length > 1 && <Select
-      value={pointId} onChange={setPointId} style={{ minWidth: 130 }} aria-label="Пункт выдачи"
-      options={[{ value: '', label: 'Все ПВЗ' }, ...points.map(point => ({ value: point.id, label: point.name }))]}
-    />}
-    <Select
-      value={month} onChange={setMonth} style={{ minWidth: 140 }} aria-label="Месяц"
-      options={monthOptions().map(value => ({ value, label: monthLabel(value) }))}
-    />
-  </div>
-}
-
 function Shell({ children }:{ children:ReactNode }) {
-  const [open, setOpen] = useState(false)
-  const screens = Grid.useBreakpoint()
-  const desktop = Boolean(screens.lg)
+  const mobile = useIsMobile()
+  const desktop = useIsDesktop()
+  const [more, setMore] = useState(false)
+  const { pathname } = useLocation()
+  useScrollRestore()
 
-  return <Layout style={{ minHeight: '100vh' }}>
-    {desktop && <Layout.Sider width={248} theme="light" style={{ position: 'sticky', top: 0, height: '100vh', borderInlineEnd: '1px solid #e9edf0' }}>
-      <Logo/>
-      <Navigation/>
-    </Layout.Sider>}
-
+  // Телефон: аппбар сверху, таб-бар снизу, разделы второго плана — в листе «Ещё».
+  if (mobile) return <Layout style={{ minHeight: '100dvh' }}>
+    <MobileAppBar/>
+    <Layout.Content>
+      <div key={pathname} className="page-enter p-4 pb-tabbar">{children}</div>
+    </Layout.Content>
+    <MobileTabBar onMore={() => setMore(true)}/>
     <Drawer
-      open={!desktop && open} onClose={() => setOpen(false)} placement="left"
-      width={280} closable={false} styles={{ body: { padding: 0 } }} title={<Logo/>}
+      open={more} onClose={() => setMore(false)} placement="bottom" height="auto"
+      title="Разделы" className="sheet" styles={{ body: { padding: 0 } }}
     >
-      <Navigation onNavigate={() => setOpen(false)}/>
+      <Navigation onNavigate={() => setMore(false)}/>
     </Drawer>
+  </Layout>
+
+  // Планшет получает свёрнутый сайдер: иконки без подписей, но навигация всегда на виду.
+  return <Layout style={{ minHeight: '100dvh' }}>
+    <Layout.Sider
+      width={248} collapsed={!desktop} collapsedWidth={72} theme="light"
+      style={{ position: 'sticky', top: 0, height: '100dvh', borderInlineEnd: `1px solid ${color.line}` }}
+    >
+      <Logo compact={!desktop}/>
+      <Navigation collapsed={!desktop}/>
+    </Layout.Sider>
 
     <Layout>
-      <Layout.Header style={{ position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #e9edf0' }}>
-        {!desktop && <Button type="text" icon={<MenuIcon size={20}/>} aria-label="Открыть меню" onClick={() => setOpen(true)}/>}
+      <Layout.Header style={{ position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 12, borderBottom: `1px solid ${color.line}` }}>
         {desktop && <Typography.Text type="secondary">Операционная система владельца ПВЗ</Typography.Text>}
         <Filters/>
       </Layout.Header>
+      {/* iPad ≥1024px попадает в эту ветку, а домашний индикатор у него есть. */}
       <Layout.Content className="safe-b">
         <div className="mx-auto max-w-7xl p-4 sm:p-6">{children}</div>
       </Layout.Content>
@@ -110,7 +105,7 @@ function Shell({ children }:{ children:ReactNode }) {
 }
 
 function CenteredPage({ children }:{ children:ReactNode }) {
-  return <div className="grid min-h-screen place-items-center p-4"><div className="w-full max-w-md">{children}</div></div>
+  return <div className="grid min-h-dvh place-items-center p-4"><div className="w-full max-w-md">{children}</div></div>
 }
 
 function Auth({ session }:{ session:Session | null }) {
@@ -167,11 +162,11 @@ function Onboarding({ done }:{ done:() => void }) {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
-  async function create(values:{ organization:string; point:string; address:string }) {
+  async function create(values:{ organization?:string; point:string; address?:string }) {
     if (!supabase) return
     setBusy(true)
     const { error: failure } = await supabase.rpc('create_organization_with_owner', {
-      p_name: values.organization, p_point_name: values.point, p_point_address: values.address, p_timezone: 'Europe/Moscow',
+      p_name: values.organization?.trim() || values.point.trim(), p_point_name: values.point, p_point_address: values.address?.trim() || '', p_timezone: 'Europe/Moscow',
     })
     setBusy(false)
     if (failure) setError(failure.message)
@@ -183,9 +178,9 @@ function Onboarding({ done }:{ done:() => void }) {
       <Typography.Title level={4} style={{ marginBottom: 4 }}>Настроим вашу организацию</Typography.Title>
       <Typography.Text type="secondary">Создайте организацию и первый пункт выдачи.</Typography.Text>
       <Form layout="vertical" className="mt-5" onFinish={values => void create(values)} requiredMark={false}>
-        <Form.Item name="organization" label="Название организации" rules={[{ required: true, message: 'Укажите название' }]}><Input/></Form.Item>
+        <Form.Item name="organization" label="Название организации" extra="Необязательно — используем название первого ПВЗ."><Input/></Form.Item>
         <Form.Item name="point" label="Название ПВЗ" rules={[{ required: true, message: 'Укажите название' }]}><Input/></Form.Item>
-        <Form.Item name="address" label="Адрес ПВЗ" rules={[{ required: true, message: 'Укажите адрес' }]}><Input/></Form.Item>
+        <Form.Item name="address" label="Адрес ПВЗ"><Input placeholder="Можно заполнить позже"/></Form.Item>
         {error && <Alert className="mb-3" type="error" showIcon message={error}/>}
         <Button block type="primary" htmlType="submit" loading={busy}>Начать работу</Button>
       </Form>
@@ -222,7 +217,7 @@ function NotConfigured() {
   </CenteredPage>
 }
 
-const Booting = () => <div className="grid min-h-screen place-items-center"><Spin size="large"/></div>
+const Booting = () => <div className="grid min-h-dvh place-items-center"><Spin size="large"/></div>
 
 export function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined)

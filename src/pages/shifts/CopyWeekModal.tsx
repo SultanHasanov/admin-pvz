@@ -4,7 +4,7 @@ import dayjs from 'dayjs'
 import type { Shift } from '../../entities/types'
 import { deriveWeekPattern, generateSlots, withTimes, type PlannedSlot } from '../../entities/schedule'
 import { weekLabel, weeksOfMonth } from '../../shared/dates'
-import { FormModal } from '../../shared/ui'
+import { FormModal, SheetFooter } from '../../shared/ui'
 
 /**
  * Берёт график с уже заполненной недели и повторяет его на выбранных.
@@ -36,12 +36,12 @@ export function CopyWeekModal({ weekStart, month, shifts, onClose, onReady }:{
 
   return <FormModal
     title="Применить эту неделю к другим" onClose={onClose}
-    footer={<Space wrap>
+    footer={<SheetFooter>
       <Button type="primary" disabled={!selected.length || !perWeek} onClick={build}>
         Применить{selected.length ? ` на ${selected.length} нед.` : ''}
       </Button>
       <Button onClick={onClose}>Отмена</Button>
-    </Space>}
+    </SheetFooter>}
   >
     {!perWeek
       ? <Alert type="warning" showIcon message="На этой неделе нет смен — копировать нечего."/>

@@ -112,10 +112,14 @@ export async function moveShift(shift:Shift, employeeId:string, date:string) {
 }
 
 export async function setShiftStatus(id:string, status:ShiftStatus) {
+  if (status === 'COMPLETED') {
+    const { error } = await client().rpc('confirm_shift_as_planned', { p_shift_id: id })
+    if (error) throw error
+    return
+  }
   const now = new Date().toISOString()
   const patch:Record<string, unknown> = { status, updated_at: now }
   if (status === 'ON_DUTY') patch.actual_start = now
-  if (status === 'COMPLETED') patch.actual_end = now
   const { error } = await client().from('shifts').update(patch).eq('id', id)
   if (error) throw error
 }

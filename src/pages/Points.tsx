@@ -4,7 +4,7 @@ import { Button, Card, Collapse, Form, Input, List, Popconfirm, Select, Space, T
 import { Archive, Pencil, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import type { EntryKind, PickupPoint } from '../entities/types'
 import { isValidMoney, parseMoney, rubles } from '../shared/money'
-import { Badge, EmptyState, ErrorNote, FormModal, Loading, Title } from '../shared/ui'
+import { Badge, EmptyState, ErrorNote, FormModal, Loading, RowActions, SheetFooter, Title } from '../shared/ui'
 import { createPickupPoint, listPickupPoints, setPickupPointArchived, updatePickupPoint } from '../services/points'
 import { deleteEntryPreset, listEntryPresets, rememberAmount } from '../services/presets'
 
@@ -20,9 +20,10 @@ export function PointsPage() {
   })
 
   return <>
-    <Title title="Пункты выдачи" subtitle="Точки и запомненные суммы доходов и расходов">
-      <Button type="primary" icon={<Plus size={16}/>} onClick={() => setCreating(true)}>Добавить ПВЗ</Button>
-    </Title>
+    <Title
+      title="Пункты выдачи" subtitle="Точки и запомненные суммы доходов и расходов"
+      action={{ label: 'Добавить ПВЗ', icon: <Plus size={16}/>, onClick: () => setCreating(true) }}
+    />
 
     {points.isLoading ? <Card variant="outlined"><Loading/></Card>
       : !points.data?.length ? <Card variant="outlined">
@@ -34,13 +35,12 @@ export function PointsPage() {
           <Typography.Text strong>{point.name}</Typography.Text>
           {point.archivedAt && <Badge>В архиве</Badge>}
         </Space>}
-        extra={<Space size={4} wrap>
-          <Button icon={<Pencil size={15}/>} onClick={() => setEditing(point)}/>
-          <Button
-            icon={point.archivedAt ? <RotateCcw size={15}/> : <Archive size={15}/>}
-            onClick={() => archive.mutate({ id: point.id, archived: !point.archivedAt })}
-          />
-        </Space>}
+        extra={<RowActions items={[
+          { key: 'edit', label: 'Изменить', icon: <Pencil size={15}/>, onClick: () => setEditing(point) },
+          point.archivedAt
+            ? { key: 'restore', label: 'Вернуть из архива', icon: <RotateCcw size={15}/>, onClick: () => archive.mutate({ id: point.id, archived: false }) }
+            : { key: 'archive', label: 'В архив', icon: <Archive size={15}/>, onClick: () => archive.mutate({ id: point.id, archived: true }) },
+        ]}/>}
       >
         <div className="px-5 py-4">
           <Typography.Text type="secondary">{point.address}</Typography.Text>
@@ -70,10 +70,10 @@ function PointForm({ point, onClose }:{ point:PickupPoint | null; onClose:() => 
 
   return <FormModal
     title={point ? 'Изменить ПВЗ' : 'Новый ПВЗ'} onClose={onClose}
-    footer={<Space wrap>
+    footer={<SheetFooter>
       <Button type="primary" loading={save.isPending} onClick={() => form.submit()}>Сохранить</Button>
       <Button onClick={onClose}>Отмена</Button>
-    </Space>}
+    </SheetFooter>}
   >
     <Form
       form={form} layout="vertical" requiredMark={false}
@@ -83,7 +83,7 @@ function PointForm({ point, onClose }:{ point:PickupPoint | null; onClose:() => 
       <Form.Item name="name" label="Название" rules={[{ required: true, message: 'Укажите название' }]}>
         <Input placeholder="Короткое название точки"/>
       </Form.Item>
-      <Form.Item name="address" label="Адрес" rules={[{ required: true, message: 'Укажите адрес' }]}><Input/></Form.Item>
+      <Form.Item name="address" label="Адрес"><Input placeholder="Необязательно"/></Form.Item>
       <Form.Item name="timezone" label="Часовой пояс" rules={[{ required: true, message: 'Укажите часовой пояс' }]}><Input/></Form.Item>
       <ErrorNote error={save.error}/>
     </Form>

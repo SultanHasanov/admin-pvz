@@ -9,8 +9,11 @@ export default async function handler(req, res) {
     const user = await authenticatedUser(req)
     if (!user) return res.status(401).json({ error: 'Войдите в аккаунт PVZ Control' })
     const organizationId = String(req.body?.organizationId || '')
+    const pickupPointId = String(req.body?.pickupPointId || '')
     if (!organizationId || !(await requireOwner(user.id, organizationId))) return res.status(403).json({ error: 'Недостаточно прав' })
-    const integrations = await db(`telegram_integrations?organization_id=eq.${encodeURIComponent(organizationId)}&select=*`)
+    const points = await db(`pickup_points?id=eq.${encodeURIComponent(pickupPointId)}&organization_id=eq.${encodeURIComponent(organizationId)}&archived_at=is.null&select=id`)
+    if (!points[0]) return res.status(400).json({ error: 'Выберите действующий ПВЗ' })
+    const integrations = await db(`telegram_integrations?organization_id=eq.${encodeURIComponent(organizationId)}&pickup_point_id=eq.${encodeURIComponent(pickupPointId)}&select=*`)
     const current = integrations[0]
 
     if (req.method === 'DELETE') {
@@ -39,7 +42,7 @@ export default async function handler(req, res) {
       const updated = await db(`telegram_integrations?id=eq.${integration.id}`, { method:'PATCH', body:JSON.stringify({ bot_id:bot.id, bot_username:bot.username, connected_by:user.id, connected_at:now, updated_at:now, status:'CONNECTING', last_error:null }) })
       integration = updated[0]
     } else {
-      const created = await db('telegram_integrations', { method:'POST', body:JSON.stringify({ organization_id:organizationId, bot_id:bot.id, bot_username:bot.username, connected_by:user.id, connected_at:now, status:'CONNECTING' }) })
+      const created = await db('telegram_integrations', { method:'POST', body:JSON.stringify({ organization_id:organizationId, pickup_point_id:pickupPointId, bot_id:bot.id, bot_username:bot.username, connected_by:user.id, connected_at:now, status:'CONNECTING' }) })
       integration = created[0]
     }
     const webhookSecret = crypto.randomBytes(32).toString('base64url')

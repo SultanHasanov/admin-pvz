@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { Card, Col, Row, Tooltip, Typography } from 'antd'
@@ -6,13 +6,67 @@ import { CalendarDays, CheckCircle2, CircleAlert, DollarSign, TrendingDown, Tren
 import { accrueShifts, calculateSummary, dailyTotals, ownerLosses, profit } from '../entities/calculations'
 import { dateLabel, monthLabel, timeLabel } from '../shared/dates'
 import { rubles } from '../shared/money'
-import { EmptyState, Loading, Metric, Title } from '../shared/ui'
+import { EmptyState, Loading, Metric, Title, useIsMobile } from '../shared/ui'
 import { listEmployees, listSalaryRules } from '../services/employees'
 import { listShifts, listUpcomingShifts } from '../services/shifts'
 import { listTransactions } from '../services/finance'
 import { listDeductions, listNewDeductions } from '../services/deductions'
 import { getTaxSettings } from '../services/settings'
 import { useOrg } from '../app/OrgContext'
+
+/**
+ * Доходы по дням.
+ *
+ * На телефоне 31 столбик по ~9px нажать пальцем нельзя, а Tooltip на тач-экране не
+ * открывается вообще. Поэтому график уезжает в горизонтальный скролл (столбик ≥20px),
+ * подписаны только опорные дни, а значение показывается тапом — строкой над графиком.
+ */
+function IncomeChart({ chart, month }:{ chart:number[]; month:string }) {
+  const mobile = useIsMobile()
+  const [picked, setPicked] = useState<number>()
+  const peak = Math.max(...chart, 1)
+
+  const bars = <div
+    className="flex h-40 items-end gap-[3px] sm:h-52 sm:gap-2"
+    style={mobile ? { minWidth: chart.length * 20 } : undefined}
+  >
+    {chart.map((value, index) => {
+      const day = index + 1
+      const column = <div
+        key={index} role={mobile ? 'button' : undefined}
+        aria-label={mobile ? `${day}-е, ${rubles(value)}` : undefined}
+        onClick={mobile ? () => setPicked(picked === index ? undefined : index) : undefined}
+        className="flex min-w-0 flex-1 flex-col justify-end"
+        style={{ cursor: mobile ? 'pointer' : 'default' }}
+      >
+        <div
+          className="rounded-t bg-brand-500/85"
+          style={{
+            height: `${Math.round(value / peak * 100)}%`,
+            minHeight: value ? 2 : 0,
+            opacity: picked === undefined || picked === index ? 1 : 0.45,
+          }}
+        />
+        <span className="mt-2 text-center text-[10px] text-slate-400">
+          {/* На телефоне подписываем только опорные дни — иначе цифры сливаются. */}
+          {!mobile || day === 1 || day % 5 === 0 ? day : ' '}
+        </span>
+      </div>
+
+      return mobile ? column : <Tooltip key={index} title={`${day}-е · ${rubles(value)}`}>{column}</Tooltip>
+    })}
+  </div>
+
+  if (!mobile) return bars
+
+  const date = picked === undefined ? null : `${month}-${String(picked + 1).padStart(2, '0')}`
+  return <>
+    <Typography.Text type="secondary" className="mb-2 block text-xs">
+      {date ? <>{dateLabel(date)} · <Typography.Text strong>{rubles(chart[picked!])}</Typography.Text></> : 'Нажмите на столбик, чтобы увидеть сумму'}
+    </Typography.Text>
+    <div className="scroll-x">{bars}</div>
+  </>
+}
 
 export function DashboardPage() {
   const { month, pointId, pointName } = useOrg()
@@ -43,7 +97,6 @@ export function DashboardPage() {
   }, [employees.data, shifts.data, rules.data, transactions.data, tax.data, deductions.data, pointId, month])
 
   const chart = useMemo(() => dailyTotals((transactions.data ?? []).filter(x => x.kind === 'INCOME'), month), [transactions.data, month])
-  const peak = Math.max(...chart, 1)
   const nameOf = (id:string) => employees.data?.find(e => e.id === id)?.fullName ?? 'Сотрудник'
   const staffCount = (employees.data ?? []).filter(e => !pointId || e.pickupPointIds.includes(pointId)).length
 
@@ -72,14 +125,7 @@ export function DashboardPage() {
       <Col xs={24} xl={15}>
         <Card title="Доходы по дням" variant="outlined" styles={{ body: { paddingTop: 12 } }}>
           {loading ? <Loading/> : summary.income === 0 ? <EmptyState text="За этот месяц доходов пока нет."/>
-            : <div className="flex h-40 items-end gap-[3px] sm:h-52 sm:gap-2">
-              {chart.map((value, index) => <Tooltip key={index} title={`${index + 1}-е · ${rubles(value)}`}>
-                <div className="flex min-w-0 flex-1 cursor-default flex-col justify-end">
-                  <div className="rounded-t bg-brand-500/85" style={{ height: `${Math.round(value / peak * 100)}%`, minHeight: value ? 2 : 0 }}/>
-                  <span className="mt-2 text-center text-[10px] text-slate-400">{index + 1}</span>
-                </div>
-              </Tooltip>)}
-            </div>}
+            : <IncomeChart chart={chart} month={month}/>}
         </Card>
       </Col>
 

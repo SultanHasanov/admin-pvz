@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, Checkbox, Form, Input, Select, Space, Switch, Tooltip, Typography } from 'antd'
+import { Button, Card, Checkbox, Form, Input, Select, Switch, Tooltip, Typography } from 'antd'
 import type { TableProps } from 'antd'
 import { Pencil, Plus } from 'lucide-react'
 import type { PaymentType, SalaryRate } from '../entities/types'
 import { isValidMoney, moneyInput, parseMoney, rubles } from '../shared/money'
 import { paymentTitles, rateAmount, rateTitle } from '../shared/salary'
-import { CardRow, EmptyState, ErrorNote, FormModal, ResponsiveTable } from '../shared/ui'
+import { CardRow, EmptyState, ErrorNote, FormModal, ResponsiveTable, SheetFooter } from '../shared/ui'
 import { createSalaryRate, listSalaryRates, setDefaultSalaryRate, setSalaryRateArchived, updateSalaryRate } from '../services/rates'
 
 /** Справочник ставок: заводится один раз, дальше выбирается в карточке сотрудника. */
@@ -110,10 +110,10 @@ function RateForm({ rate, onClose }:{ rate:SalaryRate | null; onClose:() => void
 
   return <FormModal
     title={rate ? 'Изменить ставку' : 'Новая ставка'} onClose={onClose}
-    footer={<Space wrap>
+    footer={<SheetFooter>
       <Button type="primary" loading={save.isPending} disabled={!isValidMoney(amount)} onClick={() => save.mutate()}>Сохранить</Button>
       <Button onClick={onClose}>Отмена</Button>
-    </Space>}
+    </SheetFooter>}
   >
     <Form layout="vertical" requiredMark={false}>
       <div className="grid gap-x-4 sm:grid-cols-2">

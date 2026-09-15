@@ -1,6 +1,7 @@
 import { useMutation } from '@tanstack/react-query'
 import { Button, Card, Result } from 'antd'
 import { PackageSearch } from 'lucide-react'
+import { color } from '../shared/tokens'
 import { ErrorNote } from '../shared/ui'
 import { requestEarlyAccess } from '../services/org'
 
@@ -8,7 +9,7 @@ export function ValuableItemsPage() {
   const request = useMutation({ mutationFn: () => requestEarlyAccess('valuable_items') })
   return <Card variant="outlined" style={{ maxWidth: 720, margin: '0 auto' }}>
     <Result
-      icon={<PackageSearch size={48} color="#16a34a"/>}
+      icon={<PackageSearch size={48} color={color.brand}/>}
       title="Контроль товаров"
       subTitle="Автоматический контроль дорогих товаров и перегруженных ячеек. Раздел ещё в разработке — оставьте заявку, и мы позовём вас в ранний доступ."
       extra={<Button

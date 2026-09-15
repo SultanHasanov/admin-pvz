@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, Button, Card, DatePicker, Form, Input, Popconfirm, Radio, Select, Space, Tabs, TimePicker, Tooltip, Typography } from 'antd'
+import { Alert, Button, Card, DatePicker, Form, Input, Radio, Select, Space, Tabs, TimePicker, Typography } from 'antd'
 import type { TableProps } from 'antd'
 import dayjs from 'dayjs'
-import { CalendarPlus, CheckCircle2, Hourglass, PlayCircle, Plus, Repeat, Trash2, UserCog, UserX } from 'lucide-react'
-import type { PayMode, Shift, ShiftStatus } from '../entities/types'
+import { CalendarPlus, Plus, Repeat } from 'lucide-react'
+import type { PayMode, Shift } from '../entities/types'
 import { dateLabel, monthLabel, timeLabel, today, weekdayLabel } from '../shared/dates'
 import { payModeTitles } from '../shared/salary'
 import { statusTitles, statusTone } from '../shared/shifts'
-import { Badge, CardRow, EmptyState, ErrorNote, FormModal, ResponsiveTable, Title } from '../shared/ui'
+import { color } from '../shared/tokens'
+import { Badge, CardRow, EmptyState, ErrorNote, FormModal, ResponsiveTable, SheetFooter, Title } from '../shared/ui'
 import { ScheduleBoard } from './shifts/ScheduleBoard'
-import { createShift, createShiftSeries, deleteShift, listShifts, replaceShift, setShiftPayMode, setShiftStatus } from '../services/shifts'
+import { ShiftActions } from './shifts/ShiftActions'
+import { createShift, createShiftSeries, listShifts, replaceShift, setShiftPayMode } from '../services/shifts'
 import { listEmployees } from '../services/employees'
 import { useOrg } from '../app/OrgContext'
 
@@ -19,36 +21,21 @@ const weekdays = [[1, 'Пн'], [2, 'Вт'], [3, 'Ср'], [4, 'Чт'], [5, 'Пт'
 const TIME = 'HH:mm'
 
 export function ShiftsPage() {
-  const queryClient = useQueryClient()
   const { month, pointId, pointName, points, defaultPointId } = useOrg()
   const [form, setForm] = useState<'single' | 'series'>()
   const [replacing, setReplacing] = useState<Shift | null>(null)
   const [paying, setPaying] = useState<Shift | null>(null)
+  const [linked, setLinked] = useState(false)
 
   const shifts = useQuery({ queryKey: ['shifts', month, pointId], queryFn: () => listShifts(month, pointId || undefined) })
   const employees = useQuery({ queryKey: ['employees', false], queryFn: () => listEmployees() })
   const nameOf = (id:string) => employees.data?.find(e => e.id === id)?.fullName ?? 'Сотрудник'
-  const invalidate = () => { void queryClient.invalidateQueries({ queryKey: ['shifts'] }) }
 
-  const status = useMutation({ mutationFn: ({ id, next }:{ id:string; next:ShiftStatus }) => setShiftStatus(id, next), onSuccess: invalidate })
-  const remove = useMutation({ mutationFn: deleteShift, onSuccess: invalidate })
-
-  const actions = (shift:Shift) => <Space size={4} wrap>
-    <Tooltip title="Как оплачивается смена"><Button size="small" icon={<Hourglass size={15}/>} onClick={() => setPaying(shift)}/></Tooltip>
-    {shift.status === 'PLANNED' && <Tooltip title="Начать смену">
-      <Button size="small" icon={<PlayCircle size={15}/>} onClick={() => status.mutate({ id: shift.id, next: 'ON_DUTY' })}/>
-    </Tooltip>}
-    {(shift.status === 'ON_DUTY' || shift.status === 'PLANNED' || shift.status === 'REPLACED') && <Tooltip title="Завершить">
-      <Button size="small" icon={<CheckCircle2 size={15}/>} onClick={() => status.mutate({ id: shift.id, next: 'COMPLETED' })}/>
-    </Tooltip>}
-    {shift.status !== 'COMPLETED' && <Tooltip title="Не вышел">
-      <Button size="small" icon={<UserX size={15}/>} onClick={() => status.mutate({ id: shift.id, next: 'NO_SHOW' })}/>
-    </Tooltip>}
-    <Tooltip title="Заменить сотрудника"><Button size="small" icon={<UserCog size={15}/>} onClick={() => setReplacing(shift)}/></Tooltip>
-    <Popconfirm title="Удалить смену?" okText="Удалить" cancelText="Отмена" okButtonProps={{ danger: true }} onConfirm={() => remove.mutate(shift.id)}>
-      <Tooltip title="Удалить"><Button size="small" icon={<Trash2 size={15}/>}/></Tooltip>
-    </Popconfirm>
-  </Space>
+  // Общий ShiftActions удаляет через deleteShiftSafe: смену, на которой висит удержание WB,
+  // он не трогает, а сообщает об этом через onLinked. Собственная кнопка тут эту защиту обходила.
+  const actions = (shift:Shift) => <ShiftActions
+    shift={shift} onPay={setPaying} onReplace={setReplacing} onLinked={() => setLinked(true)}
+  />
 
   const columns:TableProps<Shift>['columns'] = [
     {
@@ -70,16 +57,21 @@ export function ShiftsPage() {
   ]
 
   return <>
-    <Title title="Смены" subtitle={`${monthLabel(month)} · ${pointId ? pointName(pointId) : 'Все ПВЗ'}`}>
-      <Space wrap>
-        <Button icon={<Repeat size={15}/>} onClick={() => setForm('series')} disabled={!points.length}>Серия смен</Button>
-        <Button type="primary" icon={<Plus size={16}/>} onClick={() => setForm('single')} disabled={!points.length}>Создать смену</Button>
-      </Space>
+    <Title
+      title="Смены" subtitle={`${monthLabel(month)} · ${pointId ? pointName(pointId) : 'Все ПВЗ'}`}
+      action={{ label: 'Создать смену', icon: <Plus size={16}/>, onClick: () => setForm('single'), disabled: !points.length }}
+    >
+      <Button icon={<Repeat size={15}/>} onClick={() => setForm('series')} disabled={!points.length}>Серия смен</Button>
     </Title>
 
     {!employees.data?.length && !employees.isLoading && <Alert
       className="mb-4" type="warning" showIcon
       message="Сначала добавьте сотрудников — без них смену назначить не на кого."
+    />}
+
+    {linked && <Alert
+      className="mb-4" type="warning" showIcon closable onClose={() => setLinked(false)}
+      message="Смена связана с удержанием Wildberries — сначала отвяжите удержание в разделе «Удержания WB»."
     />}
 
     <Tabs
@@ -112,7 +104,7 @@ export function ShiftsPage() {
       ]}
     />
 
-    <ErrorNote error={shifts.error ?? status.error ?? remove.error}/>
+    <ErrorNote error={shifts.error}/>
     {form && <ShiftForm mode={form} defaultPointId={defaultPointId || points[0]?.id} onClose={() => setForm(undefined)}/>}
     {replacing && <ReplaceForm shift={replacing} onClose={() => setReplacing(null)}/>}
     {paying && <PayModeForm shift={paying} employeeName={nameOf(paying.employeeId)} onClose={() => setPaying(null)}/>}
@@ -136,17 +128,17 @@ function PayModeForm({ shift, employeeName, onClose }:{ shift:Shift; employeeNam
 
   return <FormModal
     title="Оплата смены" onClose={onClose}
-    footer={<Space wrap>
+    footer={<SheetFooter>
       <Button type="primary" loading={save.isPending} onClick={() => save.mutate()}>Сохранить</Button>
       <Button onClick={onClose}>Отмена</Button>
-    </Space>}
+    </SheetFooter>}
   >
     <Typography.Paragraph type="secondary">
       {employeeName} · {dateLabel(shift.startsAt)}, {timeLabel(shift.startsAt)}–{timeLabel(shift.endsAt)}
     </Typography.Paragraph>
     <Radio.Group value={payMode} onChange={e => setPayMode(e.target.value)} style={{ display: 'grid', gap: 8, width: '100%' }}>
       {(Object.keys(payModeTitles) as PayMode[]).map(mode => <Radio key={mode} value={mode} style={{
-        alignItems: 'flex-start', border: '1px solid', borderColor: payMode === mode ? '#16a34a' : '#e9edf0',
+        alignItems: 'flex-start', border: '1px solid', borderColor: payMode === mode ? color.brand : color.line,
         borderRadius: 10, padding: 12, marginInlineEnd: 0,
       }}>
         <Typography.Text strong>{payModeTitles[mode]}</Typography.Text>
@@ -187,10 +179,11 @@ function ShiftForm({ mode, defaultPointId, onClose }:{ mode:'single' | 'series';
 
   return <FormModal
     title={mode === 'single' ? 'Новая смена' : 'Серия смен'} onClose={onClose}
-    footer={<Space wrap>
+    sheetHeight="90dvh"
+    footer={<SheetFooter>
       <Button type="primary" loading={save.isPending} onClick={() => form.submit()}>Создать</Button>
       <Button onClick={onClose}>Отмена</Button>
-    </Space>}
+    </SheetFooter>}
   >
     <Form<ShiftValues>
       form={form} layout="vertical" requiredMark={false}
@@ -264,10 +257,10 @@ function ReplaceForm({ shift, onClose }:{ shift:Shift; onClose:() => void }) {
 
   return <FormModal
     title="Замена сотрудника" onClose={onClose}
-    footer={<Space wrap>
+    footer={<SheetFooter>
       <Button type="primary" loading={save.isPending} onClick={() => form.submit()}>Заменить</Button>
       <Button onClick={onClose}>Отмена</Button>
-    </Space>}
+    </SheetFooter>}
   >
     <Typography.Paragraph type="secondary">
       Смена {dateLabel(shift.startsAt)}, {timeLabel(shift.startsAt)}–{timeLabel(shift.endsAt)}.

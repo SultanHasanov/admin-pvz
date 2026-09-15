@@ -1,9 +1,9 @@
-import { Button, Drawer, Space, Switch, Tooltip, Typography } from 'antd'
+import { Button, Space, Switch, Tooltip, Typography } from 'antd'
 import dayjs from 'dayjs'
 import type { Employee, Shift } from '../../entities/types'
 import { timeLabel } from '../../shared/dates'
 import { statusTitles, statusTone } from '../../shared/shifts'
-import { Badge, FormModal, useIsMobile } from '../../shared/ui'
+import { Badge, FormModal, SheetFooter } from '../../shared/ui'
 import { ShiftActions } from './ShiftActions'
 
 const WEEKDAYS = ['воскресенье', 'понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота']
@@ -24,15 +24,14 @@ export interface DaySheetProps {
 }
 
 export function DaySheet(props:DaySheetProps) {
-  const mobile = useIsMobile()
   const day = dayjs(props.date)
   const title = `${day.date()} ${MONTHS[day.month()]}, ${WEEKDAYS[day.day()]}`
-  const body = <Body {...props}/>
 
-  // На телефоне шторка снизу читается как родная, модалка посреди экрана — нет.
-  return mobile
-    ? <Drawer open placement="bottom" height="auto" title={title} onClose={props.onClose} styles={{ body: { paddingTop: 8 } }}>{body}</Drawer>
-    : <FormModal title={title} onClose={props.onClose} footer={<Button onClick={props.onClose}>Закрыть</Button>}>{body}</FormModal>
+  // Развилка «лист на телефоне / модалка на десктопе» теперь внутри FormModal.
+  return <FormModal
+    title={title} onClose={props.onClose}
+    footer={<SheetFooter><Button onClick={props.onClose}>Закрыть</Button></SheetFooter>}
+  ><Body {...props}/></FormModal>
 }
 
 function Body({ date, staff, shiftsOfDay, pointLabel, pending, onToggle, onPay, onReplace, onLinked, onOpenWeek }:DaySheetProps) {

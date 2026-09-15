@@ -104,7 +104,9 @@ export function PatternWizard({ month, weekStart, staff, shifts, points, templat
   }
 
   return <FormModal
-    title="График смен" onClose={onClose} width={640}
+    // width теперь только для десктопа; на телефоне лист фиксируем — мастер меняет высоту по шагам.
+    title="График смен" onClose={onClose} width={640} sheetHeight="90dvh"
+    // Порядок «Назад → Далее» оставляем рядом: в мастере он привычнее широкой кнопки сверху.
     footer={<Space wrap>
       {step > 0 && <Button onClick={() => setStep(step - 1)}>Назад</Button>}
       {step < 2 && <Button type="primary" onClick={() => setStep(step + 1)}>Далее</Button>}

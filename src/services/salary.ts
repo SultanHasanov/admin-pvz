@@ -52,15 +52,15 @@ export async function deletePenalty(id:string) {
 export async function listSalaryPayments(month:string):Promise<SalaryPayment[]> {
   const organization_id = await organizationId()
   const { from, to } = range(month)
-  const { data, error } = await client().from('salary_payments').select('id,employee_id,date,amount_kopecks,kind,comment').eq('organization_id', organization_id).gte('date', from).lt('date', to).order('date')
+  const { data, error } = await client().from('salary_payments').select('id,employee_id,date,accrual_month,pickup_point_id,amount_kopecks,kind,comment').eq('organization_id', organization_id).eq('accrual_month', from).order('date')
   if (error) throw error
-  return (data as { id:string; employee_id:string; date:string; amount_kopecks:number; kind:SalaryPayment['kind']; comment:string | null }[])
-    .map(row => ({ id: row.id, employeeId: row.employee_id, date: row.date, amountKopecks: row.amount_kopecks, kind: row.kind, comment: row.comment }))
+  return (data as { id:string; employee_id:string; date:string; accrual_month:string; pickup_point_id:string|null; amount_kopecks:number; kind:SalaryPayment['kind']; comment:string | null }[])
+    .map(row => ({ id: row.id, employeeId: row.employee_id, date: row.date, accrualMonth:row.accrual_month, pickupPointId:row.pickup_point_id, amountKopecks: row.amount_kopecks, kind: row.kind, comment: row.comment }))
 }
 
-export async function createSalaryPayment(input:{ employeeId:string; date:string; amountKopecks:number; kind:SalaryPayment['kind']; comment?:string }) {
+export async function createSalaryPayment(input:{ employeeId:string; date:string; accrualMonth:string; pickupPointId?:string|null; amountKopecks:number; kind:SalaryPayment['kind']; comment?:string }) {
   const organization_id = await organizationId()
-  const { error } = await client().from('salary_payments').insert({ organization_id, employee_id: input.employeeId, date: input.date, amount_kopecks: input.amountKopecks, kind: input.kind, comment: input.comment?.trim() || null })
+  const { error } = await client().from('salary_payments').insert({ organization_id, employee_id: input.employeeId, date: input.date, accrual_month:`${input.accrualMonth}-01`, pickup_point_id:input.pickupPointId ?? null, amount_kopecks: input.amountKopecks, kind: input.kind, comment: input.comment?.trim() || null })
   if (error) throw error
 }
 

@@ -9,7 +9,7 @@ const optionsKeyboard = values => [...values.reduce((rows, value, index) => { if
 async function integrationContext(req) {
   const id = String(req.query?.integration || '')
   if (!/^[0-9a-f-]{36}$/i.test(id)) return null
-  const integrations = await db(`telegram_integrations?id=eq.${encodeURIComponent(id)}&status=eq.CONNECTED&select=id,organization_id`)
+  const integrations = await db(`telegram_integrations?id=eq.${encodeURIComponent(id)}&status=eq.CONNECTED&pickup_point_id=not.is.null&select=id,organization_id,pickup_point_id`)
   const integration = integrations[0]
   if (!integration) return null
   const secrets = await db(`telegram_bot_secrets?integration_id=eq.${encodeURIComponent(id)}&select=encrypted_bot_token,webhook_secret_hash`)
@@ -25,7 +25,7 @@ async function send(token, chatId, text, keyboard = mainKeyboard) { return teleg
 async function linkChat(context, chatId, userId, code) {
   const rows = await db(`telegram_pairing_codes?integration_id=eq.${context.id}&code=eq.${encodeURIComponent(code)}&used_at=is.null&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=*`)
   const pair = rows[0]; if (!pair) return false
-  await db('telegram_chats', { method: 'POST', body: JSON.stringify({ organization_id: context.organization_id, integration_id: context.id, user_id: pair.user_id, telegram_chat_id: chatId, telegram_user_id: userId, role: 'OWNER', state: { step: 'idle' } }), prefer: 'resolution=merge-duplicates,return=minimal' })
+  await db('telegram_chats', { method: 'POST', body: JSON.stringify({ organization_id: context.organization_id, integration_id: context.id, user_id: pair.user_id, telegram_chat_id: chatId, telegram_user_id: userId, role: pair.role, state: { step: 'idle', employeeId: pair.employee_id || null } }), prefer: 'resolution=merge-duplicates,return=minimal' })
   await db(`telegram_pairing_codes?id=eq.${pair.id}`, { method: 'PATCH', body: JSON.stringify({ used_at: new Date().toISOString() }), prefer: 'return=minimal' })
   return true
 }
@@ -43,11 +43,9 @@ async function rememberPreset(organizationId, pointId, kind, category, amount) {
 
 /** Шаг выбора ПВЗ пропускается, когда точка одна. */
 async function startPointStep(context, chat, reply, nextStep) {
-  const points = await listPoints(chat.organization_id)
-  if (!points.length) { await setState(chat.id, { step: 'idle' }); return reply('Сначала добавьте ПВЗ в админке.') }
-  if (points.length === 1) return enterCategoryStep(chat, reply, nextStep, points[0])
-  await setState(chat.id, { step: `${nextStep}_point`, points })
-  return reply('Выберите ПВЗ.', optionsKeyboard(points.map(point => point.name)))
+  const points = await db(`pickup_points?id=eq.${context.pickup_point_id}&organization_id=eq.${context.organization_id}&select=id,name`)
+  if (!points[0]) { await setState(chat.id, { step: 'idle' }); return reply('Этот бот больше не привязан к ПВЗ.') }
+  return enterCategoryStep(chat, reply, nextStep, points[0])
 }
 
 async function enterCategoryStep(chat, reply, nextStep, point) {
@@ -67,15 +65,30 @@ async function handleConnected(context, chat, text) {
   const state = chat.state || { step: 'idle' }
   const reply = (value, keyboard) => send(context.botToken, chat.telegram_chat_id, value, keyboard)
 
+  if (chat.role === 'EMPLOYEE') {
+    const employeeId = state.employeeId
+    const employeeKeyboard = [[{ text: '📅 Мои смены' }, { text: '💰 Моя зарплата' }]]
+    if (!employeeId) return reply('Доступ сотрудника отключён. Попросите владельца прислать новое приглашение.', employeeKeyboard)
+    const access = await db(`employee_pickup_points?employee_id=eq.${employeeId}&pickup_point_id=eq.${context.pickup_point_id}&select=employee_id`)
+    if (!access[0]) return reply('Доступ к этому ПВЗ отключён. Попросите владельца прислать новое приглашение.', employeeKeyboard)
+    if (text === '🔄 Главное меню' || text === '/start') return reply('Выберите действие.', employeeKeyboard)
+    if (text === '📅 Мои смены') {
+      const rows = await db(`shifts?organization_id=eq.${chat.organization_id}&pickup_point_id=eq.${context.pickup_point_id}&employee_id=eq.${employeeId}&planned_start=gte.${encodeURIComponent(new Date().toISOString())}&select=planned_start,planned_end,status&order=planned_start&limit=10`)
+      return reply(rows.length ? `Ваши ближайшие смены:\n${rows.map(x => `• ${new Date(x.planned_start).toLocaleString('ru-RU')}–${new Date(x.planned_end).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}`).join('\n')}` : 'Ближайших смен нет.', employeeKeyboard)
+    }
+    if (text === '💰 Моя зарплата') return reply('Подробный расчёт зарплаты появится после закрытия периода владельцем.', employeeKeyboard)
+    return reply('Используйте кнопки меню.', employeeKeyboard)
+  }
+
   if (text === '🔄 Главное меню' || text === '/start') { await setState(chat.id, { step: 'idle' }); return reply('Выберите действие.') }
   if (text === '➕ Удержание') return startPointStep(context, chat, reply, 'deduction')
   if (text === '➕ Расход') return startPointStep(context, chat, reply, 'expense')
   if (text === '👥 Сотрудники') {
-    const rows = await db(`employees?organization_id=eq.${chat.organization_id}&status=eq.ACTIVE&select=full_name&order=full_name`)
+    const rows = await db(`employees?organization_id=eq.${chat.organization_id}&status=eq.ACTIVE&employee_pickup_points.pickup_point_id=eq.${context.pickup_point_id}&select=full_name,employee_pickup_points!inner(pickup_point_id)&order=full_name`)
     return reply(rows.length ? `Сотрудники:\n${rows.map(x => `• ${x.full_name}`).join('\n')}` : 'Сотрудников пока нет. Добавьте их в админке.')
   }
   if (text === '📅 Смены') {
-    const rows = await db(`shifts?organization_id=eq.${chat.organization_id}&planned_start=gte.${encodeURIComponent(new Date().toISOString())}&select=planned_start,employees(full_name)&order=planned_start&limit=5`)
+    const rows = await db(`shifts?organization_id=eq.${chat.organization_id}&pickup_point_id=eq.${context.pickup_point_id}&planned_start=gte.${encodeURIComponent(new Date().toISOString())}&select=planned_start,employees(full_name)&order=planned_start&limit=5`)
     return reply(rows.length ? `Ближайшие смены:\n${rows.map(x => `• ${new Date(x.planned_start).toLocaleString('ru-RU')} — ${x.employees?.full_name || 'сотрудник'}`).join('\n')}` : 'Ближайших смен нет.')
   }
 
@@ -143,6 +156,11 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end()
   try {
     const context = await integrationContext(req); if (!context) return res.status(401).end()
+    const updateId = Number(req.body?.update_id)
+    if (Number.isFinite(updateId)) {
+      try { await db('telegram_updates', { method:'POST', body:JSON.stringify({ integration_id:context.id, update_id:updateId }), prefer:'return=minimal' }) }
+      catch (error) { if (String(error.message).includes('23505') || String(error.message).includes('duplicate')) return res.status(200).json({ ok:true, duplicate:true }); throw error }
+    }
     const message = req.body?.message; if (!message?.chat?.id || !message?.from?.id) return res.status(200).json({ ok: true })
     const text = String(message.text || '').trim(), match = text.match(/^\/start\s+([A-Z0-9]{8})$/i)
     if (match) {
