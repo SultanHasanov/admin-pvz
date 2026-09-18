@@ -3,8 +3,8 @@ import type { Session } from '@supabase/supabase-js'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Card } from '../shared/kit/Card'
-import { Button, TextButton } from '../shared/kit/Button'
-import { Banner, TextField } from '../shared/kit/Field'
+import { Button } from '../shared/kit/Button'
+import { Banner } from '../shared/kit/Field'
 import { Label } from '../shared/kit/Text'
 import { haptics } from '../shared/kit/haptics'
 import { supabase } from '../lib/supabase'
@@ -14,9 +14,7 @@ import { INVITE_CODE, acceptInvitation, normalizeCode } from '../services/invita
  * Вход по приглашению: ссылка `/join/ABC-D3F` или ручной ввод кода.
  *
  * Экран вне оболочки с табами и вне проверки организации — у нового сотрудника её ещё
- * нет. Порядок: код → вход или регистрация → приём приглашения → кабинет `/me`.
- * Код держим в адресе, а не в памяти: после подтверждения почты человек вернётся
- * по ссылке из письма, и код должен быть на месте.
+ * нет. Порядок: код → анонимная сессия → приём приглашения → кабинет `/me`.
  */
 export default function Join({ session, onJoined }:{
   session:Session | null
@@ -28,9 +26,6 @@ export default function Join({ session, onJoined }:{
   const queryClient = useQueryClient()
 
   const [code, setCode] = useState(normalizeCode(params.code ?? ''))
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [register, setRegister] = useState(true)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ tone:'bad' | 'info'; text:string }>()
 
@@ -53,21 +48,21 @@ export default function Join({ session, onJoined }:{
     }
   }
 
-  async function signIn() {
+  /**
+   * Сотрудник входит только по коду: без почты и пароля создаём анонимную сессию
+   * Supabase и сразу принимаем приглашение — аккаунт привязывается к этому устройству.
+   */
+  async function enter() {
     if (!supabase) return
     setBusy(true); setMessage(undefined)
-    const result = register
-      ? await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        // Письмо подтверждения вернёт сюда же — вместе с кодом.
-        options: { emailRedirectTo: `${location.origin}/join/${code}` },
-      })
-      : await supabase.auth.signInWithPassword({ email: email.trim(), password })
-    setBusy(false)
-    if (result.error) setMessage({ tone: 'bad', text: result.error.message })
-    else if (register && !result.data.session) setMessage({ tone: 'info', text: 'Подтвердите почту по ссылке из письма — она вернёт вас на этот экран' })
-    // Сессия появилась — App перерисует экран с кнопкой «Присоединиться».
+    const { error } = await supabase.auth.signInAnonymously()
+    if (error) {
+      setBusy(false)
+      haptics.error()
+      setMessage({ tone: 'bad', text: error.message })
+      return
+    }
+    await join()
   }
 
   return <div className="kit-root grid min-h-dvh place-items-center bg-bg px-4 py-8">
@@ -96,29 +91,12 @@ export default function Join({ session, onJoined }:{
 
       {session
         ? <div className="mt-3">
-          <div className="mb-3 text-center text-sub text-muted">Вы вошли как {session.user.email}</div>
+          <div className="mb-3 text-center text-sub text-muted">Вы вошли как {session.user.email || 'сотрудник'}</div>
           <Button block disabled={!valid || busy} onClick={() => void join()}>Присоединиться</Button>
         </div>
-        : <Card className="mt-3 p-4">
-          <div className="mb-3 text-row font-medium">{register ? 'Создайте аккаунт' : 'Войдите в аккаунт'}</div>
-          <TextField label="Почта" type="email" autoComplete="email" inputMode="email" value={email} onChange={event => setEmail(event.target.value)}/>
-          <TextField
-            label="Пароль"
-            type="password"
-            autoComplete={register ? 'new-password' : 'current-password'}
-            hint={register ? 'Не короче 6 символов' : undefined}
-            value={password}
-            onChange={event => setPassword(event.target.value)}
-          />
-          <Button block disabled={!valid || !email.trim() || password.length < 6 || busy} onClick={() => void signIn()}>
-            {register ? 'Создать аккаунт' : 'Войти'}
-          </Button>
-          <div className="mt-3 text-center">
-            <TextButton onClick={() => setRegister(!register)}>
-              {register ? 'Уже есть аккаунт' : 'Создать аккаунт'}
-            </TextButton>
-          </div>
-        </Card>}
+        : <div className="mt-3">
+          <Button block disabled={!valid || busy} onClick={() => void enter()}>Войти по коду</Button>
+        </div>}
     </div>
   </div>
 }

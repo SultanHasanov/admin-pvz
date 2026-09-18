@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom'
-import { Screen, Header, FilterRow } from '../shared/kit/Screen'
+import { Screen, FilterRow } from '../shared/kit/Screen'
 import { Card, Hero } from '../shared/kit/Card'
 import { Avatar, List, ListRow, Pill } from '../shared/kit/ListRow'
 import { SectionTitle } from '../shared/kit/Text'
@@ -70,7 +70,6 @@ export default function Money() {
   }, { replace: true })
 
   return <Screen
-    header={<Header title="Деньги"/>}
     filters={<FilterRow>
       <Chip onClick={() => open('pvzPick')}>{pointId ? pointName(pointId) : 'Все ПВЗ'}</Chip>
       <Chip onClick={() => open('monthPick')}>{period}</Chip>

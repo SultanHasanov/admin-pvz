@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { create } from 'zustand'
 
@@ -54,6 +54,9 @@ const useStore = create<SheetsStore>(set => ({
   set: stack => set({ stack }),
 }))
 
+/** Верхняя шторка прямо сейчас, без ожидания рендера. */
+export const currentTopSheet = () => useStore.getState().stack.at(-1)
+
 const sheetDepthOf = (state:unknown) =>
   typeof state === 'object' && state !== null && 'sheetDepth' in state && typeof state.sheetDepth === 'number'
     ? state.sheetDepth
@@ -77,14 +80,25 @@ export function useSheets() {
   const here = location.pathname + location.search
 
   // История — источник правды: после «Назад» глубина уменьшилась, и стек подрезается.
+  // Режем только при уменьшении глубины: навигация идёт в transition и коммитится позже
+  // стора, поэтому в промежуточном кадре depth < stack.length — это не «Назад».
+  const previousDepth = useRef(depth)
   useEffect(() => {
-    if (depth < useStore.getState().stack.length) setStack(useStore.getState().stack.slice(0, depth))
+    const decreased = depth < previousDepth.current
+    previousDepth.current = depth
+    if (decreased && depth < useStore.getState().stack.length) setStack(useStore.getState().stack.slice(0, depth))
   }, [depth, setStack])
 
   const open = useCallback(<K extends SheetType>(type:K, props?:SheetProps<K>) => {
-    setStack([...useStore.getState().stack, { type, props }])
-    navigate(here, { state: { ...(location.state as object), sheetDepth: depth + 1 } })
-  }, [navigate, here, location.state, depth, setStack])
+    const current = useStore.getState().stack
+    // Пункт меню подменяет само меню: иначе «закрыть меню» и «открыть шторку» гоняются в истории.
+    if (current[current.length - 1]?.type === 'menu') {
+      setStack([...current.slice(0, -1), { type, props }])
+      return
+    }
+    setStack([...current, { type, props }])
+    navigate(here, { state: { ...(location.state as object), sheetDepth: current.length + 1 } })
+  }, [navigate, here, location.state, setStack])
 
   /** Заменить верхнюю шторку, не добавляя шаг в историю: «выбрать» → «подтвердить». */
   const replace = useCallback(<K extends SheetType>(type:K, props?:SheetProps<K>) => {

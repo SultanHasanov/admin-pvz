@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import dayjs from 'dayjs'
-import { Screen, Header, FilterRow } from '../shared/kit/Screen'
+import { Screen, FilterRow } from '../shared/kit/Screen'
 import { Card } from '../shared/kit/Card'
 import { Avatar, List, ListRow } from '../shared/kit/ListRow'
 import { SectionTitle } from '../shared/kit/Text'
@@ -45,6 +45,12 @@ export default function Schedule() {
   const [picked, setPicked] = useState<string | undefined>(() => params.get('d') ?? undefined)
   const [weekStart, setWeekStart] = useState(() => weekStartOf(
     month === today.slice(0, 7) ? today : monthStart(month)))
+
+  // Месяц меняется из шторки: матрица недели и выбранный день должны пойти за ним.
+  useEffect(() => {
+    setWeekStart(weekStartOf(month === today.slice(0, 7) ? today : monthStart(month)))
+    setPicked(current => current?.startsWith(month) ? current : undefined)
+  }, [month]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const period = monthLabel(month).split(' ')[0]
   const nameOf = (id:string) => employees.data?.find(employee => employee.id === id)?.fullName ?? 'Сотрудник'
@@ -96,7 +102,6 @@ export default function Schedule() {
   const openDay = (point:string, date:string) => open('day', { pointId: point, date, pointLabel: pointName(point) })
 
   return <Screen
-    header={<Header title="График"/>}
     filters={<FilterRow>
       <Chip onClick={() => open('pvzPick')}>{pointId ? pointName(pointId) : 'Все ПВЗ'}</Chip>
       <Chip onClick={() => open('monthPick')}>{period}</Chip>

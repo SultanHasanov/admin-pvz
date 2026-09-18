@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '../../shared/kit/Button'
 import { Banner, TextField } from '../../shared/kit/Field'
 import { haptics } from '../../shared/kit/haptics'
-import { supabase } from '../../lib/supabase'
+import { appUrl, supabase } from '../../lib/supabase'
 import { AuthLayout, Logo } from './AuthLayout'
 
 /** Supabase отвечает по-английски; человеку нужна причина по-русски. */
@@ -40,7 +40,7 @@ export default function Login() {
     if (!supabase) return
     setBusy(true); setError(undefined)
     // Ссылка из письма входит в аккаунт и открывает экран нового пароля (см. App.tsx).
-    const result = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${location.origin}/reset` })
+    const result = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: appUrl('/reset') })
     setBusy(false)
     if (result.error) setError(authError(result.error.message))
     else setMode('sent')

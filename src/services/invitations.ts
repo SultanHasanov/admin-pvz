@@ -1,3 +1,4 @@
+import { appUrl } from '../lib/supabase'
 import type { Invitation, InvitationStatus } from '../entities/types'
 import { normalizeCode } from '../shared/invite'
 import { client, organizationId, resetOrganizationCache } from './org'
@@ -22,7 +23,7 @@ const toInvitation = (row:InvitationRow):Invitation => ({
 })
 
 /** Ссылка приглашения. Домен — текущий: так ссылка работает и на превью, и в проде. */
-export const inviteLink = (code:string) => `${location.origin}/join/${code}`
+export const inviteLink = (code:string) => appUrl(`/join/${code}`)
 
 /**
  * Последнее приглашение сотрудника — живое, принятое или отозванное: экрану

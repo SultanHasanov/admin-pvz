@@ -11,7 +11,7 @@ import { cn } from '../../shared/kit/cn'
 import { formatPhone } from '../../shared/format'
 import { parseMoney } from '../../shared/money'
 import { plural } from '../../shared/format'
-import { supabase } from '../../lib/supabase'
+import { appUrl, supabase } from '../../lib/supabase'
 import { createEmployee } from '../../services/employees'
 import { applyStarterSchedule, createOrganization } from '../../services/onboarding'
 import { AuthLayout } from './AuthLayout'
@@ -79,7 +79,7 @@ export default function Onboarding({ session, onDone }:{ session:Session | null;
         const result = await supabase.auth.signUp({
           email: email.trim(),
           password,
-          options: { emailRedirectTo: `${location.origin}/register` },
+          options: { emailRedirectTo: appUrl('/register') },
         })
         if (result.error) throw result.error
         // Проект требует подтверждения почты — сессии ещё нет, дальше идти не с чем.

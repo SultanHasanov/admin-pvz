@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { Screen, Header, FilterRow } from '../shared/kit/Screen'
+import { Screen, FilterRow } from '../shared/kit/Screen'
 import { Card } from '../shared/kit/Card'
 import { Avatar, List, ListRow } from '../shared/kit/ListRow'
 import { SectionTitle } from '../shared/kit/Text'
@@ -48,7 +48,6 @@ export default function People() {
   ].filter(group => group.rows.length)
 
   return <Screen
-    header={<Header title="Сотрудники"/>}
     filters={<FilterRow>
       <Chip onClick={() => open('pvzPick')}>{pointId ? pointName(pointId) : 'Все ПВЗ'}</Chip>
       <Chip onClick={() => open('monthPick')}>{period}</Chip>

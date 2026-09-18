@@ -1,4 +1,4 @@
-import { useId, type InputHTMLAttributes, type ReactNode } from 'react'
+import { useId, useState, type InputHTMLAttributes, type ReactNode } from 'react'
 import { cn } from './cn'
 import { Label } from './Text'
 
@@ -28,10 +28,28 @@ interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'cl
   error?:ReactNode
 }
 
-export function TextField({ label, hint, error, ...rest }:TextFieldProps) {
+export function TextField({ label, hint, error, type, ...rest }:TextFieldProps) {
   const id = useId()
+  const [shown, setShown] = useState(false)
+  const secret = type === 'password'
   return <Field label={label && <label htmlFor={id}>{label}</label>} hint={hint} error={error}>
-    <input id={id} className={control} aria-invalid={!!error} {...rest}/>
+    {secret
+      ? <div className="relative">
+        <input id={id} className={cn(control, 'pr-12')} aria-invalid={!!error} type={shown ? 'text' : 'password'} {...rest}/>
+        <button
+          type="button"
+          aria-label={shown ? 'Скрыть пароль' : 'Показать пароль'}
+          className="tap absolute inset-y-0 right-1 flex w-11 items-center justify-center text-muted"
+          onClick={() => setShown(!shown)}
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
+            <path d="M1.8 10S4.8 4.5 10 4.5 18.2 10 18.2 10 15.2 15.5 10 15.5 1.8 10 1.8 10Z" stroke="currentColor" strokeWidth="1.6"/>
+            <circle cx="10" cy="10" r="2.6" stroke="currentColor" strokeWidth="1.6"/>
+            {shown && <path d="M3 17 17 3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>}
+          </svg>
+        </button>
+      </div>
+      : <input id={id} className={control} aria-invalid={!!error} type={type} {...rest}/>}
   </Field>
 }
 

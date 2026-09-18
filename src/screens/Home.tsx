@@ -1,4 +1,4 @@
-import { Screen, Header, FilterRow } from '../shared/kit/Screen'
+import { Bell, Screen, FilterRow } from '../shared/kit/Screen'
 import { Card, Hero, HeroTile, HeroTiles } from '../shared/kit/Card'
 import { List, ListRow, Avatar, Dot } from '../shared/kit/ListRow'
 import { SectionTitle } from '../shared/kit/Text'
@@ -48,10 +48,10 @@ export default function Home() {
   ]
 
   return <Screen
-    header={<Header title="Главная" bell={{ count: badgeOf(unread.length), onClick: () => open('notifs') }}/>}
-    filters={<FilterRow>
+    filters={<FilterRow className="items-center">
       <Chip onClick={() => open('pvzPick')}>{pointId ? pointName(pointId) : 'Все ПВЗ'}</Chip>
       <Chip onClick={() => open('monthPick')}>{period}</Chip>
+      <div className="ml-auto flex-none"><Bell count={badgeOf(unread.length)} onClick={() => open('notifs')}/></div>
     </FilterRow>}
   >
     {totals.error && <div className="mb-3"><ErrorNote error={totals.error}/></div>}

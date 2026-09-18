@@ -44,22 +44,27 @@ export function Header({ title, onBack, action, bell }:{
       onClick={() => { haptics.tap(); onBack() }}
     >‹</button>}
     <div className="flex-1 truncate text-[21px] font-semibold tracking-[-0.025em]">{title}</div>
-    {bell && <button
+    {bell && <Bell {...bell}/>}
+    {action}
+  </div>
+}
+
+/** Колокольчик со счётчиком. Вынесен, чтобы стоять и в шапке, и в ряду фильтров. */
+export function Bell({ count, onClick }:{ count:number | string | null; onClick:() => void }) {
+  return <button
       type="button"
       aria-label="Уведомления"
       className="tap relative flex size-9 items-center justify-center"
-      onClick={() => { haptics.tap(); bell.onClick() }}
+      onClick={() => { haptics.tap(); onClick() }}
     >
       <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden>
         <path d="M5 8.2a5 5 0 0 1 10 0v3.3l1.3 2.2H3.7L5 11.5V8.2Z" stroke="currentColor" strokeWidth="1.6"/>
         <path d="M8.2 16.2a1.9 1.9 0 0 0 3.6 0" stroke="currentColor" strokeWidth="1.6"/>
       </svg>
-      {bell.count !== null && <span className="absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-lg bg-accent px-1 text-[10px] font-semibold text-white">
-        {bell.count}
+      {count !== null && <span className="absolute top-0.5 right-0.5 flex h-4 min-w-4 items-center justify-center rounded-lg bg-accent px-1 text-[10px] font-semibold text-white">
+        {count}
       </span>}
-    </button>}
-    {action}
-  </div>
+    </button>
 }
 
 /** Ряд фильтров под шапкой: выбранный ПВЗ и месяц. Прокручивается, если чипов больше двух. */

@@ -2,14 +2,14 @@ import { Toaster as Sonner, toast as sonner } from 'sonner'
 import { haptics } from './haptics'
 
 /**
- * Тосты прототипа: тёмная плашка внизу над панелью табов, галочка слева, одна строка текста.
+ * Тосты прототипа: тёмная плашка сверху, под вырезом экрана, галочка слева, одна строка текста.
  * Живут 2,6 секунды — столько же, сколько в прототипе (`toast()` там сбрасывает таймер).
  */
 export const Toaster = () => <Sonner
-  position="bottom-center"
+  position="top-center"
   duration={2600}
   visibleToasts={2}
-  offset="calc(var(--tabbar-space) + 16px)"
+  offset="calc(env(safe-area-inset-top) + 12px)"
   gap={8}
   toastOptions={{
     unstyled: true,
