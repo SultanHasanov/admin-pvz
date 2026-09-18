@@ -4,9 +4,18 @@ import { generateSlots } from '../entities/schedule'
 import { monthEnd, monthStart } from '../shared/dates'
 import { client, organizationId } from './org'
 
-interface ShiftRow { id:string; employee_id:string; pickup_point_id:string; planned_start:string; planned_end:string; actual_start:string | null; actual_end:string | null; pay_mode:PayMode | null; status:ShiftStatus }
-const columns = 'id,employee_id,pickup_point_id,planned_start,planned_end,actual_start,actual_end,pay_mode,status'
-const toShift = (row:ShiftRow):Shift => ({ id: row.id, employeeId: row.employee_id, pickupPointId: row.pickup_point_id, startsAt: row.planned_start, endsAt: row.planned_end, actualStartsAt: row.actual_start, actualEndsAt: row.actual_end, payMode: row.pay_mode ?? 'FULL', status: row.status })
+interface ShiftRow { id:string; employee_id:string; pickup_point_id:string; planned_start:string; planned_end:string; actual_start:string | null; actual_end:string | null; pay_mode:PayMode | null; status:ShiftStatus; slot_index:number | null; work_date:string | null }
+const columns = 'id,employee_id,pickup_point_id,planned_start,planned_end,actual_start,actual_end,pay_mode,status,slot_index,work_date'
+const toShift = (row:ShiftRow):Shift => ({
+  id: row.id, employeeId: row.employee_id, pickupPointId: row.pickup_point_id,
+  startsAt: row.planned_start, endsAt: row.planned_end,
+  actualStartsAt: row.actual_start, actualEndsAt: row.actual_end,
+  payMode: row.pay_mode ?? 'FULL', status: row.status,
+  // Место и календарный день считает база (миграция 0012): день зависит от часового
+  // пояса точки, и вычислять его в браузере значит разойтись с уникальным индексом.
+  slotIndex: row.slot_index ?? 0,
+  workDate: row.work_date ?? dayjs(row.planned_start).format('YYYY-MM-DD'),
+})
 
 /** Локальное время смены превращаем в ISO без сдвига пояса браузера. */
 const at = (date:string, time:string) => dayjs(`${date}T${time}`).toISOString()
@@ -36,14 +45,20 @@ export async function listUpcomingShifts(limit = 5):Promise<Shift[]> {
   return (data as ShiftRow[]).map(toShift)
 }
 
-export interface ShiftInput { employeeId:string; pickupPointId:string; date:string; startsAt:string; endsAt:string; payMode?:PayMode }
+export interface ShiftInput { employeeId:string; pickupPointId:string; date:string; startsAt:string; endsAt:string; payMode?:PayMode; slotIndex?:number }
 
 function rowFrom(organization_id:string, input:ShiftInput) {
   const start = at(input.date, input.startsAt)
   // Смена, заканчивающаяся раньше начала, переходит на следующие сутки.
   const sameDayEnd = at(input.date, input.endsAt)
   const end = dayjs(sameDayEnd).isAfter(dayjs(start)) ? sameDayEnd : dayjs(sameDayEnd).add(1, 'day').toISOString()
-  return { organization_id, employee_id: input.employeeId, pickup_point_id: input.pickupPointId, planned_start: start, planned_end: end, pay_mode: input.payMode ?? 'FULL' }
+  return {
+    organization_id, employee_id: input.employeeId, pickup_point_id: input.pickupPointId,
+    planned_start: start, planned_end: end, pay_mode: input.payMode ?? 'FULL',
+    // Занятое место база переназначит на ближайшее свободное — писателю не нужно
+    // знать про чужие смены, чтобы поставить свою.
+    slot_index: input.slotIndex ?? 0,
+  }
 }
 
 export async function createShift(input:ShiftInput) {
@@ -132,6 +147,20 @@ export async function setShiftPayMode(id:string, payMode:PayMode) {
 
 export async function updateShiftTimes(id:string, actualStart:string | null, actualEnd:string | null) {
   const { error } = await client().from('shifts').update({ actual_start: actualStart, actual_end: actualEnd, updated_at: new Date().toISOString() }).eq('id', id)
+  if (error) throw error
+}
+
+/**
+ * Сотрудник начинает и закрывает свою смену только через RPC: прямой update дал бы
+ * переписать режим оплаты и время, то есть собственную зарплату.
+ */
+export async function startMyShift(shiftId:string) {
+  const { error } = await client().rpc('employee_start_shift', { p_shift_id: shiftId })
+  if (error) throw error
+}
+
+export async function endMyShift(shiftId:string) {
+  const { error } = await client().rpc('employee_end_shift', { p_shift_id: shiftId })
   if (error) throw error
 }
 

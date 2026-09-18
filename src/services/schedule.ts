@@ -1,5 +1,6 @@
 import type { PayMode } from '../entities/types'
 import type { ApplyPlan, PlannedSlot } from '../entities/schedule'
+import type { CellPlan, PlannedCell } from '../entities/slots'
 import { createShiftsBulk, updateShiftPlan, type ShiftInput } from './shifts'
 
 export interface ApplyOptions {
@@ -57,6 +58,56 @@ export async function applySchedule(plan:ApplyPlan, options:ApplyOptions):Promis
     } catch (error) {
       const reason = reasonOf(error)
       for (const slot of slice) result.failed.push({ employeeId: slot.employeeId, date: slot.date, reason })
+    }
+  }
+
+  return result
+}
+
+export type CellApplyOptions = Omit<ApplyOptions, 'pickupPointId'>
+
+const cellInput = (cell:PlannedCell, options:CellApplyOptions):ShiftInput => ({
+  employeeId: cell.employeeId,
+  pickupPointId: cell.pointId,
+  date: cell.date,
+  startsAt: cell.startsAt ?? options.startsAt,
+  endsAt: cell.endsAt ?? options.endsAt,
+  payMode: cell.payMode ?? options.payMode,
+  slotIndex: cell.slotIndex,
+})
+
+/**
+ * Применение графика по местам на смене.
+ *
+ * Отличие от `applySchedule` одно, но принципиальное: ячейка адресуется точкой, днём
+ * и местом, поэтому повторное применение с другой очередью переписывает то же место,
+ * а не добавляет вторую смену рядом.
+ */
+export async function applyCells(plan:CellPlan, options:CellApplyOptions):Promise<ApplyResult> {
+  const result:ApplyResult = { added: 0, replaced: 0, skipped: plan.locked.length, failed: [] }
+
+  if (options.strategy === 'replace') {
+    for (const { cell, shift } of plan.conflicts) {
+      try {
+        await updateShiftPlan(shift.id, cellInput(cell, options))
+        result.replaced += 1
+      } catch (error) {
+        result.failed.push({ employeeId: cell.employeeId, date: cell.date, reason: reasonOf(error) })
+      }
+    }
+  } else {
+    result.skipped += plan.conflicts.length
+  }
+
+  const chunk = 200
+  for (let start = 0; start < plan.toAdd.length; start += chunk) {
+    const slice = plan.toAdd.slice(start, start + chunk)
+    try {
+      await createShiftsBulk(slice.map(cell => cellInput(cell, options)), chunk)
+      result.added += slice.length
+    } catch (error) {
+      const reason = reasonOf(error)
+      for (const cell of slice) result.failed.push({ employeeId: cell.employeeId, date: cell.date, reason })
     }
   }
 

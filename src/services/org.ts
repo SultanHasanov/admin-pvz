@@ -7,7 +7,8 @@ export function client():SupabaseClient {
 }
 
 let cachedOrganizationId:string | null = null
-export function resetOrganizationCache() { cachedOrganizationId = null }
+let cachedEmployeeId:string | null | undefined
+export function resetOrganizationCache() { cachedOrganizationId = null; cachedEmployeeId = undefined }
 
 export async function organizationId():Promise<string> {
   if (cachedOrganizationId) return cachedOrganizationId
@@ -18,6 +19,38 @@ export async function organizationId():Promise<string> {
   if (error || !data) throw new Error('Сначала завершите onboarding и создайте организацию')
   cachedOrganizationId = data.organization_id as string
   return cachedOrganizationId
+}
+
+/**
+ * Сотрудник, которым я вхожу в смены. У владельца, который сам не работает на точке,
+ * `employee_id` в участниках пустой — это не ошибка, а нормальное состояние,
+ * поэтому возвращаем `null`, а не бросаем.
+ */
+export async function currentEmployeeId():Promise<string | null> {
+  if (cachedEmployeeId !== undefined) return cachedEmployeeId
+  const db = client()
+  const { data: userResult, error: userError } = await db.auth.getUser()
+  if (userError || !userResult.user) throw new Error('Войдите в аккаунт')
+  const { data, error } = await db.from('organization_members').select('employee_id').eq('user_id', userResult.user.id).limit(1).single()
+  if (error) throw error
+  cachedEmployeeId = (data?.employee_id as string | null) ?? null
+  return cachedEmployeeId
+}
+
+export type MemberRole = 'OWNER' | 'MANAGER' | 'EMPLOYEE'
+
+/**
+ * Роль в организации — по ней приложение решает, какую оболочку открыть: сотрудник
+ * попадает в свой кабинет, а не на экраны с чужими зарплатами (которые RLS ему всё
+ * равно покажет пустыми). `null` — пользователь ещё ни в одной организации.
+ */
+export async function currentRole():Promise<MemberRole | null> {
+  const db = client()
+  const { data: userResult, error: userError } = await db.auth.getUser()
+  if (userError || !userResult.user) throw new Error('Войдите в аккаунт')
+  const { data, error } = await db.from('organization_members').select('role').eq('user_id', userResult.user.id).limit(1)
+  if (error) throw error
+  return (data?.[0]?.role as MemberRole | undefined) ?? null
 }
 
 export async function getOrganization() {

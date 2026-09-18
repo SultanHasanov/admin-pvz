@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { accrueShifts, calculatePayroll, calculateSalarySheet, dailyTotals, ownerLosses, profit, rateForDate } from './calculations'
-import type { Bonus, Deduction, Employee, Penalty, SalaryPayment, SalaryRule, Shift, Transaction } from './types'
+import { accrueShifts, calculatePayroll, calculateSalarySheet, dailyTotals, employeeShare, ownerLossOf, ownerLosses, profit, rateForDate } from './calculations'
+import type { Bonus, Deduction, DeductionPart, Employee, Penalty, SalaryPayment, SalaryRule, Shift, Transaction } from './types'
 
 const worker:Employee = { id: 'e', fullName: 'Иван', pickupPointIds: ['p'], paymentType: 'SHIFT', rateKopecks: 200000, monthlyNormDays: 22, salaryRateId: null, hourlyRateKopecks: null, status: 'ACTIVE' }
 const completed:Shift = { id: 's', employeeId: 'e', pickupPointId: 'p', startsAt: '2026-09-01T08:00:00+03:00', endsAt: '2026-09-01T22:00:00+03:00', payMode: 'FULL', status: 'COMPLETED' }
@@ -83,5 +83,48 @@ describe('dailyTotals', () => {
     expect(totals).toHaveLength(30)
     expect(totals[0]).toBe(1500)
     expect(totals[29]).toBe(700)
+  })
+})
+
+describe('удержание, разделённое между сотрудниками', () => {
+  // Сид прототипа: 2 400 ₽ — Ирина 1 000, Камила 1 000, 400 остаются убытком владельца.
+  const split:Deduction = { id: 'd6', pickupPointId: 'p1', employeeId: null, shiftId: null, eventAt: '2026-09-16T10:00:00Z', amountKopecks: 240000, reason: 'Пересорт при выдаче', status: 'EMPLOYEE_LIABILITY', createdAt: '2026-09-16T10:00:00Z' }
+  const parts:DeductionPart[] = [
+    { deductionId: 'd6', employeeId: 'e1', amountKopecks: 100000 },
+    { deductionId: 'd6', employeeId: 'e7', amountKopecks: 100000 },
+  ]
+
+  it('каждый платит свою часть', () => {
+    expect(employeeShare(split, parts, 'e1')).toBe(100000)
+    expect(employeeShare(split, parts, 'e7')).toBe(100000)
+    expect(employeeShare(split, parts, 'e2')).toBe(0)
+  })
+
+  it('остаток сверх частей — убыток владельца', () => {
+    expect(ownerLossOf(split, parts)).toBe(40000)
+  })
+
+  it('при частях назначенный целиком сотрудник не платит всю сумму', () => {
+    const assigned = { ...split, employeeId: 'e1' }
+    expect(employeeShare(assigned, parts, 'e1')).toBe(100000)
+  })
+
+  it('без частей удержание целиком на назначенном, убытка нет', () => {
+    const whole = { ...split, employeeId: 'e1' }
+    expect(employeeShare(whole, [], 'e1')).toBe(240000)
+    expect(ownerLossOf(whole, [])).toBe(0)
+  })
+
+  it('спорное удержание из зарплаты не берём, даже если части уже расписаны', () => {
+    expect(employeeShare({ ...split, status: 'DISPUTED' }, parts, 'e1')).toBe(0)
+  })
+
+  it('в ведомости вычитается часть, а в убытках месяца — остаток', () => {
+    const sheet = calculateSalarySheet({
+      employeeId: 'e1', month: '2026-09', shifts: [], rules: [], bonuses: [], penalties: [], payments: [],
+      deductions: [split], parts,
+    })
+    expect(sheet.deductions).toBe(100000)
+    expect(ownerLosses([split], '2026-09', parts)).toBe(40000)
   })
 })

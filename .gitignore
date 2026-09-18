@@ -2,3 +2,14 @@ node_modules
 dist
 .env
 .env.local
+
+# Снимки стенда визуальной проверки: пересобираются командой npm run visual
+visual/shots
+visual/.artifacts
+
+# Распакованный прототип: пересобирается командой npm run proto
+.prototype
+
+
+# Служебный кэш Supabase CLI
+supabase/.temp

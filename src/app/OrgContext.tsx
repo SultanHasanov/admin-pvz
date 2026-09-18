@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import type { ModuleKey, PickupPoint } from '../entities/types'
+import type { PickupPoint } from '../entities/types'
 import { currentMonth } from '../shared/dates'
 import { listPickupPoints } from '../services/points'
-import { listEnabledModules } from '../services/settings'
+import { keys } from '../services/queries'
 
 interface OrgValue {
   points:PickupPoint[]
@@ -16,8 +16,6 @@ interface OrgValue {
   pointName:(id:string | null | undefined) => string
   /** ПВЗ, в который пишем новую запись: выбранный или единственный. */
   defaultPointId:string
-  modules:ModuleKey[]
-  isModuleEnabled:(module:ModuleKey) => boolean
 }
 
 const OrgContext = createContext<OrgValue | null>(null)
@@ -27,8 +25,7 @@ const store = (key:string, value:string) => { try { localStorage.setItem(key, va
 export function OrgProvider({ children }:{ children:ReactNode }) {
   const [pointId, setPointIdState] = useState(() => stored('pvz.point', ''))
   const [month, setMonthState] = useState(() => stored('pvz.month', currentMonth()))
-  const points = useQuery({ queryKey: ['points'], queryFn: () => listPickupPoints() })
-  const modules = useQuery({ queryKey: ['modules'], queryFn: listEnabledModules })
+  const points = useQuery({ queryKey: keys.points, queryFn: () => listPickupPoints() })
 
   const setPointId = useCallback((value:string) => { setPointIdState(value); store('pvz.point', value) }, [])
   const setMonth = useCallback((value:string) => { setMonthState(value); store('pvz.month', value) }, [])
@@ -46,9 +43,7 @@ export function OrgProvider({ children }:{ children:ReactNode }) {
     setMonth,
     pointName: id => list.find(p => p.id === id)?.name ?? '—',
     defaultPointId: pointId || (list.length === 1 ? list[0].id : ''),
-    modules: modules.data ?? [],
-    isModuleEnabled: module => !modules.data || modules.data.includes(module),
-  }), [list, points.isLoading, pointId, setPointId, month, setMonth, modules.data])
+  }), [list, points.isLoading, pointId, setPointId, month, setMonth])
 
   return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>
 }

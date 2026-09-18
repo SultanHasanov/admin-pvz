@@ -1,141 +1,28 @@
-/* Tailwind оставляем только ради утилит раскладки: preflight не подключаем,
-   иначе его сброс спорит с собственным reset антд. */
+/* Tailwind целиком: тема, preflight и утилиты. Preflight до фазы 9 был выключен — он спорил
+   с ресетом antd; antd удалён, и ручной сброс кнопок и полей больше не нужен. */
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
 @import "tailwindcss/utilities.css" layer(utilities);
-
-/* Бренд-цвета продублированы в src/shared/theme.ts — антд выводит палитры из colorPrimary
-   алгоритмически и var() не разбирает. Меняете здесь — поменяйте и там. */
-@theme {
-  --color-brand-50:#f0fdf4;
-  --color-brand-100:#dcfce7;
-  --color-brand-500:#16a34a;
-  --color-brand-600:#15803d;
-  --color-ink:#172026;
-
-  /* Нейтрали: те же значения раздаёт src/shared/tokens.ts для инлайновых стилей. */
-  --color-line:#e9edf0;
-  --color-line-soft:#f1f5f9;
-  --color-surface:#ffffff;
-  --color-surface-muted:#fafafa;
-  --color-muted:#94a3b8;
-  --color-sub:#64748b;
-  --color-danger-500:#dc2626;
-
-  --font-sans:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-}
-
-:root {
-  --tabbar-h:56px;
-  --tabbar-space:calc(var(--tabbar-h) + env(safe-area-inset-bottom));
-}
+/* Дизайн-система прототипа: токены, шрифты, служебные классы. */
+@import "./kit/kit.css";
 
 @layer base {
-  * { box-sizing: border-box; }
   html { -webkit-text-size-adjust:100%; }
   body {
-    margin:0; min-width:320px; overflow-x:hidden;
-    background:#f5f6f8; color:var(--color-ink);
-    /* Системное начертание — SF на iOS, Roboto на Android. Тот же стек в theme.ts. */
+    min-width:320px;
+    background:var(--color-bg);
+    color:var(--color-ink);
     font-family:var(--font-sans);
+    /* Цифры не должны «дышать» при пересчёте сумм. */
+    font-variant-numeric:tabular-nums;
+    letter-spacing:-0.01em;
     -webkit-tap-highlight-color:transparent;
   }
-  h1, h2, h3, h4, p, figure { margin:0; }
-  img, svg { vertical-align:middle; max-width:100%; }
-}
-
-/* Отступ под системную панель жестов на телефоне. */
-.safe-b { padding-bottom:env(safe-area-inset-bottom); }
-
-/* Горизонтальная прокрутка плотных рядов без видимого скроллбара. */
-.scroll-x { overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
-.scroll-x::-webkit-scrollbar { display:none; }
-
-/* ---------- Мобильная оболочка ---------- */
-
-.appbar {
-  position:sticky; top:0; z-index:20;
-  display:flex; align-items:center; gap:4px;
-  height:52px; padding:0 4px 0 12px;
-  background:rgb(255 255 255 / .92); backdrop-filter:saturate(180%) blur(12px);
-  border-bottom:1px solid var(--color-line);
-}
-.appbar__title {
-  flex:1; min-width:0; font-size:17px;
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-}
-.appbar__chips {
-  position:sticky; top:52px; z-index:19;
-  display:flex; gap:8px; padding:8px 12px;
-  background:#f5f6f8; border-bottom:1px solid var(--color-line);
-}
-
-.chip {
-  display:inline-flex; align-items:center; gap:4px; flex:0 0 auto;
-  height:32px; padding:0 12px; border-radius:16px;
-  border:1px solid var(--color-line); background:var(--color-surface);
-  font:inherit; font-size:13px; font-weight:500; color:var(--color-ink); cursor:pointer;
-}
-.chip > span { max-width:9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-
-@media (prefers-reduced-motion:no-preference) {
-  .is-spinning { animation:is-spinning 1s linear infinite; }
-  @keyframes is-spinning { to { rotate:360deg; } }
-}
-
-.tabbar {
-  position:fixed; inset:auto 0 0 0; z-index:30;
-  display:grid; grid-auto-flow:column; grid-auto-columns:1fr;
-  height:var(--tabbar-space); padding-bottom:env(safe-area-inset-bottom);
-  background:rgb(255 255 255 / .92); backdrop-filter:saturate(180%) blur(12px);
-  border-top:1px solid var(--color-line);
-}
-.tabbar__item {
-  display:grid; place-items:center; align-content:center; gap:3px;
-  border:0; background:none; padding:0; min-height:var(--tabbar-h);
-  font:inherit; font-size:10px; line-height:1; color:var(--color-muted); cursor:pointer;
-}
-.tabbar__item span { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.tabbar__item[data-active="true"] { color:var(--color-brand-500); font-weight:600; }
-
-/* Контент не должен заезжать под таб-бар. */
-.pb-tabbar { padding-bottom:calc(var(--tabbar-space) + 16px); }
-
-/* Плавающая кнопка главного действия — над таб-баром. */
-.fab {
-  position:fixed; right:16px; bottom:calc(var(--tabbar-space) + 16px); z-index:25;
-  width:56px; height:56px; box-shadow:0 6px 20px rgb(22 163 74 / .35);
-}
-
-/* Появление экрана: снимает «жёсткую склейку», которая читается как веб-страница. */
-@media (prefers-reduced-motion:no-preference) {
-  .page-enter { animation:page-in .13s ease-out; }
-  @keyframes page-in { from { opacity:0; transform:translateY(4px); } }
-}
-
-/* ---------- Лист снизу ---------- */
-
-.sheet .ant-drawer-content { border-radius:16px 16px 0 0; }
-.sheet .ant-drawer-header { position:relative; border-bottom:0; padding-top:20px; }
-/* «Ручка» сверху — главный визуальный признак нативного листа. */
-.sheet .ant-drawer-header::before {
-  content:''; position:absolute; top:8px; left:50%; translate:-50% 0;
-  width:36px; height:4px; border-radius:2px; background:var(--color-line);
-}
-.sheet .ant-drawer-footer { border-top:1px solid var(--color-line-soft); background:var(--color-surface); }
-
-/* Футер листа: ряд на десктопе, столбик во всю ширину на телефоне. */
-.sheet-footer { display:flex; flex-wrap:wrap; gap:8px; }
-
-/* Граница совпадает с MOBILE_QUERY из src/shared/responsive.ts. */
-@media (max-width:767px), (pointer:coarse) and (max-width:1023px) {
-  /* iOS зумит страницу, когда шрифт поля меньше 16px. */
-  .ant-input,
-  .ant-input-number-input,
-  .ant-select-selector,
-  .ant-picker-input > input { font-size:16px !important; }
-
-  /* Главная кнопка сверху и во всю ширину — нативный вид футера листа. */
-  .sheet-footer { flex-direction:column; flex-wrap:nowrap; }
-  .sheet-footer > .ant-btn { width:100%; }
+  /* Preflight оставляет кнопкам центровку браузера и курсор-стрелку; строки списков
+     и карточки-кнопки кита выровнены по левому краю, как в прототипе. */
+  button { text-align:inherit; }
+  button:not(:disabled), [role='button']:not([aria-disabled='true']) { cursor:pointer; }
+  /* Иконки кита стоят внутри строк текста: блочный svg из preflight ломал бы базовую линию. */
+  svg { display:inline-block; }
 }

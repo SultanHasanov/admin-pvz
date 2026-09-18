@@ -1,5 +1,5 @@
 import dayjs from 'dayjs'
-import type { Bonus, DashboardSummary, Deduction, Employee, PayMode, Penalty, SalaryPayment, SalaryRule, SalarySheet, Shift, Transaction } from './types'
+import type { Bonus, DashboardSummary, Deduction, DeductionPart, Employee, PayMode, Penalty, SalaryPayment, SalaryRule, SalarySheet, Shift, Transaction } from './types'
 
 const day = (value:string) => value.slice(0, 10)
 const hours = (shift:Shift) => dayjs(shift.actualEndsAt ?? shift.endsAt).diff(dayjs(shift.actualStartsAt ?? shift.startsAt), 'minute') / 60
@@ -51,25 +51,58 @@ export function accrueShifts(worked:Shift[], rules:SalaryRule[]):number {
 const inMonth = (value:string | null | undefined, month:string) => Boolean(value && value.startsWith(month))
 const countedPenalty = (p:Penalty) => p.status === 'ASSIGNED' || p.status === 'CONFIRMED' || p.status === 'WITHHELD'
 
+/**
+ * Сколько из удержания приходится на сотрудника.
+ *
+ * Удержание бывает назначено целиком (поле `employeeId`) или разделено на части.
+ * Если части есть, считаются только они — даже если в `employeeId` стоит кто-то:
+ * иначе разделённое удержание вычлось бы с назначенного дважды.
+ * Считается только статус «на сотруднике»: спорное или отменённое WB из зарплаты не берём.
+ */
+export function employeeShare(deduction:Deduction, parts:DeductionPart[], employeeId:string):number {
+  if (deduction.status !== 'EMPLOYEE_LIABILITY') return 0
+  const own = parts.filter(part => part.deductionId === deduction.id)
+  if (own.length) return own.filter(part => part.employeeId === employeeId).reduce((sum, part) => sum + part.amountKopecks, 0)
+  return deduction.employeeId === employeeId ? deduction.amountKopecks : 0
+}
+
+/**
+ * Убыток владельца по одному удержанию. Не хранится: это сумма минус части
+ * («Ирина 1 000, Камила 1 000, 400 — убыток владельца»), а у признанного убытком
+ * или подтверждённого WB — вся сумма.
+ */
+export function ownerLossOf(deduction:Deduction, parts:DeductionPart[]):number {
+  if (deduction.status === 'OWNER_LOSS' || deduction.status === 'CONFIRMED_BY_WB') return deduction.amountKopecks
+  if (deduction.status !== 'EMPLOYEE_LIABILITY') return 0
+  const own = parts.filter(part => part.deductionId === deduction.id)
+  if (!own.length) return 0
+  return Math.max(0, deduction.amountKopecks - own.reduce((sum, part) => sum + part.amountKopecks, 0))
+}
+
 export function calculateSalarySheet(input:{
   employeeId:string; month:string; shifts:Shift[]; rules:SalaryRule[]
   bonuses:Bonus[]; penalties:Penalty[]; deductions:Deduction[]; payments:SalaryPayment[]
+  /** Части разделённых удержаний. Без них удержание целиком падает на `employeeId`. */
+  parts?:DeductionPart[]
 }):SalarySheet {
   const { employeeId, month } = input
+  const parts = input.parts ?? []
   const worked = input.shifts.filter(s => s.employeeId === employeeId && s.status === 'COMPLETED' && inMonth(s.startsAt, month))
   const accrued = accrueShifts(worked, input.rules.filter(r => r.employeeId === employeeId))
   const bonuses = input.bonuses.filter(b => b.employeeId === employeeId && inMonth(b.date, month)).reduce((s, b) => s + b.amountKopecks, 0)
   const penalties = input.penalties.filter(p => p.employeeId === employeeId && inMonth(p.date, month) && countedPenalty(p)).reduce((s, p) => s + p.amountKopecks, 0)
-  const deductions = input.deductions.filter(d => d.employeeId === employeeId && d.status === 'EMPLOYEE_LIABILITY' && inMonth(d.eventAt ?? d.createdAt, month)).reduce((s, d) => s + d.amountKopecks, 0)
+  const deductions = input.deductions
+    .filter(d => inMonth(d.eventAt ?? d.createdAt, month))
+    .reduce((s, d) => s + employeeShare(d, parts, employeeId), 0)
   const paid = input.payments.filter(p => p.employeeId === employeeId && (p.accrualMonth ?? p.date).startsWith(month)).reduce((s, p) => s + p.amountKopecks, 0)
   return { employeeId, accrued, bonuses, penalties, deductions, paid, balance: accrued + bonuses - penalties - deductions - paid, shifts: worked.length }
 }
 
-/** Убытки владельца: удержания WB, которые не оспорены и не переложены на сотрудника. */
-export function ownerLosses(deductions:Deduction[], month:string):number {
+/** Убытки владельца за месяц: признанные убытком, подтверждённые WB и нераспределённые остатки. */
+export function ownerLosses(deductions:Deduction[], month:string, parts:DeductionPart[] = []):number {
   return deductions
-    .filter(d => (d.status === 'OWNER_LOSS' || d.status === 'CONFIRMED_BY_WB') && inMonth(d.eventAt ?? d.createdAt, month))
-    .reduce((sum, d) => sum + d.amountKopecks, 0)
+    .filter(d => inMonth(d.eventAt ?? d.createdAt, month))
+    .reduce((sum, d) => sum + ownerLossOf(d, parts), 0)
 }
 
 export function calculateSummary(transactions:Transaction[], payroll:number, taxRate:number, shifts:Shift[], losses = 0):DashboardSummary {

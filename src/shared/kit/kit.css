@@ -1,0 +1,176 @@
+/* Дизайн-система «Пункт»: токены сняты с прототипа
+   («Пункт - прототип приложения ПВЗ.html»). Hex живёт только здесь —
+   в коде используются классы Tailwind и var(--color-*) из kit/tokens.ts. */
+
+/* Статические начертания, а не вариативный файл: вариативный WebKit стенда набирал
+   любым весом как 400 — font-semibold молча не работал, и снимки врали про вес.
+   Подключены только веса, которые есть в коде (font-light … font-bold). */
+@import "@fontsource/ibm-plex-sans/300.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans/700.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+
+@theme {
+  /* Основа */
+  --color-bg:#f4f1ee;
+  --color-surface:#ffffff;
+  --color-surface-soft:#faf8f6;
+  --color-ink:#1b1614;
+  --color-ink-soft:#2b2421;
+
+  /* Акцент */
+  --color-accent:#8f3a6b;
+  --color-accent-tint:#f7ecf2;
+  --color-accent-soft:#e6c9da;
+  --color-accent-faint:#fbf7f9;
+
+  /* Смысловые */
+  --color-ok:#2f7d5b;
+  --color-ok-tint:#eef5f0;
+  --color-ok-tint-2:#e7f4ed;
+  --color-bad:#c8543c;
+  --color-bad-strong:#b3402f;
+  --color-bad-tint:#fbe9e5;
+  --color-bad-tint-2:#f9ece8;
+  --color-bad-tint-3:#f6e7e3;
+  --color-warn:#9a6b18;
+  --color-warn-tint:#fdf3e7;
+  --color-warn-ink:#8a5a20;
+  --color-warn-banner:#fdf2ea;
+  --color-warn-banner-line:#f0d9c2;
+  --color-gold:#e0a83c;
+  --color-info:#3f5f8f;
+  --color-info-tint:#e9eff8;
+  --color-info-tint-2:#eef2f9;
+
+  /* Линии и текст второго плана */
+  --color-track:#eae5df;
+  --color-chevron:#c9c0b8;
+  --color-cell-line:#efe9e3;
+  --color-tabbar-line:#e3ddd6;
+  --color-handle:#d8d0c8;
+  --color-line:#e7e2dc;
+  --color-line-soft:#f0ebe5;
+  --color-line-faint:#f1ece7;
+  --color-line-strong:#e0d9d2;
+  --color-line-hard:#cfc5bc;
+  --color-muted:#8a807a;
+  --color-muted-strong:#6f665f;
+  --color-muted-soft:#a49a92;
+  --color-muted-faint:#c0b6ae;
+
+  /* График доходов и плитки метрик на тёмной карточке */
+  --color-chart-bar:#c9a0bb;
+  --color-chart-empty:#e6dfd8;
+  --color-tile-income:#8ddcb0;
+  --color-tile-expense:#f0a794;
+  --color-tile-salary:#e0a9cd;
+  --color-tile-tax:#e6d6c6;
+
+  /* Радиусы прототипа */
+  --radius-xs:7px;
+  --radius-sm:11px;
+  --radius-md:14px;
+  --radius-lg:18px;
+  --radius-xl:20px;
+  --radius-2xl:26px;
+
+  --font-sans:'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono:'IBM Plex Mono', ui-monospace, 'SF Mono', monospace;
+
+  /* Шкала кеглей прототипа. Дробные значения не опечатка: на них держится плотность
+     экрана — 14.5px в строке списка и 12.5px в подписи под ней. */
+  --text-hero:38px;
+  /* Кабинет сотрудника и приглашение — размеры из прототипа (ehome, emoney, invite). */
+  --text-sum:33px;
+  --text-code:31px;
+  --text-date:26px;
+  --text-stat:20px;
+  --text-lead:22px;
+  --text-tile:18.5px;
+  --text-title:17px;
+  --text-sec:15.5px;
+  --text-row:14.5px;
+  --text-act:13.5px;
+  --text-sub:12.5px;
+  --text-mono:12px;
+  --text-tiny:11.5px;
+  --text-lbl:10.5px;
+  --text-axis:10px;
+}
+
+:root {
+  /* Высота нижней панели и «поднятие» под экранной клавиатурой (useKeyboardInset). */
+  --tabbar-h:56px;
+  --tabbar-space:calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+  --kb:0px;
+}
+
+/* Оболочка приложения забирает скролл себе: страница не тянется «резинкой»,
+   а прокручивается только контейнер экрана — это главное отличие от веб-страницы.
+   Включается атрибутом, который ставит Shell: экраны входа и регистрации длиннее
+   экрана телефона и прокручиваются обычным образом, по body. */
+html[data-shell='app'],
+html[data-shell='app'] body {
+  height:100%;
+  overflow:hidden;
+  overscroll-behavior:none;
+}
+
+@layer base {
+  /* `.kit-root` — корень дерева на ките (оболочка, вход, регистрация, `/join`). Шрифт и цвет
+     задаются и на body, но корень повторяет их: портал или обёртка сторонней библиотеки над
+     экраном не должны снова подсунуть системный шрифт (так было с `.ant-app` до фазы 9). */
+  .kit-root {
+    color:var(--color-ink);
+    font-family:var(--font-sans);
+    font-variant-numeric:tabular-nums;
+    letter-spacing:-0.01em;
+  }
+  /* Preflight наследует шрифт полям, но не трекинг. */
+  :is(button, input, textarea, select) { letter-spacing:inherit; }
+}
+
+@layer utilities {
+  /* Моно-капс — основной приём прототипа для подписей полей и блоков. */
+  .lbl {
+    font-family:var(--font-mono);
+    font-size:10.5px;
+    font-weight:600;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--color-muted);
+  }
+
+  /* Контейнер с инерционной прокруткой, не передающий её наружу. */
+  .scroll-y {
+    overflow-y:auto;
+    overscroll-behavior-y:contain;
+    -webkit-overflow-scrolling:touch;
+  }
+
+  .scroll-x {
+    overflow-x:auto;
+    overscroll-behavior-x:contain;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  .scroll-x::-webkit-scrollbar { display:none; }
+
+  /* Отклик на касание вместо hover, которого на телефоне нет. */
+  .tap {
+    -webkit-tap-highlight-color:transparent;
+    touch-action:manipulation;
+  }
+  @media (prefers-reduced-motion:no-preference) {
+    .tap { transition:scale .12s ease-out, background-color .12s ease-out; }
+    .tap:active { scale:.97; }
+  }
+
+  .safe-t { padding-top:env(safe-area-inset-top); }
+  .safe-b { padding-bottom:env(safe-area-inset-bottom); }
+}

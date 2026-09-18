@@ -106,3 +106,16 @@ export async function setEmployeeStatus(id:string, status:'ACTIVE' | 'ARCHIVED')
   const { error } = await client().from('employees').update({ status, updated_at: new Date().toISOString() }).eq('id', id)
   if (error) throw error
 }
+
+/**
+ * Имена коллег для сотрудника: в приложении он видит, с кем стоит в смене.
+ * Читаем представление `employees_public`, а не таблицу: в таблице телефоны, telegram
+ * и идентификаторы WB, которые сотрудникам друг про друга знать незачем.
+ */
+export async function listColleagues():Promise<{ id:string; fullName:string }[]> {
+  const organization_id = await organizationId()
+  const { data, error } = await client().from('employees_public').select('id,full_name')
+    .eq('organization_id', organization_id).order('full_name')
+  if (error) throw error
+  return (data as { id:string; full_name:string }[]).map(row => ({ id: row.id, fullName: row.full_name }))
+}

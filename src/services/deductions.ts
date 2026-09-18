@@ -1,5 +1,5 @@
 import dayjs from 'dayjs'
-import type { Deduction, DeductionEvent, DeductionStatus } from '../entities/types'
+import type { Deduction, DeductionEvent, DeductionPart, DeductionStatus } from '../entities/types'
 import { monthEnd, monthStart } from '../shared/dates'
 import { client, organizationId } from './org'
 
@@ -67,13 +67,71 @@ export async function logDeductionEvent(deductionId:string, eventType:string, no
 }
 
 export async function listDeductionEvents(deductionId:string):Promise<DeductionEvent[]> {
-  const { data, error } = await client().from('wb_deduction_events').select('id,deduction_id,event_type,note,created_at').eq('deduction_id', deductionId).order('created_at')
+  const { data, error } = await client().from('wb_deduction_events').select('id,deduction_id,event_type,note,created_at,author_employee_id').eq('deduction_id', deductionId).order('created_at')
   if (error) throw error
-  return (data as { id:string; deduction_id:string; event_type:string; note:string | null; created_at:string }[])
-    .map(row => ({ id: row.id, deductionId: row.deduction_id, eventType: row.event_type, note: row.note, createdAt: row.created_at }))
+  return (data as { id:string; deduction_id:string; event_type:string; note:string | null; created_at:string; author_employee_id:string | null }[])
+    .map(row => ({ id: row.id, deductionId: row.deduction_id, eventType: row.event_type, note: row.note, createdAt: row.created_at, authorEmployeeId: row.author_employee_id }))
+}
+
+/**
+ * Удержания, которые видит текущий пользователь, без привязки к месяцу. У сотрудника
+ * RLS оставляет только его собственные — назначенные целиком или по частям.
+ */
+export async function listVisibleDeductions(limit = 50):Promise<Deduction[]> {
+  const organization_id = await organizationId()
+  const { data, error } = await client().from('wb_deductions').select(columns).eq('organization_id', organization_id)
+    .order('event_at', { ascending: false }).limit(limit)
+  if (error) throw error
+  return (data as DeductionRow[]).map(toDeduction)
+}
+
+/** Части удержаний. Сотрудник по RLS получает только свои строки — чужих долей ему не видно. */
+export async function listDeductionParts(deductionIds:string[]):Promise<DeductionPart[]> {
+  if (!deductionIds.length) return []
+  const { data, error } = await client().from('wb_deduction_parts')
+    .select('deduction_id,employee_id,amount_kopecks').in('deduction_id', deductionIds)
+  if (error) throw error
+  return (data as { deduction_id:string; employee_id:string; amount_kopecks:number }[])
+    .map(row => ({ deductionId: row.deduction_id, employeeId: row.employee_id, amountKopecks: row.amount_kopecks }))
+}
+
+/**
+ * Разложить удержание по сотрудникам. Прежние части заменяются целиком, статус и запись
+ * в истории ставит RPC: пустой список — «полностью убыток владельца».
+ */
+export async function setDeductionParts(deductionId:string, parts:{ employeeId:string; amountKopecks:number }[]) {
+  const { error } = await client().rpc('set_deduction_parts', { p_deduction_id: deductionId, p_parts: parts })
+  if (error) throw error
+}
+
+/**
+ * «Не согласен» от сотрудника. Это обычное событие в истории удержания — владелец увидит
+ * его там же, где статусы. Автор обязателен: политика пускает только запись от себя.
+ */
+export async function disagreeWithDeduction(deductionId:string, employeeId:string, note:string) {
+  const db = client()
+  const organization_id = await organizationId()
+  const { data: userResult } = await db.auth.getUser()
+  const { error } = await db.from('wb_deduction_events').insert({
+    organization_id,
+    deduction_id: deductionId,
+    event_type: 'EMPLOYEE_DISAGREE',
+    note: note.trim() || 'Без комментария',
+    author_employee_id: employeeId,
+    actor_id: userResult.user?.id ?? null,
+  })
+  if (error) throw error
 }
 
 export async function deleteDeduction(id:string) {
   const { error } = await client().from('wb_deductions').delete().eq('id', id)
   if (error) throw error
+}
+
+/** Удержания, по которым сотрудник уже возразил: в списке они помечены «Вы не согласны». */
+export async function listMyDisagreements(employeeId:string):Promise<string[]> {
+  const { data, error } = await client().from('wb_deduction_events').select('deduction_id')
+    .eq('event_type', 'EMPLOYEE_DISAGREE').eq('author_employee_id', employeeId)
+  if (error) throw error
+  return [...new Set((data as { deduction_id:string }[]).map(row => row.deduction_id))]
 }

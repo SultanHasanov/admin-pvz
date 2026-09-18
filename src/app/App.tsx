@@ -1,240 +1,95 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import { useQueryClient } from '@tanstack/react-query'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { Alert, Button, Card, Drawer, Form, Input, Layout, Menu, Spin, Typography } from 'antd'
-import { LogOut } from 'lucide-react'
-import { useIsDesktop, useIsMobile } from '../shared/ui'
-import { color } from '../shared/tokens'
-import { DashboardPage } from '../pages/Dashboard'
-import { PointsPage } from '../pages/Points'
-import { EmployeesPage } from '../pages/Employees'
-import { ShiftsPage } from '../pages/Shifts'
-import { FinancePage } from '../pages/Finance'
-import { SalaryPage } from '../pages/Salary'
-import { DeductionsPage } from '../pages/Deductions'
-import { SettingsPage } from '../pages/Settings'
-import { TelegramPage } from '../pages/Telegram'
-import { ValuableItemsPage } from '../pages/ValuableItems'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
-import { resetOrganizationCache } from '../services/org'
-import { Filters } from './Filters'
-import { MobileAppBar } from './MobileAppBar'
-import { MobileTabBar } from './MobileTabBar'
-import { links } from './navigation'
-import { useScrollRestore } from './useScrollRestore'
-import { OrgProvider, useOrg } from './OrgContext'
+import { resetOrganizationCache, type MemberRole } from '../services/org'
+import { OrgProvider } from './OrgContext'
+import { AppRoutes } from './router'
 
-function Logo({ compact }:{ compact?:boolean }) {
-  return <div className="flex items-center gap-2 px-2 py-4 font-bold">
-    <img src="/brand/pvz-control-logo.png" width="32" height="32" alt="" className="h-8 w-8 shrink-0 rounded-lg"/>
-    {!compact && 'PVZ Control'}
-  </div>
+// Вход по приглашению живёт вне оболочки и вне проверки организации: у нового сотрудника
+// организации ещё нет, и без этого исключения его встретил бы онбординг владельца.
+const Join = lazy(() => import('../screens/Join'))
+const Login = lazy(() => import('../screens/auth/Login'))
+const Onboarding = lazy(() => import('../screens/auth/Onboarding'))
+const ResetPassword = lazy(() => import('../screens/auth/ResetPassword'))
+// Стенд кита нужен только разработке и снимкам — в первый кадр приложения не грузится.
+const KitStand = lazy(() => import('../screens/KitStand'))
+
+/**
+ * Адреса старой antd-панели (удалена в фазе 9) → разделы новой оболочки.
+ * У людей остались закладки и ярлыки на рабочем столе — они не должны вести в пустоту.
+ */
+const LEGACY:Record<string, string> = {
+  '/points': '/more/points',
+  '/employees': '/people',
+  '/shifts': '/sched',
+  '/finance': '/money',
+  '/salary': '/money?tab=pay',
+  '/deductions': '/money?tab=ded',
+  '/telegram': '/more/telegram',
+  '/settings': '/more/settings',
+  '/valuable-items': '/home',
 }
 
-function Navigation({ onNavigate, collapsed }:{ onNavigate?:() => void; collapsed?:boolean }) {
-  const navigate = useNavigate()
-  const { pathname } = useLocation()
-  const { isModuleEnabled } = useOrg()
-  const visible = links.filter(link => !link.module || isModuleEnabled(link.module))
+/** Загрузка до первого кадра: знак «П» по центру, без чужих спиннеров. */
+const Booting = () => <div className="kit-root grid min-h-dvh place-items-center bg-bg">
+  <div className="flex size-12 animate-pulse items-center justify-center rounded-[14px] bg-accent text-lead font-semibold text-white">П</div>
+</div>
 
-  return <div className="flex h-full flex-col">
-    {/* inlineCollapsed здесь не нужен и вызывает предупреждение: Menu берёт состояние
-        из контекста Layout.Sider, а collapsed используем только для подписей. */}
-    <Menu
-      mode="inline" style={{ borderInlineEnd: 0, flex: 1 }}
-      selectedKeys={[visible.some(l => l.to === pathname) ? pathname : '/']}
-      onClick={({ key }) => { navigate(key); onNavigate?.() }}
-      items={visible.map(link => ({
-        key: link.to,
-        icon: <link.icon size={18}/>,
-        label: link.title,
-      }))}
-    />
-    <div className="p-2 safe-b">
-      <Button
-        block type="text" icon={<LogOut size={16}/>}
-        onClick={() => { resetOrganizationCache(); void supabase?.auth.signOut() }}
-      >{collapsed ? '' : 'Выйти'}</Button>
+function NotConfigured() {
+  return <div className="kit-root grid min-h-dvh place-items-center bg-bg px-4">
+    <div className="w-full max-w-[420px] rounded-lg border border-line bg-surface p-5">
+      <div className="text-title font-semibold">Подключите Supabase</div>
+      <div className="mt-2 text-row leading-[1.5] text-muted">
+        Скопируйте <code className="font-mono">.env.example</code> в <code className="font-mono">.env.local</code>,
+        заполните <code className="font-mono">VITE_SUPABASE_URL</code> и <code className="font-mono">VITE_SUPABASE_ANON_KEY</code>,
+        затем перезапустите <code className="font-mono">npm run dev</code>.
+      </div>
     </div>
   </div>
 }
 
-function Shell({ children }:{ children:ReactNode }) {
-  const mobile = useIsMobile()
-  const desktop = useIsDesktop()
-  const [more, setMore] = useState(false)
+/** Сотрудник живёт только в своём кабинете: экраны владельца RLS отдал бы ему пустыми. */
+function ProductRoutes({ role }:{ role:MemberRole | null }) {
   const { pathname } = useLocation()
-  useScrollRestore()
-
-  // Телефон: аппбар сверху, таб-бар снизу, разделы второго плана — в листе «Ещё».
-  if (mobile) return <Layout style={{ minHeight: '100dvh' }}>
-    <MobileAppBar/>
-    <Layout.Content>
-      <div key={pathname} className="page-enter p-4 pb-tabbar">{children}</div>
-    </Layout.Content>
-    <MobileTabBar onMore={() => setMore(true)}/>
-    <Drawer
-      open={more} onClose={() => setMore(false)} placement="bottom" height="auto"
-      title="Разделы" className="sheet" styles={{ body: { padding: 0 } }}
-    >
-      <Navigation onNavigate={() => setMore(false)}/>
-    </Drawer>
-  </Layout>
-
-  // Планшет получает свёрнутый сайдер: иконки без подписей, но навигация всегда на виду.
-  return <Layout style={{ minHeight: '100dvh' }}>
-    <Layout.Sider
-      width={248} collapsed={!desktop} collapsedWidth={72} theme="light"
-      style={{ position: 'sticky', top: 0, height: '100dvh', borderInlineEnd: `1px solid ${color.line}` }}
-    >
-      <Logo compact={!desktop}/>
-      <Navigation collapsed={!desktop}/>
-    </Layout.Sider>
-
-    <Layout>
-      <Layout.Header style={{ position: 'sticky', top: 0, zIndex: 20, display: 'flex', alignItems: 'center', gap: 12, borderBottom: `1px solid ${color.line}` }}>
-        {desktop && <Typography.Text type="secondary">Операционная система владельца ПВЗ</Typography.Text>}
-        <Filters/>
-      </Layout.Header>
-      {/* iPad ≥1024px попадает в эту ветку, а домашний индикатор у него есть. */}
-      <Layout.Content className="safe-b">
-        <div className="mx-auto max-w-7xl p-4 sm:p-6">{children}</div>
-      </Layout.Content>
-    </Layout>
-  </Layout>
+  const inCabinet = pathname === '/me' || pathname.startsWith('/me/')
+  if (role === 'EMPLOYEE' && !inCabinet) return <Navigate to="/me" replace/>
+  if (LEGACY[pathname]) return <Navigate to={LEGACY[pathname]} replace/>
+  return <OrgProvider><AppRoutes/></OrgProvider>
 }
-
-function CenteredPage({ children }:{ children:ReactNode }) {
-  return <div className="grid min-h-dvh place-items-center p-4"><div className="w-full max-w-md">{children}</div></div>
-}
-
-function Auth({ session }:{ session:Session | null }) {
-  const navigate = useNavigate()
-  const [register, setRegister] = useState(false)
-  const [message, setMessage] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [form] = Form.useForm<{ email:string; password:string }>()
-  if (session) return <Navigate to="/" replace/>
-
-  async function submit({ email, password }:{ email:string; password:string }) {
-    if (!supabase) return
-    setBusy(true); setMessage('')
-    const result = register ? await supabase.auth.signUp({ email, password }) : await supabase.auth.signInWithPassword({ email, password })
-    setBusy(false)
-    if (result.error) setMessage(result.error.message)
-    else if (register && !result.data.session) setMessage('Подтвердите регистрацию по ссылке в письме')
-    else navigate('/', { replace: true })
-  }
-
-  async function reset() {
-    const email = form.getFieldValue('email')
-    if (!supabase || !email) return setMessage('Введите email')
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}/login` })
-    setMessage(error?.message ?? 'Ссылка отправлена на почту')
-  }
-
-  return <CenteredPage>
-    <Card variant="outlined">
-      <div className="mb-5 flex items-center gap-2 text-xl font-bold">
-        <img src="/brand/pvz-control-logo.png" width="36" height="36" alt="" className="h-9 w-9 rounded-xl"/>PVZ Control
-      </div>
-      <Typography.Title level={4} style={{ marginBottom: 4 }}>{register ? 'Создать аккаунт' : 'Войти в аккаунт'}</Typography.Title>
-      <Typography.Text type="secondary">Управляйте ПВЗ в одном месте</Typography.Text>
-      <Form form={form} layout="vertical" className="mt-5" onFinish={values => void submit(values)} requiredMark={false}>
-        <Form.Item name="email" label="Email" rules={[{ required: true, type: 'email', message: 'Введите email' }]}>
-          <Input autoComplete="email" inputMode="email"/>
-        </Form.Item>
-        <Form.Item name="password" label="Пароль" rules={[{ required: true, min: 6, message: 'Минимум 6 символов' }]}>
-          <Input.Password autoComplete="current-password"/>
-        </Form.Item>
-        {message && <Alert className="mb-3" type="info" showIcon message={message}/>}
-        <Button block type="primary" htmlType="submit" loading={busy}>{register ? 'Зарегистрироваться' : 'Войти'}</Button>
-      </Form>
-      <div className="mt-4 flex flex-wrap justify-between gap-3">
-        <Button type="link" style={{ padding: 0 }} onClick={() => setRegister(!register)}>{register ? 'Уже есть аккаунт' : 'Создать аккаунт'}</Button>
-        {!register && <Button type="text" onClick={() => void reset()}>Забыли пароль?</Button>}
-      </div>
-    </Card>
-  </CenteredPage>
-}
-
-function Onboarding({ done }:{ done:() => void }) {
-  const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  async function create(values:{ organization?:string; point:string; address?:string }) {
-    if (!supabase) return
-    setBusy(true)
-    const { error: failure } = await supabase.rpc('create_organization_with_owner', {
-      p_name: values.organization?.trim() || values.point.trim(), p_point_name: values.point, p_point_address: values.address?.trim() || '', p_timezone: 'Europe/Moscow',
-    })
-    setBusy(false)
-    if (failure) setError(failure.message)
-    else { resetOrganizationCache(); done() }
-  }
-
-  return <CenteredPage>
-    <Card variant="outlined">
-      <Typography.Title level={4} style={{ marginBottom: 4 }}>Настроим вашу организацию</Typography.Title>
-      <Typography.Text type="secondary">Создайте организацию и первый пункт выдачи.</Typography.Text>
-      <Form layout="vertical" className="mt-5" onFinish={values => void create(values)} requiredMark={false}>
-        <Form.Item name="organization" label="Название организации" extra="Необязательно — используем название первого ПВЗ."><Input/></Form.Item>
-        <Form.Item name="point" label="Название ПВЗ" rules={[{ required: true, message: 'Укажите название' }]}><Input/></Form.Item>
-        <Form.Item name="address" label="Адрес ПВЗ"><Input placeholder="Можно заполнить позже"/></Form.Item>
-        {error && <Alert className="mb-3" type="error" showIcon message={error}/>}
-        <Button block type="primary" htmlType="submit" loading={busy}>Начать работу</Button>
-      </Form>
-    </Card>
-  </CenteredPage>
-}
-
-function ProductRoutes() {
-  return <OrgProvider><Shell><Routes>
-    <Route path="/" element={<DashboardPage/>}/>
-    <Route path="/points" element={<PointsPage/>}/>
-    <Route path="/employees" element={<EmployeesPage/>}/>
-    <Route path="/shifts" element={<ShiftsPage/>}/>
-    <Route path="/finance" element={<FinancePage/>}/>
-    <Route path="/salary" element={<SalaryPage/>}/>
-    <Route path="/deductions" element={<DeductionsPage/>}/>
-    <Route path="/telegram" element={<TelegramPage/>}/>
-    <Route path="/settings" element={<SettingsPage/>}/>
-    <Route path="/valuable-items" element={<ValuableItemsPage/>}/>
-    <Route path="*" element={<Navigate to="/" replace/>}/>
-  </Routes></Shell></OrgProvider>
-}
-
-function NotConfigured() {
-  return <CenteredPage>
-    <Card variant="outlined">
-      <Typography.Title level={4}>Подключите Supabase</Typography.Title>
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-        Скопируйте <Typography.Text code>.env.example</Typography.Text> в <Typography.Text code>.env.local</Typography.Text>,
-        заполните <Typography.Text code>VITE_SUPABASE_URL</Typography.Text> и <Typography.Text code>VITE_SUPABASE_ANON_KEY</Typography.Text>,
-        затем перезапустите <Typography.Text code>npm run dev</Typography.Text>.
-      </Typography.Paragraph>
-    </Card>
-  </CenteredPage>
-}
-
-const Booting = () => <div className="grid min-h-dvh place-items-center"><Spin size="large"/></div>
 
 export function App() {
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [session, setSession] = useState<Session | null | undefined>(undefined)
   const [hasOrganization, setHasOrganization] = useState<boolean>()
+  const [role, setRole] = useState<MemberRole | null>(null)
+  const userId = useRef<string | null>(null)
 
   async function checkOrganization(current:Session) {
     if (!supabase) return setHasOrganization(true)
-    const { data, error } = await supabase.from('organization_members').select('organization_id').eq('user_id', current.user.id).limit(1)
+    const { data, error } = await supabase.from('organization_members').select('organization_id,role').eq('user_id', current.user.id).limit(1)
     setHasOrganization(!error && Boolean(data?.length))
+    setRole((data?.[0]?.role as MemberRole | undefined) ?? null)
   }
 
   useEffect(() => {
     if (!supabase) { setSession(null); return }
-    void supabase.auth.getSession().then(({ data }) => setSession(data.session))
-    const { data } = supabase.auth.onAuthStateChange((_event, next) => { resetOrganizationCache(); setSession(next) })
+    void supabase.auth.getSession().then(({ data }) => { userId.current = data.session?.user.id ?? null; setSession(data.session) })
+    const { data } = supabase.auth.onAuthStateChange((event, next) => {
+      // Ссылка из письма «забыли пароль» входит в аккаунт — сразу просим новый пароль.
+      if (event === 'PASSWORD_RECOVERY') navigate('/reset', { replace: true })
+      resetOrganizationCache()
+      // Другой человек на том же телефоне — кэш прежнего выбрасываем целиком. Ключи
+      // кэша не содержат пользователя, и сотрудник иначе увидел бы данные владельца.
+      const nextUser = next?.user.id ?? null
+      if (nextUser !== userId.current) queryClient.clear()
+      userId.current = nextUser
+      setSession(next)
+    })
     return () => data.subscription.unsubscribe()
-  }, [])
+  }, [queryClient, navigate])
 
   useEffect(() => { if (session) void checkOrganization(session); else setHasOrganization(undefined) }, [session])
 
@@ -242,12 +97,23 @@ export function App() {
   if (session === undefined) return <Booting/>
 
   return <Routes>
-    <Route path="/login" element={<Auth session={session}/>}/>
+    {/* Стенд кита — вне авторизации: он не читает данные, а смотреть его нужно с телефона. */}
+    <Route path="/kit" element={<Suspense fallback={<Booting/>}><KitStand/></Suspense>}/>
+    <Route path="/login" element={session ? <Navigate to="/" replace/> : <Suspense fallback={<Booting/>}><Login/></Suspense>}/>
+    {/* Регистрация: без сессии первый шаг создаёт аккаунт, с сессией — сразу организацию.
+        Организацию App узнаёт только в конце: иначе после второго шага экран сменился бы на приложение. */}
+    <Route path="/register" element={session && hasOrganization
+      ? <Navigate to="/" replace/>
+      : <Suspense fallback={<Booting/>}><Onboarding session={session} onDone={async () => { if (session) await checkOrganization(session) }}/></Suspense>}/>
+    <Route path="/reset" element={session ? <Suspense fallback={<Booting/>}><ResetPassword/></Suspense> : <Navigate to="/login" replace/>}/>
+    <Route path="/join/:code?" element={<Suspense fallback={<Booting/>}>
+      <Join session={session} onJoined={async () => { if (session) await checkOrganization(session) }}/>
+    </Suspense>}/>
     <Route path="/*" element={
       !session ? <Navigate to="/login" replace/>
         : hasOrganization === undefined ? <Booting/>
-          : !hasOrganization ? <Onboarding done={() => void checkOrganization(session)}/>
-            : <ProductRoutes/>
+          : !hasOrganization ? <Navigate to="/register" replace/>
+            : <ProductRoutes role={role}/>
     }/>
   </Routes>
 }

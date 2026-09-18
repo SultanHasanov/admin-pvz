@@ -69,3 +69,17 @@ export async function setDefaultSalaryRate(id:string, isDefault:boolean) {
   const { error } = await db.from('salary_rates').update({ is_default: true, updated_at: now }).eq('id', id)
   if (error) throw error
 }
+
+/**
+ * Ставка по умолчанию — та, что подставляется новому сотруднику. В справочнике это
+ * ставка с флагом `is_default`; если её нет, заводим «Основную».
+ */
+export async function saveDefaultRate(rateKopecks:number) {
+  const current = (await listSalaryRates()).find(rate => rate.isDefault && !rate.archivedAt)
+  if (current) {
+    await updateSalaryRate(current.id, { name: current.name, paymentType: current.paymentType, rateKopecks, monthlyNormDays: current.monthlyNormDays })
+    return
+  }
+  const id = await createSalaryRate({ name: 'Основная', paymentType: 'SHIFT', rateKopecks })
+  await setDefaultSalaryRate(id, true)
+}
