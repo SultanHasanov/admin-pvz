@@ -78,7 +78,7 @@ export function App() {
     if (!supabase) { setSession(null); return }
     void supabase.auth.getSession().then(({ data }) => { userId.current = data.session?.user.id ?? null; setSession(data.session) })
     const { data } = supabase.auth.onAuthStateChange((event, next) => {
-      // Ссылка из письма «забыли пароль» входит в аккаунт — сразу просим новый пароль.
+      // Подтверждение кода восстановления создаёт сессию — сразу просим новый пароль.
       if (event === 'PASSWORD_RECOVERY') navigate('/reset', { replace: true })
       resetOrganizationCache()
       // Другой человек на том же телефоне — кэш прежнего выбрасываем целиком. Ключи

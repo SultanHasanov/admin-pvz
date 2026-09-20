@@ -33,8 +33,7 @@ const STEPS = {
  * первый сотрудник, график. Первые два шага записываются одним RPC в конце второго:
  * организации без точки в базе не бывает. Третий и четвёртый можно пропустить.
  *
- * Без сессии первый шаг ещё и создаёт аккаунт; если проект требует подтверждения
- * почты, человек вернётся по ссылке уже со входом, и шаг попросит только название.
+ * Без сессии первый шаг создаёт аккаунт и проверяет код из письма.
  */
 export default function Onboarding({ session, onDone }:{ session:Session | null; onDone:() => Promise<void> }) {
   const navigate = useNavigate()
@@ -46,6 +45,8 @@ export default function Onboarding({ session, onDone }:{ session:Session | null;
   const [organization, setOrganization] = useState(readDraft)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [pendingEmail, setPendingEmail] = useState('')
+  const [code, setCode] = useState('')
   const [pointName, setPointName] = useState('')
   const [address, setAddress] = useState('')
   const [from, setFrom] = useState('09:00')
@@ -76,14 +77,27 @@ export default function Onboarding({ session, onDone }:{ session:Session | null;
       saveDraft(organization.trim())
       if (!session) {
         if (!supabase) return
+        if (pendingEmail) {
+          const result = await supabase.auth.verifyOtp({ email: pendingEmail, token: code, type: 'email' })
+          if (result.error) throw result.error
+          if (!result.data.session) throw new Error('Не удалось подтвердить почту — попробуйте ещё раз')
+          setPendingEmail('')
+          setCode('')
+          setInfo(undefined)
+          setStep(2)
+          return
+        }
         const result = await supabase.auth.signUp({
           email: email.trim(),
           password,
           options: { emailRedirectTo: appUrl('/register') },
         })
         if (result.error) throw result.error
-        // Проект требует подтверждения почты — сессии ещё нет, дальше идти не с чем.
-        if (!result.data.session) { setInfo(`Письмо отправлено на ${email.trim()}. Откройте ссылку — регистрация продолжится с этого шага.`); return }
+        if (!result.data.session) {
+          setPendingEmail(email.trim())
+          setInfo(`Отправили код на ${email.trim()}. Введите его ниже, чтобы продолжить регистрацию.`)
+          return
+        }
       }
       setStep(2)
     } else if (step === 2) {
@@ -106,8 +120,16 @@ export default function Onboarding({ session, onDone }:{ session:Session | null;
     else await finish()
   })
 
+  const resendCode = () => run(async () => {
+    if (!supabase || !pendingEmail) return
+    const { error: failure } = await supabase.auth.resend({ type: 'signup', email: pendingEmail })
+    if (failure) throw failure
+    setCode('')
+    setInfo(`Новый код отправлен на ${pendingEmail}`)
+  })
+
   const valid = {
-    1: organization.trim().length >= 2 && (session !== null || (email.includes('@') && password.length >= 6)),
+    1: organization.trim().length >= 2 && (session !== null || (pendingEmail ? /^\d{6}$/.test(code) : email.includes('@') && password.length >= 6)),
     2: pointName.trim().length > 0 && address.trim().length > 0 && /^\d\d:\d\d$/.test(from) && /^\d\d:\d\d$/.test(to),
     3: fullName.trim().length > 1 && parseMoney(rate) > 0,
     4: Boolean(employeeId && pointId),
@@ -123,10 +145,11 @@ export default function Onboarding({ session, onDone }:{ session:Session | null;
 
     {step === 1 && <>
       <TextField label="Название" value={organization} placeholder="ИП Ковалёв А. С." onChange={event => setOrganization(event.target.value)}/>
-      {!session && <>
+      {!session && !pendingEmail && <>
         <TextField label="Почта для входа" type="email" inputMode="email" autoComplete="email" placeholder="ivan@pvz.ru" value={email} onChange={event => setEmail(event.target.value)}/>
         <TextField label="Пароль" type="password" autoComplete="new-password" hint="Не короче 6 символов" value={password} onChange={event => setPassword(event.target.value)}/>
       </>}
+      {!session && pendingEmail && <TextField label="Код из письма" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}/>}
     </>}
 
     {step === 2 && <>
@@ -156,11 +179,15 @@ export default function Onboarding({ session, onDone }:{ session:Session | null;
     {error && <div className="mt-3"><Banner tone="bad">{error}</Banner></div>}
 
     <Button block className="mt-5" disabled={!valid || busy} onClick={() => void next()}>
-      {step === 4 ? 'Применить и войти' : 'Далее'}
+      {step === 4 ? 'Применить и войти' : pendingEmail && !session ? 'Подтвердить код' : 'Далее'}
     </Button>
+    {step === 1 && pendingEmail && !session && <>
+      <Button block variant="quiet" className="mt-1" disabled={busy} onClick={() => void resendCode()}>Отправить код повторно</Button>
+      <Button block variant="quiet" className="mt-1" disabled={busy} onClick={() => { setPendingEmail(''); setCode(''); setInfo(undefined); setError(undefined) }}>Изменить почту</Button>
+    </>}
     {step >= 3 && <Button block variant="quiet" className="mt-1" disabled={busy} onClick={() => void skip()}>
       {step === 4 ? 'Пропустить и войти' : 'Пропустить'}
     </Button>}
-    {step === 1 && !session && <Button block variant="quiet" className="mt-1" onClick={() => navigate('/login')}>У меня уже есть аккаунт</Button>}
+    {step === 1 && !session && !pendingEmail && <Button block variant="quiet" className="mt-1" onClick={() => navigate('/login')}>У меня уже есть аккаунт</Button>}
   </AuthLayout>
 }
