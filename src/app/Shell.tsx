@@ -9,6 +9,8 @@ import { SheetHost } from './sheetRegistry'
 import { useSheets } from './sheets'
 import { useNav } from './nav'
 import { roleOf, tabOf, tabsFor } from './tabs'
+import { useOrg } from './OrgContext'
+import { PickList } from '../shared/kit/PickList'
 
 /**
  * Оболочка приложения: шапка и содержимое прокручиваются внутри, панель табов и шторки
@@ -19,7 +21,8 @@ import { roleOf, tabOf, tabsFor } from './tabs'
  */
 export function AppShell({ render }:{ render:(location:Location) => ReactNode }) {
   const location = useLocation()
-  const { setTab } = useNav()
+  const { setTab, push } = useNav()
+  const { points, pointId, setPointId, loadingPoints } = useOrg()
   useKeyboardInset()
   useDevSheetHandle()
 
@@ -43,6 +46,16 @@ export function AppShell({ render }:{ render:(location:Location) => ReactNode })
       onSelect={id => setTab(id as typeof active)}
     />
     <SheetHost/>
+    {role === 'owner' && !loadingPoints && !pointId && location.pathname !== '/more/points' && location.pathname !== '/more/points/new' &&
+      <div className="absolute inset-0 z-50 flex items-center justify-center bg-bg p-4" role="dialog" aria-modal="true" aria-label="Выбор пункта выдачи">
+        <div className="w-full max-w-md">
+          <h1 className="mb-2 text-xl font-semibold">Выберите ПВЗ</h1>
+          <p className="mb-4 text-sub text-muted">Выбор сохранится для всех разделов, пока вы не выберете другой пункт.</p>
+          {points.some(point => !point.archivedAt)
+            ? <PickList value={pointId} onPick={setPointId} options={points.filter(point => !point.archivedAt).map(point => ({ value: point.id, name: point.name, sub: point.address }))}/>
+            : <button type="button" className="rounded-md bg-accent px-4 py-3 text-white" onClick={() => push('/more/points/new')}>Добавить ПВЗ</button>}
+        </div>
+      </div>}
     <Toaster/>
     <UpdatePrompt/>
   </div>

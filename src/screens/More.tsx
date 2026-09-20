@@ -39,9 +39,7 @@ export default function More() {
     {
       label: 'Интеграции',
       rows: [
-        { title: 'Кабинет WB ПВЗ', sub: 'Загрузка точек, сотрудников и удержаний', to: '/more/wb' },
         { title: 'Telegram-боты', sub: 'Расходы сообщением в чат', to: '/more/telegram' },
-        { title: 'Сверка с WB', sub: 'Что изменилось после загрузки', to: '/money/ded/sync' },
       ],
     },
   ]

@@ -10,7 +10,6 @@ import { getTaxSettings } from '../../services/settings'
 import { listSalaryRates } from '../../services/rates'
 import { getPayoutSettings } from '../../services/payoutSettings'
 import { listExpenseCategories, listRecurringExpenses } from '../../services/finance'
-import { getWbStatus } from '../../services/wb'
 import { listTelegramIntegrations } from '../../services/telegram'
 import { useOrg } from '../../app/OrgContext'
 import { useNav } from '../../app/nav'
@@ -25,7 +24,7 @@ export default function Settings() {
   const { push, back, canBack } = useNav()
   const { open } = useSheets()
 
-  const [organization, tax, rates, payout, categories, recurring, wb, telegram] = useQueries({
+  const [organization, tax, rates, payout, categories, recurring, telegram] = useQueries({
     queries: [
       { queryKey: keys.organization, queryFn: getOrganization },
       { queryKey: keys.tax, queryFn: getTaxSettings },
@@ -34,14 +33,12 @@ export default function Settings() {
       { queryKey: keys.categories(), queryFn: () => listExpenseCategories() },
       { queryKey: keys.recurring, queryFn: listRecurringExpenses },
       // Интеграции ходят во внешние функции: их сбой не должен ронять экран настроек.
-      { queryKey: keys.wb, queryFn: getWbStatus, retry: false },
       { queryKey: keys.telegram, queryFn: listTelegramIntegrations, retry: false },
     ],
   })
 
   const defaultRate = rates.data?.find(rate => rate.isDefault && !rate.archivedAt)
   const botsConnected = (telegram.data ?? []).filter(row => row.status === 'CONNECTED').length
-  const wbConnected = wb.data?.status === 'CONNECTED'
 
   const groups = [
     {
@@ -68,7 +65,6 @@ export default function Settings() {
     {
       label: 'Интеграции',
       rows: [
-        { title: 'Кабинет WB ПВЗ', right: wbConnected ? 'подключён' : 'не подключён', tone: wbConnected ? 'text-ok' : 'text-bad-strong', onClick: () => push('/more/wb') },
         { title: 'Telegram-боты', right: botsConnected ? `подключено: ${botsConnected}` : 'не подключены', tone: botsConnected ? 'text-ok' : 'text-muted', onClick: () => push('/more/telegram') },
       ],
     },

@@ -32,7 +32,7 @@ export function OrgProvider({ children }:{ children:ReactNode }) {
 
   const list = useMemo(() => points.data ?? [], [points.data])
   // Выбранный ПВЗ мог быть архивирован в другой вкладке — не оставляем ссылку на исчезнувшую точку.
-  useEffect(() => { if (pointId && list.length && !list.some(p => p.id === pointId)) setPointId('') }, [list, pointId, setPointId])
+  useEffect(() => { if (pointId && !points.isLoading && !list.some(p => p.id === pointId && !p.archivedAt)) setPointId('') }, [list, pointId, points.isLoading, setPointId])
 
   const value = useMemo<OrgValue>(() => ({
     points: list,
