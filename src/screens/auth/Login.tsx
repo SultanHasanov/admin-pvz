@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from '../../shared/kit/Button'
 import { Banner, TextField } from '../../shared/kit/Field'
 import { haptics } from '../../shared/kit/haptics'
+import { OTP_MAX, OTP_MIN, otpDigits } from '../../shared/otp'
 import { appUrl, supabase } from '../../lib/supabase'
 import { AuthLayout, Logo } from './AuthLayout'
 
@@ -62,9 +63,9 @@ export default function Login() {
     <div className="mt-2 mb-5 text-row leading-[1.45] text-muted">
       Код для восстановления отправлен на {email.trim()}. Введите его, чтобы задать новый пароль.
     </div>
-    <TextField label="Код из письма" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}/>
+    <TextField label="Код из письма" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={OTP_MAX} placeholder="000000" value={code} onChange={event => setCode(otpDigits(event.target.value))}/>
     {error && <Banner tone="bad">{error}</Banner>}
-    <Button block disabled={code.length !== 6 || busy} onClick={() => void verifyResetCode()}>Подтвердить код</Button>
+    <Button block disabled={code.length < OTP_MIN || busy} onClick={() => void verifyResetCode()}>Подтвердить код</Button>
     <Button block variant="quiet" className="mt-1" disabled={busy} onClick={() => { setCode(''); void sendReset() }}>Отправить код повторно</Button>
     <Button block variant="quiet" className="mt-1" onClick={() => setMode('login')}>Вернуться к входу</Button>
   </AuthLayout>

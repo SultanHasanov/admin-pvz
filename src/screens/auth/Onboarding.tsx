@@ -11,6 +11,7 @@ import { cn } from '../../shared/kit/cn'
 import { formatPhone } from '../../shared/format'
 import { parseMoney } from '../../shared/money'
 import { plural } from '../../shared/format'
+import { OTP_MAX, isOtpReady, otpDigits } from '../../shared/otp'
 import { appUrl, supabase } from '../../lib/supabase'
 import { createEmployee } from '../../services/employees'
 import { applyStarterSchedule, createOrganization } from '../../services/onboarding'
@@ -129,7 +130,7 @@ export default function Onboarding({ session, onDone }:{ session:Session | null;
   })
 
   const valid = {
-    1: organization.trim().length >= 2 && (session !== null || (pendingEmail ? /^\d{6}$/.test(code) : email.includes('@') && password.length >= 6)),
+    1: organization.trim().length >= 2 && (session !== null || (pendingEmail ? isOtpReady(code) : email.includes('@') && password.length >= 6)),
     2: pointName.trim().length > 0 && address.trim().length > 0 && /^\d\d:\d\d$/.test(from) && /^\d\d:\d\d$/.test(to),
     3: fullName.trim().length > 1 && parseMoney(rate) > 0,
     4: Boolean(employeeId && pointId),
@@ -149,7 +150,7 @@ export default function Onboarding({ session, onDone }:{ session:Session | null;
         <TextField label="Почта для входа" type="email" inputMode="email" autoComplete="email" placeholder="ivan@pvz.ru" value={email} onChange={event => setEmail(event.target.value)}/>
         <TextField label="Пароль" type="password" autoComplete="new-password" hint="Не короче 6 символов" value={password} onChange={event => setPassword(event.target.value)}/>
       </>}
-      {!session && pendingEmail && <TextField label="Код из письма" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="000000" value={code} onChange={event => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}/>}
+      {!session && pendingEmail && <TextField label="Код из письма" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={OTP_MAX} placeholder="000000" value={code} onChange={event => setCode(otpDigits(event.target.value))}/>}
     </>}
 
     {step === 2 && <>
