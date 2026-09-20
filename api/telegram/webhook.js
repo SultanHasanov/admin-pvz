@@ -1,11 +1,17 @@
+/**
+ * Вебхук бота точки.
+ *
+ * Бот односторонний: он присылает в рабочую группу ПВЗ то, что настроено в приложении.
+ * Сценариев ввода (расходы, удержания, кабинет сотрудника) здесь нет — всё это делается
+ * на сайте, и бот не должен быть вторым, расходящимся с ним интерфейсом.
+ *
+ * Поэтому вебхук делает ровно две вещи: запоминает чаты, в которые бота добавили, и
+ * отвечает на свои команды в подтверждённой группе. Подтверждает группу владелец кнопкой
+ * в приложении: без этого любой, кто знает @имя бота, добавил бы его в свой чат и получал
+ * бы график точки с именами сотрудников.
+ */
 import { db, decryptToken, safeEqual, secretHash, telegram } from '../_telegram.js'
 import { buildReminder, localNow } from '../_reminders.js'
-
-const mainKeyboard = [[{ text: '➕ Удержание' }, { text: '➕ Расход' }], [{ text: '👥 Сотрудники' }, { text: '📅 Смены' }], [{ text: '🔄 Главное меню' }]]
-const money = text => { const value = Number(String(text).replace(',', '.').replace(/[^\d.]/g, '')); return Number.isFinite(value) && value > 0 ? Math.round(value * 100) : null }
-const rubles = kopecks => `${(kopecks / 100).toLocaleString('ru-RU')} ₽`
-/** Кнопки по две в ряд + возврат в меню. */
-const optionsKeyboard = values => [...values.reduce((rows, value, index) => { if (index % 2 === 0) rows.push([]); rows[rows.length - 1].push({ text: value }); return rows }, []), [{ text: '🔄 Главное меню' }]]
 
 async function integrationContext(req) {
   const id = String(req.query?.integration || '')
@@ -19,50 +25,45 @@ async function integrationContext(req) {
   return { ...integration, botToken: decryptToken(stored.encrypted_bot_token) }
 }
 
-async function getChat(integrationId, chatId) { const rows = await db(`telegram_chats?integration_id=eq.${integrationId}&telegram_chat_id=eq.${chatId}&active=eq.true&select=*`); return rows[0] || null }
-async function setState(id, state) { await db(`telegram_chats?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ state, updated_at: new Date().toISOString() }), prefer: 'return=minimal' }) }
-async function send(token, chatId, text, keyboard = mainKeyboard) { return telegram(token, 'sendMessage', { chat_id: chatId, text, reply_markup: { keyboard, resize_keyboard: true } }) }
-
 const isGroupChat = chat => chat?.type === 'group' || chat?.type === 'supergroup'
 
+const send = (context, chatId, text) => telegram(context.botToken, 'sendMessage', { chat_id: chatId, text })
+
+const findChat = (integrationId, chatId) =>
+  db(`telegram_chats?integration_id=eq.${integrationId}&telegram_chat_id=eq.${chatId}&select=id,chat_kind,telegram_chat_id,active,approved_at`)
+    .then(rows => rows[0] || null)
+
+const patchChat = (id, patch) => db(`telegram_chats?id=eq.${id}`, {
+  method: 'PATCH',
+  body: JSON.stringify({ ...patch, updated_at: new Date().toISOString() }),
+  prefer: 'return=minimal',
+}).catch(() => null)
+
 /**
- * Привязка чата по коду из приложения.
- *
- * Код помечен тем, куда его ждут: личный код в группе и код группы в личке не сработают.
- * Иначе любой участник группы, увидев чужой личный код, подписал бы общий чат на сводки
- * или, наоборот, получил бы в личку права на ввод расходов.
+ * Запомнить чат, в который добавили бота. Он появится в приложении как кандидат —
+ * подтверждённым (и получающим напоминания) его делает владелец кнопкой.
  */
-async function linkChat(context, message, code) {
-  const chat = message.chat
-  const group = isGroupChat(chat)
-  const rows = await db(`telegram_pairing_codes?integration_id=eq.${context.id}&code=eq.${encodeURIComponent(code)}&used_at=is.null&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=*`)
-  const pair = rows[0]
-  if (!pair) return 'unknown'
-  if (Boolean(pair.for_group) !== group) return 'wrong_place'
-  await db('telegram_chats?on_conflict=integration_id,telegram_chat_id', {
+async function rememberChat(context, chat, fromId) {
+  const known = await findChat(context.id, chat.id)
+  const title = String(chat.title || '').slice(0, 120)
+  if (known) {
+    await patchChat(known.id, { active: true, title })
+    return known
+  }
+  await db('telegram_chats', {
     method: 'POST',
     body: JSON.stringify({
-      organization_id: context.organization_id, integration_id: context.id, user_id: pair.user_id,
-      telegram_chat_id: chat.id, telegram_user_id: message.from.id, role: pair.role,
-      chat_kind: group ? 'GROUP' : 'PRIVATE',
-      title: group ? String(chat.title || '').slice(0, 120) : null,
-      active: true,
-      state: { step: 'idle', employeeId: pair.employee_id || null },
-      updated_at: new Date().toISOString(),
+      organization_id: context.organization_id, integration_id: context.id,
+      telegram_chat_id: chat.id, telegram_user_id: fromId,
+      chat_kind: 'GROUP', title, active: true, approved_at: null, state: { step: 'idle' },
     }),
-    prefer: 'resolution=merge-duplicates,return=minimal',
-  })
-  await db(`telegram_pairing_codes?id=eq.${pair.id}`, { method: 'PATCH', body: JSON.stringify({ used_at: new Date().toISOString() }), prefer: 'return=minimal' })
-  return group ? 'group' : 'private'
+    prefer: 'return=minimal',
+  }).catch(error => { console.error('telegram remember chat', error.message) })
+  return null
 }
 
-const deactivateChat = (integrationId, chatId) => db(
-  `telegram_chats?integration_id=eq.${integrationId}&telegram_chat_id=eq.${chatId}`,
-  { method: 'PATCH', body: JSON.stringify({ active: false, updated_at: new Date().toISOString() }), prefer: 'return=minimal' },
-).catch(() => null)
-
-const GROUP_HELP = [
-  'Я присылаю сюда напоминания по этому ПВЗ.',
+const HELP = [
+  'Я присылаю в эту группу напоминания по вашему ПВЗ.',
   '',
   '/today — кто на смене сегодня',
   '/tomorrow — кто выходит завтра',
@@ -70,220 +71,104 @@ const GROUP_HELP = [
   '/gaps — где в графике не хватает людей',
   '/stop — перестать писать в эту группу',
   '',
-  'Время напоминаний настраивается в приложении: «Ещё → Telegram-боты».',
+  'Что и во сколько приходит — настраивается в приложении: «Ещё → Telegram-боты».',
 ].join('\n')
 
-const GROUP_COMMANDS = { '/today': 'duty_today', '/tomorrow': 'duty_tomorrow', '/week': 'week', '/gaps': 'gaps' }
+const WAITING = 'Я в группе. Осталось подтвердить её в приложении: «Ещё → Telegram-боты → Напоминания в группу» — эта группа уже в списке, нажмите «Подключить».'
+
+const COMMANDS = { '/today': 'duty_today', '/tomorrow': 'duty_tomorrow', '/week': 'week', '/gaps': 'gaps' }
 
 /**
- * Группа — это чат живых людей, а не пульт: на обычные сообщения бот обязан молчать,
+ * Группа — чат живых людей, а не пульт: на обычные сообщения бот обязан молчать,
  * иначе его выгонят в первый же день. Отвечаем только на свои команды.
  */
-async function handleGroup(context, chat, text) {
+async function handleCommand(context, chat, text) {
   const command = text.replace(/@[A-Za-z0-9_]+/g, '').trim().toLowerCase()
-  const reply = value => telegram(context.botToken, 'sendMessage', { chat_id: chat.telegram_chat_id, text: value })
-
-  if (command === '/start' || command === '/help') return reply(GROUP_HELP)
+  if (command === '/start' || command === '/help') return send(context, chat.telegram_chat_id, HELP)
   if (command === '/stop') {
-    await deactivateChat(context.id, chat.telegram_chat_id)
-    return reply('Больше сюда не пишу. Чтобы вернуть напоминания, создайте новый код в приложении.')
+    // Бот остаётся в чате, но замолкает: в приложении группа снова станет кандидатом.
+    await patchChat(chat.id, { approved_at: null })
+    return send(context, chat.telegram_chat_id, 'Больше сюда не пишу. Вернуть напоминания можно в приложении.')
   }
 
-  const kind = GROUP_COMMANDS[command]
+  const kind = COMMANDS[command]
   if (!kind) return null
 
   const [point] = await db(`pickup_points?id=eq.${context.pickup_point_id}&select=id,name,timezone,slot_config`)
-  if (!point) return reply('Этот бот больше не привязан к ПВЗ.')
+  if (!point) return send(context, chat.telegram_chat_id, 'Этот бот больше не привязан к ПВЗ.')
   const [settings] = await db(`telegram_bot_settings?integration_id=eq.${context.id}&select=*`)
   const { date } = localNow(point.timezone || 'Europe/Moscow')
   const message = await buildReminder({
     kind, point, organizationId: context.organization_id, today: date, preview: true,
     settings: settings || { gaps_horizon_days: 14, gaps_quiet_when_full: true },
   })
-  return reply(message || 'Пока нечего показать.')
-}
-
-const listPoints = organizationId => db(`pickup_points?organization_id=eq.${organizationId}&archived_at=is.null&select=id,name&order=name`)
-const listPresets = (organizationId, pointId, kind) => db(`entry_presets?organization_id=eq.${organizationId}&pickup_point_id=eq.${pointId}&kind=eq.${kind}&select=category_name,amount_kopecks&order=category_name`)
-
-async function rememberPreset(organizationId, pointId, kind, category, amount) {
-  await db('entry_presets?on_conflict=organization_id,pickup_point_id,kind,category_name', {
-    method: 'POST',
-    body: JSON.stringify({ organization_id: organizationId, pickup_point_id: pointId, kind, category_name: category, amount_kopecks: amount, updated_at: new Date().toISOString() }),
-    prefer: 'resolution=merge-duplicates,return=minimal',
-  })
-}
-
-/** Шаг выбора ПВЗ пропускается, когда точка одна. */
-async function startPointStep(context, chat, reply, nextStep) {
-  const points = await db(`pickup_points?id=eq.${context.pickup_point_id}&organization_id=eq.${context.organization_id}&select=id,name`)
-  if (!points[0]) { await setState(chat.id, { step: 'idle' }); return reply('Этот бот больше не привязан к ПВЗ.') }
-  return enterCategoryStep(chat, reply, nextStep, points[0])
-}
-
-async function enterCategoryStep(chat, reply, nextStep, point) {
-  if (nextStep === 'deduction') {
-    await setState(chat.id, { step: 'deduction_amount', point })
-    return reply(`ПВЗ: ${point.name}. Введите сумму удержания в рублях.`)
-  }
-  const presets = await listPresets(chat.organization_id, point.id, 'EXPENSE')
-  await setState(chat.id, { step: 'expense_category', point })
-  return reply(
-    presets.length ? `ПВЗ: ${point.name}. Выберите категорию или напишите новую.` : `ПВЗ: ${point.name}. Напишите категорию расхода, например: Расходники.`,
-    presets.length ? optionsKeyboard(presets.map(preset => preset.category_name)) : mainKeyboard,
-  )
-}
-
-async function handleConnected(context, chat, text) {
-  const state = chat.state || { step: 'idle' }
-  const reply = (value, keyboard) => send(context.botToken, chat.telegram_chat_id, value, keyboard)
-
-  if (chat.role === 'EMPLOYEE') {
-    const employeeId = state.employeeId
-    const employeeKeyboard = [[{ text: '📅 Мои смены' }, { text: '💰 Моя зарплата' }]]
-    if (!employeeId) return reply('Доступ сотрудника отключён. Попросите владельца прислать новое приглашение.', employeeKeyboard)
-    const access = await db(`employee_pickup_points?employee_id=eq.${employeeId}&pickup_point_id=eq.${context.pickup_point_id}&select=employee_id`)
-    if (!access[0]) return reply('Доступ к этому ПВЗ отключён. Попросите владельца прислать новое приглашение.', employeeKeyboard)
-    if (text === '🔄 Главное меню' || text === '/start') return reply('Выберите действие.', employeeKeyboard)
-    if (text === '📅 Мои смены') {
-      const rows = await db(`shifts?organization_id=eq.${chat.organization_id}&pickup_point_id=eq.${context.pickup_point_id}&employee_id=eq.${employeeId}&planned_start=gte.${encodeURIComponent(new Date().toISOString())}&select=planned_start,planned_end,status&order=planned_start&limit=10`)
-      return reply(rows.length ? `Ваши ближайшие смены:\n${rows.map(x => `• ${new Date(x.planned_start).toLocaleString('ru-RU')}–${new Date(x.planned_end).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}`).join('\n')}` : 'Ближайших смен нет.', employeeKeyboard)
-    }
-    if (text === '💰 Моя зарплата') return reply('Подробный расчёт зарплаты появится после закрытия периода владельцем.', employeeKeyboard)
-    return reply('Используйте кнопки меню.', employeeKeyboard)
-  }
-
-  if (text === '🔄 Главное меню' || text === '/start') { await setState(chat.id, { step: 'idle' }); return reply('Выберите действие.') }
-  if (text === '➕ Удержание') return startPointStep(context, chat, reply, 'deduction')
-  if (text === '➕ Расход') return startPointStep(context, chat, reply, 'expense')
-  if (text === '👥 Сотрудники') {
-    const rows = await db(`employees?organization_id=eq.${chat.organization_id}&status=eq.ACTIVE&employee_pickup_points.pickup_point_id=eq.${context.pickup_point_id}&select=full_name,employee_pickup_points!inner(pickup_point_id)&order=full_name`)
-    return reply(rows.length ? `Сотрудники:\n${rows.map(x => `• ${x.full_name}`).join('\n')}` : 'Сотрудников пока нет. Добавьте их в админке.')
-  }
-  if (text === '📅 Смены') {
-    const rows = await db(`shifts?organization_id=eq.${chat.organization_id}&pickup_point_id=eq.${context.pickup_point_id}&planned_start=gte.${encodeURIComponent(new Date().toISOString())}&select=planned_start,employees(full_name)&order=planned_start&limit=5`)
-    return reply(rows.length ? `Ближайшие смены:\n${rows.map(x => `• ${new Date(x.planned_start).toLocaleString('ru-RU')} — ${x.employees?.full_name || 'сотрудник'}`).join('\n')}` : 'Ближайших смен нет.')
-  }
-
-  if (state.step === 'expense_point' || state.step === 'deduction_point') {
-    const point = (state.points || []).find(item => item.name === text)
-    if (!point) return reply('Выберите ПВЗ кнопкой из списка.', optionsKeyboard((state.points || []).map(item => item.name)))
-    return enterCategoryStep(chat, reply, state.step === 'expense_point' ? 'expense' : 'deduction', point)
-  }
-
-  if (state.step === 'deduction_amount') {
-    const amount = money(text)
-    if (!amount) return reply('Введите сумму числом, например: 3730')
-    await setState(chat.id, { step: 'deduction_reason', amount, point: state.point })
-    return reply('Напишите причину удержания.')
-  }
-  if (state.step === 'deduction_reason') {
-    await db('wb_deductions', { method: 'POST', body: JSON.stringify({ organization_id: chat.organization_id, pickup_point_id: state.point?.id ?? null, event_at: new Date().toISOString(), amount_kopecks: state.amount, reason: text, status: 'NEW' }), prefer: 'return=minimal' })
-    await setState(chat.id, { step: 'idle' })
-    return reply(`Удержание ${rubles(state.amount)} добавлено. Причина: ${text}`)
-  }
-
-  if (state.step === 'expense_category') {
-    const category = text.trim()
-    const presets = await listPresets(chat.organization_id, state.point.id, 'EXPENSE')
-    const preset = presets.find(item => item.category_name === category)
-    await setState(chat.id, { step: 'expense_amount', point: state.point, category, preset: preset?.amount_kopecks ?? null })
-    return preset
-      ? reply(`Запомненная сумма для «${category}» — ${rubles(preset.amount_kopecks)}. Отправьте её кнопкой или введите другую.`, optionsKeyboard([String(preset.amount_kopecks / 100)]))
-      : reply(`Введите сумму расхода «${category}» в рублях.`)
-  }
-
-  if (state.step === 'expense_amount') {
-    const amount = money(text)
-    if (!amount) return reply('Введите сумму числом, например: 1200')
-    const categories = await db(`expense_categories?organization_id=eq.${chat.organization_id}&name=eq.${encodeURIComponent(state.category)}&select=id`)
-    let categoryId = categories[0]?.id
-    if (!categoryId) {
-      const created = await db('expense_categories', { method: 'POST', body: JSON.stringify({ organization_id: chat.organization_id, name: state.category }) })
-      categoryId = created[0].id
-    }
-    await db('expense_entries', { method: 'POST', body: JSON.stringify({ organization_id: chat.organization_id, category_id: categoryId, pickup_point_id: state.point.id, date: new Date().toISOString().slice(0, 10), amount_kopecks: amount }), prefer: 'return=minimal' })
-    if (state.preset === amount) {
-      await setState(chat.id, { step: 'idle' })
-      return reply(`Расход ${rubles(amount)} добавлен: ${state.category} · ${state.point.name}.`)
-    }
-    await setState(chat.id, { step: 'expense_remember', point: state.point, category: state.category, amount })
-    return reply(`Расход ${rubles(amount)} добавлен: ${state.category} · ${state.point.name}.\nЗапомнить эту сумму для следующего раза?`, optionsKeyboard(['Запомнить', 'Не запоминать']))
-  }
-
-  if (state.step === 'expense_remember') {
-    if (text === 'Запомнить') {
-      await rememberPreset(chat.organization_id, state.point.id, 'EXPENSE', state.category, state.amount)
-      await setState(chat.id, { step: 'idle' })
-      return reply(`Запомнил: ${state.category} · ${state.point.name} — ${rubles(state.amount)}.`)
-    }
-    await setState(chat.id, { step: 'idle' })
-    return reply('Хорошо, сумма не запомнена.')
-  }
-
-  return reply('Нажмите кнопку нужного действия.')
+  return send(context, chat.telegram_chat_id, message || 'Пока нечего показать.')
 }
 
 export default async function handler(req, res) {
-  if (req.method === 'GET') return res.status(200).json({ ok: true, service: 'pvz-control-telegram', mode: 'organization-bots' })
+  if (req.method === 'GET') return res.status(200).json({ ok: true, service: 'punkt-telegram', mode: 'group-reminders' })
   if (req.method !== 'POST') return res.status(405).end()
   try {
     const context = await integrationContext(req); if (!context) return res.status(401).end()
+
     const updateId = Number(req.body?.update_id)
     if (Number.isFinite(updateId)) {
-      try { await db('telegram_updates', { method:'POST', body:JSON.stringify({ integration_id:context.id, update_id:updateId }), prefer:'return=minimal' }) }
-      catch (error) { if (String(error.message).includes('23505') || String(error.message).includes('duplicate')) return res.status(200).json({ ok:true, duplicate:true }); throw error }
+      try { await db('telegram_updates', { method: 'POST', body: JSON.stringify({ integration_id: context.id, update_id: updateId }), prefer: 'return=minimal' }) }
+      catch (error) { if (/23505|duplicate/i.test(String(error.message))) return res.status(200).json({ ok: true, duplicate: true }); throw error }
     }
-    // Бота добавили в группу или выгнали из неё. Без этого напоминания продолжали бы
-    // уходить в чат, из которого бота уже удалили.
+
+    // Бота добавили в группу или выгнали из неё. Добавление — единственный способ
+    // узнать id чата: Bot API не даёт боту список его чатов.
     const membership = req.body?.my_chat_member
     if (membership?.chat?.id) {
       const status = membership.new_chat_member?.status
-      if (['left', 'kicked'].includes(status)) await deactivateChat(context.id, membership.chat.id)
-      else if (isGroupChat(membership.chat) && ['member', 'administrator'].includes(status)) {
-        const known = await getChat(context.id, membership.chat.id)
-        if (!known) await telegram(context.botToken, 'sendMessage', {
-          chat_id: membership.chat.id,
-          text: 'Я на месте. Чтобы включить напоминания, откройте в приложении «Ещё → Telegram-боты», создайте код для группы и отправьте сюда: /start КОД',
-        }).catch(() => null)
+      const known = await findChat(context.id, membership.chat.id)
+      if (['left', 'kicked'].includes(status)) {
+        if (known) await patchChat(known.id, { active: false })
+      } else if (isGroupChat(membership.chat) && ['member', 'administrator'].includes(status)) {
+        const existing = await rememberChat(context, membership.chat, membership.from?.id ?? 0)
+        if (!existing?.approved_at) await send(context, membership.chat.id, WAITING).catch(() => null)
       }
       return res.status(200).json({ ok: true })
     }
 
-    const message = req.body?.message; if (!message?.chat?.id || !message?.from?.id) return res.status(200).json({ ok: true })
+    const message = req.body?.message
+    if (!message?.chat?.id || !message?.from?.id) return res.status(200).json({ ok: true })
     const text = String(message.text || '').trim()
-    const match = text.match(/^\/start(?:@[A-Za-z0-9_]+)?\s+([A-Z0-9]{8})$/i)
-    if (match) {
-      const linked = await linkChat(context, message, match[1].toUpperCase())
-      const answer = linked === 'group' ? 'Группа подключена. Буду присылать сюда напоминания по этому ПВЗ. Команды — /help'
-        : linked === 'private' ? 'PVZ Control подключён. Выберите действие.'
-          : linked === 'wrong_place' ? 'Этот код не для такого чата: код группы отправляют в группу, личный — боту в личке.'
-            : 'Код подключения недействителен или истёк. Создайте новый в приложении.'
-      if (linked === 'private') await send(context.botToken, message.chat.id, answer)
-      else await telegram(context.botToken, 'sendMessage', { chat_id: message.chat.id, text: answer })
+
+    // В личке бот не нужен: всё, что он умеет, настраивается на сайте. Объясняем это
+    // на команду и молчим на остальное, чтобы не изображать несуществующее меню.
+    if (!isGroupChat(message.chat)) {
+      if (/^\/(start|help)\b/i.test(text)) {
+        await send(context, message.chat.id, 'Этот бот присылает напоминания в рабочую группу ПВЗ. Добавьте меня в группу и подтвердите её в приложении — «Ещё → Telegram-боты».').catch(() => null)
+      }
       return res.status(200).json({ ok: true })
     }
 
-    const chat = await getChat(context.id, message.chat.id)
+    const chat = await findChat(context.id, message.chat.id)
+
+    // Бота добавили в группу до этой версии — события о добавлении не было. Любой
+    // «/start» в группе возвращает её в список приложения, кода для этого не нужно.
     if (!chat) {
-      // В чужой группе молчим: бот мог попасть туда до привязки, и подсказка в каждом
-      // сообщении выглядела бы как спам.
-      if (!isGroupChat(message.chat)) await send(context.botToken, message.chat.id, 'Сначала создайте код подключения в админке и отправьте /start КОД.')
+      if (/^\/start\b/i.test(text)) {
+        await rememberChat(context, message.chat, message.from.id)
+        await send(context, message.chat.id, WAITING).catch(() => null)
+      }
       return res.status(200).json({ ok: true })
     }
+
+    if (!chat.approved_at) {
+      if (/^\/(start|help)\b/i.test(text)) await send(context, message.chat.id, WAITING).catch(() => null)
+      return res.status(200).json({ ok: true })
+    }
+
     try {
-      if (chat.chat_kind === 'GROUP') await handleGroup(context, chat, text)
-      else await handleConnected(context, chat, text)
+      await handleCommand(context, chat, text)
     } catch (error) {
       // Пятисотка заставила бы Telegram ретраить апдейт и подвесить очередь чата,
-      // поэтому сбой сценария объясняем пользователю и подтверждаем доставку.
-      console.error('telegram scenario', error)
-      if (chat.chat_kind === 'GROUP') {
-        await telegram(context.botToken, 'sendMessage', { chat_id: chat.telegram_chat_id, text: 'Не получилось собрать ответ. Попробуйте ещё раз.' }).catch(() => null)
-      } else {
-        await setState(chat.id, { step: 'idle' }).catch(() => null)
-        await send(context.botToken, chat.telegram_chat_id, 'Не удалось выполнить действие. Попробуйте ещё раз.').catch(() => null)
-      }
+      // поэтому сбой объясняем в чате и подтверждаем доставку.
+      console.error('telegram command', error)
+      await send(context, chat.telegram_chat_id, 'Не получилось собрать ответ. Попробуйте ещё раз.').catch(() => null)
     }
     return res.status(200).json({ ok: true })
   } catch (error) {

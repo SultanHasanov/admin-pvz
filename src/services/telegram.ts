@@ -1,39 +1,41 @@
 import { client, organizationId } from './org'
 
-export async function createTelegramPairingCode(pickupPointId:string, employeeId?:string) {
-  const org = await organizationId()
-  const { data, error } = await client().rpc('create_telegram_pairing_code', {
-    p_organization_id: org, p_pickup_point_id: pickupPointId, p_employee_id: employeeId ?? null,
-  })
-  if (error) throw error
-  return data as string
-}
+/**
+ * Чат, в который добавили бота.
+ *
+ * `approvedAt` пустой — бот в группе, но молчит: Telegram сообщает о добавлении сам,
+ * и без подтверждения владельцем любой чужой чат начал бы получать график точки.
+ */
+export interface TelegramGroupChat { id:string; telegramChatId:number; title:string | null; approvedAt:string | null }
 
-/** Код для группы: его отправляют боту прямо в чате, где он должен писать. */
-export async function createTelegramGroupCode(pickupPointId:string) {
-  const org = await organizationId()
-  const { data, error } = await client().rpc('create_telegram_group_code', {
-    p_organization_id: org, p_pickup_point_id: pickupPointId,
-  })
-  if (error) throw error
-  return data as string
-}
-
-/** Группа, куда бот присылает напоминания. Их может быть несколько — это не запрещено. */
-export interface TelegramGroupChat { id:string; telegram_chat_id:number; title:string | null }
+interface GroupRow { id:string; telegram_chat_id:number; title:string | null; approved_at:string | null }
 
 export async function listTelegramGroups(integrationId:string):Promise<TelegramGroupChat[]> {
   const { data, error } = await client().from('telegram_chats')
-    .select('id,telegram_chat_id,title')
+    .select('id,telegram_chat_id,title,approved_at')
     .eq('integration_id', integrationId).eq('chat_kind', 'GROUP').eq('active', true)
+    .order('approved_at', { nullsFirst: false })
   if (error) throw error
-  return data as TelegramGroupChat[]
+  return (data as GroupRow[]).map(row => ({
+    id: row.id, telegramChatId: row.telegram_chat_id, title: row.title, approvedAt: row.approved_at,
+  }))
 }
 
-/** Отвязать группу. Строку не удаляем: вместе с ней исчезла бы история привязки. */
+/** Подтвердить группу: с этой минуты туда уходят напоминания. */
+export async function approveTelegramGroup(chatId:string) {
+  const now = new Date().toISOString()
+  const { error } = await client().from('telegram_chats')
+    .update({ approved_at: now, updated_at: now }).eq('id', chatId)
+  if (error) throw error
+}
+
+/**
+ * Отключить группу. Бот остаётся в чате, но замолкает и снова становится кандидатом —
+ * вычёркивать чат целиком нельзя: тогда вернуть его можно было бы только переустановкой бота.
+ */
 export async function unlinkTelegramGroup(chatId:string) {
   const { error } = await client().from('telegram_chats')
-    .update({ active: false, updated_at: new Date().toISOString() }).eq('id', chatId)
+    .update({ approved_at: null, updated_at: new Date().toISOString() }).eq('id', chatId)
   if (error) throw error
 }
 

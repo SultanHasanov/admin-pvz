@@ -63,7 +63,7 @@ export default async function handler(req, res) {
         if (!integration?.pickup_point_id) continue
         const [point] = await db(`pickup_points?id=eq.${integration.pickup_point_id}&archived_at=is.null&select=id,name,timezone,slot_config`)
         if (!point) continue
-        const chats = await db(`telegram_chats?integration_id=eq.${integration.id}&chat_kind=eq.GROUP&active=eq.true&select=id,telegram_chat_id`)
+        const chats = await db(`telegram_chats?integration_id=eq.${integration.id}&chat_kind=eq.GROUP&active=eq.true&approved_at=not.is.null&select=id,telegram_chat_id`)
         if (!chats.length) continue
 
         const timeZone = point.timezone || 'Europe/Moscow'

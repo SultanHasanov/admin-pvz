@@ -12,9 +12,9 @@ import { EmptyState, SkeletonRows } from '../../shared/kit/Misc'
 import { toastDone, toastError } from '../../shared/kit/Toaster'
 import { keys, scope } from '../../services/queries'
 import {
-  createTelegramGroupCode, getTelegramBotSettings, listTelegramGroups, listTelegramIntegrations,
+  approveTelegramGroup, getTelegramBotSettings, listTelegramGroups, listTelegramIntegrations,
   saveTelegramBotSettings, sendTelegramPreview, unlinkTelegramGroup,
-  type ReminderKind, type TelegramBotSettings,
+  type ReminderKind, type TelegramBotSettings, type TelegramGroupChat,
 } from '../../services/telegram'
 import { useWrite } from '../../features/write'
 import { useOrg } from '../../app/OrgContext'
@@ -66,14 +66,20 @@ function ReminderForm({ integrationId, pointId, pointName, header }:{
   header:ReactElement
 }) {
   const { open } = useSheets()
-  const [code, setCode] = useState<string>()
   const [testing, setTesting] = useState<ReminderKind>()
 
-  const groups = useQuery({ queryKey: keys.telegramGroups(integrationId), queryFn: () => listTelegramGroups(integrationId) })
+  // Список обновляем сам: бота добавляют в группу в другом приложении, и человек ждёт,
+  // когда чат появится здесь. Без обновления он видел бы пустой экран и думал, что не вышло.
+  const groups = useQuery({
+    queryKey: keys.telegramGroups(integrationId),
+    queryFn: () => listTelegramGroups(integrationId),
+    refetchInterval: 5000,
+  })
   const stored = useQuery({ queryKey: keys.telegramSettings(integrationId), queryFn: () => getTelegramBotSettings(integrationId) })
 
   if (stored.isLoading || groups.isLoading) return <Screen header={header}><Card><SkeletonRows rows={4}/></Card></Screen>
 
+  const chats = groups.data ?? []
   return <Form
     key={integrationId}
     header={header}
@@ -81,9 +87,8 @@ function ReminderForm({ integrationId, pointId, pointName, header }:{
     pointName={pointName}
     integrationId={integrationId}
     initial={stored.data ?? DEFAULTS}
-    group={groups.data?.[0]}
-    code={code}
-    onCode={setCode}
+    group={chats.find(chat => chat.approvedAt)}
+    candidates={chats.filter(chat => !chat.approvedAt)}
     testing={testing}
     onTesting={setTesting}
     confirm={open}
@@ -92,15 +97,16 @@ function ReminderForm({ integrationId, pointId, pointName, header }:{
 
 type Confirm = ReturnType<typeof useSheets>['open']
 
-function Form({ header, pointId, pointName, integrationId, initial, group, code, onCode, testing, onTesting, confirm }:{
+function Form({ header, pointId, pointName, integrationId, initial, group, candidates, testing, onTesting, confirm }:{
   header:ReactElement
   pointId:string
   pointName:string
   integrationId:string
   initial:Omit<TelegramBotSettings, 'integration_id'> | TelegramBotSettings
-  group?:{ id:string; title:string | null }
-  code?:string
-  onCode:(value?:string) => void
+  /** Подтверждённая группа: туда уходят напоминания. */
+  group?:TelegramGroupChat
+  /** Чаты, куда бота добавили, но ещё не подтвердили. */
+  candidates:TelegramGroupChat[]
   testing?:ReminderKind
   onTesting:(value?:ReminderKind) => void
   confirm:Confirm
@@ -130,16 +136,16 @@ function Form({ header, pointId, pointName, integrationId, initial, group, code,
     done: 'Напоминания сохранены',
   })
 
-  const pair = useWrite({
-    run: () => createTelegramGroupCode(pointId),
-    invalidate: [],
-    done: 'Код создан — отправьте его в группу',
+  const approve = useWrite({
+    run: (chatId:string) => approveTelegramGroup(chatId),
+    invalidate: [scope.telegramBot],
+    done: 'Группа подключена',
   })
 
   const unlink = useWrite({
     run: () => unlinkTelegramGroup(group!.id),
     invalidate: [scope.telegramBot],
-    done: 'Группа отвязана',
+    done: 'Группа отключена',
   })
 
   async function test(kind:ReminderKind) {
@@ -171,39 +177,40 @@ function Form({ header, pointId, pointName, integrationId, initial, group, code,
             block
             disabled={unlink.isPending}
             onClick={() => confirm('confirm', {
-              text: 'Отвязать группу? Напоминания перестанут приходить.',
-              yesLabel: 'Отвязать',
+              text: 'Отключить группу? Напоминания перестанут приходить, бот останется в чате.',
+              yesLabel: 'Отключить',
               tone: 'bad',
               onYes: () => unlink.mutate(undefined as void),
             })}
-          >Отвязать группу</Button>
+          >Отключить группу</Button>
         </>
-        : <>
-          <div className="text-sub leading-[1.5] text-muted">
-            1. Добавьте бота в рабочую группу ПВЗ.<br/>
-            2. Создайте код и отправьте его сообщением в эту группу.
-          </div>
-          {code
-            ? <div className="mt-3 rounded-md bg-surface-soft p-3">
-              <div className="text-sub text-muted">Отправьте в группу в течение 15 минут:</div>
-              <button
-                type="button"
-                className="tap mt-1 font-mono text-row font-medium"
-                onClick={() => void navigator.clipboard?.writeText(`/start ${code}`).then(() => toastDone('Команда скопирована'))}
-              >/start {code}</button>
+        : candidates.length
+          ? <>
+            <div className="text-sub leading-[1.5] text-muted">
+              Бота добавили в {candidates.length === 1 ? 'эту группу' : 'эти группы'}. Подтвердите ту, куда слать напоминания.
             </div>
-            : null}
-          <Button
-            className="mt-3"
-            block
-            disabled={pair.isPending}
-            onClick={() => pair.mutate(undefined as void, { onSuccess: (value) => onCode(value as string) })}
-          >{code ? 'Создать новый код' : 'Создать код для группы'}</Button>
-        </>}
+            <div className="mt-3 grid gap-2">
+              {candidates.map(chat => <div key={chat.id} className="flex items-center justify-between gap-3 rounded-md bg-surface-soft p-3">
+                <div className="min-w-0">
+                  <div className="truncate text-row font-medium">{chat.title || 'Группа без названия'}</div>
+                  <div className="font-mono text-sub text-muted">{chat.telegramChatId}</div>
+                </div>
+                <Button
+                  className="flex-none px-4 py-2 text-act"
+                  disabled={approve.isPending}
+                  onClick={() => approve.mutate(chat.id)}
+                >Подключить</Button>
+              </div>)}
+            </div>
+          </>
+          : <div className="text-sub leading-[1.5] text-muted">
+            Добавьте бота в рабочую группу ПВЗ — чат появится здесь сам, подтвердить его нужно будет кнопкой.
+            Если бот уже в группе, напишите там <span className="font-mono">/start</span>.
+          </div>}
     </Card>
 
     {!group && <div className="mt-3"><Banner>
-      Пока группа не подключена, напоминания никуда не уходят — настройки ниже просто ждут её.
+      Пока группа не подтверждена, напоминания никуда не уходят — настройки ниже просто ждут её.
     </Banner></div>}
 
     <SectionTitle>Что присылать</SectionTitle>

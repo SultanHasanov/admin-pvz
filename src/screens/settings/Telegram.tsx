@@ -7,9 +7,9 @@ import { Button } from '../../shared/kit/Button'
 import { Banner, TextField } from '../../shared/kit/Field'
 import { EmptyState, ErrorNote, SkeletonRows } from '../../shared/kit/Misc'
 import { toastDone, toastError } from '../../shared/kit/Toaster'
-import { keys } from '../../services/queries'
+import { keys, scope } from '../../services/queries'
 import {
-  connectTelegramBot, createTelegramPairingCode, disconnectTelegramBot, listTelegramIntegrations,
+  connectTelegramBot, disconnectTelegramBot, listTelegramIntegrations,
   type TelegramIntegrationInfo,
 } from '../../services/telegram'
 import type { PickupPoint } from '../../entities/types'
@@ -18,8 +18,10 @@ import { useNav } from '../../app/nav'
 import { useSheets } from '../../app/sheets'
 
 /**
- * Telegram-боты. В прототипе один общий бот; в проекте у каждой точки свой — так бот
- * знает, к какому ПВЗ относится сообщение, и не спрашивает об этом в каждом расходе.
+ * Telegram-боты: у каждой точки свой бот, и он только пишет в рабочую группу этой точки.
+ *
+ * Бот ничего не принимает: расходы, удержания и график ведутся в приложении. Один бот
+ * на точку — чтобы сообщение о чужих сменах не приходило в чужой чат.
  */
 export default function Telegram() {
   const { points } = useOrg()
@@ -30,11 +32,9 @@ export default function Telegram() {
 
   return <Screen header={<Header title="Telegram-боты" onBack={canBack ? back : undefined}/>}>
     <div className="mb-3 text-row leading-[1.45] text-muted">
-      Расходы и удержания можно добавлять сообщением в бот точки, не открывая приложение.
+      Бот присылает в рабочую группу ПВЗ то, что вы включите: кто сегодня на смене, кто выходит завтра
+      и в какие дни людей не хватает. Отвечать ему не нужно — всё настраивается здесь.
     </div>
-    <Card className="mb-3 px-4 py-3 font-mono text-mono leading-[1.6] text-muted-strong">
-      расход аренда 45000<br/>удержание 1400 недостача
-    </Card>
 
     {orphan && <div className="mb-3"><Banner>
       Старого общего бота не удалось привязать к точке: ПВЗ несколько. Подключите отдельного бота для каждого пункта.
@@ -60,8 +60,10 @@ function PointBot({ point, integration }:{ point:PickupPoint; integration?:Teleg
   const { open } = useSheets()
   const { push } = useNav()
   const [token, setToken] = useState('')
-  const [pairing, setPairing] = useState<string>()
-  const refresh = () => void client.invalidateQueries({ queryKey: keys.telegram })
+  const refresh = () => {
+    void client.invalidateQueries({ queryKey: keys.telegram })
+    void client.invalidateQueries({ queryKey: scope.telegramBot })
+  }
   const onError = (error:Error) => toastError(error.message || 'Telegram не ответил')
 
   const connect = useMutation({
@@ -71,10 +73,9 @@ function PointBot({ point, integration }:{ point:PickupPoint; integration?:Teleg
   })
   const disconnect = useMutation({
     mutationFn: () => disconnectTelegramBot(point.id),
-    onSuccess: () => { setPairing(undefined); toastDone('Бот отключён'); refresh() },
+    onSuccess: () => { toastDone('Бот отключён'); refresh() },
     onError,
   })
-  const pair = useMutation({ mutationFn: () => createTelegramPairingCode(point.id), onSuccess: setPairing, onError })
 
   const connected = integration?.status === 'CONNECTED'
 
@@ -88,31 +89,22 @@ function PointBot({ point, integration }:{ point:PickupPoint; integration?:Teleg
 
     {connected
       ? <>
-        <div className="mt-1 text-sub leading-[1.45] text-muted">Всё, что написано этому боту, относится только к «{point.name}».</div>
-        {pairing && <div className="mt-3 rounded-md bg-surface-soft p-3">
-          <div className="text-sub text-muted">Отправьте боту в течение 15 минут:</div>
-          <button
-            type="button"
-            className="tap mt-1 font-mono text-row font-medium"
-            onClick={() => void navigator.clipboard?.writeText(`/start ${pairing}`).then(() => toastDone('Команда скопирована'))}
-          >/start {pairing}</button>
-        </div>}
-        <Button block variant="secondary" className="mt-3" onClick={() => push(`/more/telegram/${point.id}`)}>
-          Напоминания в группу
-        </Button>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <Button disabled={pair.isPending} onClick={() => pair.mutate()}>Привязать мой Telegram</Button>
-          <Button
-            variant="secondary"
-            disabled={disconnect.isPending}
-            onClick={() => open('confirm', {
-              text: `Отключить бота от ${point.name}? Сообщения в него перестанут записываться.`,
-              yesLabel: 'Отключить',
-              tone: 'bad',
-              onYes: () => disconnect.mutate(),
-            })}
-          >Отключить</Button>
+        <div className="mt-1 text-sub leading-[1.45] text-muted">
+          Осталось добавить бота в рабочую группу «{point.name}» и выбрать, что он туда присылает.
         </div>
+        <Button block className="mt-3" onClick={() => push(`/more/telegram/${point.id}`)}>Напоминания в группу</Button>
+        <Button
+          block
+          variant="secondary"
+          className="mt-2"
+          disabled={disconnect.isPending}
+          onClick={() => open('confirm', {
+            text: `Отключить бота от ${point.name}? Напоминания в группу перестанут приходить.`,
+            yesLabel: 'Отключить',
+            tone: 'bad',
+            onYes: () => disconnect.mutate(),
+          })}
+        >Отключить бота</Button>
       </>
       : <>
         <div className="mt-1 text-sub leading-[1.45] text-muted">
