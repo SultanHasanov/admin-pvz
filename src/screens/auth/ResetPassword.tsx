@@ -4,6 +4,7 @@ import { Button } from '../../shared/kit/Button'
 import { Banner, TextField } from '../../shared/kit/Field'
 import { toastDone } from '../../shared/kit/Toaster'
 import { supabase } from '../../lib/supabase'
+import { clearRecovery } from '../../lib/recovery'
 import { AuthLayout } from './AuthLayout'
 
 /**
@@ -25,8 +26,16 @@ export default function ResetPassword() {
     const { error: failure } = await supabase.auth.updateUser({ password })
     setBusy(false)
     if (failure) { setError(failure.message); return }
+    clearRecovery()
     toastDone('Пароль обновлён')
     navigate('/', { replace: true })
+  }
+
+  /** Передумал менять пароль: сессия из письма без нового пароля никуда не ведёт. */
+  async function cancel() {
+    clearRecovery()
+    await supabase?.auth.signOut()
+    navigate('/login', { replace: true })
   }
 
   return <AuthLayout>
@@ -36,5 +45,6 @@ export default function ResetPassword() {
     <TextField label="Ещё раз" type="password" autoComplete="new-password" error={mismatch ? 'Пароли не совпадают' : undefined} value={repeat} onChange={event => setRepeat(event.target.value)}/>
     {error && <Banner tone="bad">{error}</Banner>}
     <Button block disabled={password.length < 6 || repeat !== password || busy} onClick={() => void save()}>Сохранить пароль</Button>
+    <Button block variant="quiet" className="mt-1" disabled={busy} onClick={() => void cancel()}>Отменить и выйти</Button>
   </AuthLayout>
 }

@@ -3,6 +3,7 @@ import type { Session } from '@supabase/supabase-js'
 import { useQueryClient } from '@tanstack/react-query'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
+import { clearRecovery, isRecovering, markRecovery } from '../lib/recovery'
 import { resetOrganizationCache, type MemberRole } from '../services/org'
 import { OrgProvider } from './OrgContext'
 import { AppRoutes } from './router'
@@ -78,8 +79,10 @@ export function App() {
     if (!supabase) { setSession(null); return }
     void supabase.auth.getSession().then(({ data }) => { userId.current = data.session?.user.id ?? null; setSession(data.session) })
     const { data } = supabase.auth.onAuthStateChange((event, next) => {
-      // Подтверждение кода восстановления создаёт сессию — сразу просим новый пароль.
-      if (event === 'PASSWORD_RECOVERY') navigate('/reset', { replace: true })
+      // Переход по старой ссылке из письма: Supabase сам объявляет восстановление.
+      if (event === 'PASSWORD_RECOVERY') { markRecovery(); navigate('/reset', { replace: true }) }
+      // Пометка живёт до смены пароля, но чужой сессии она не касается.
+      if (event === 'SIGNED_OUT') clearRecovery()
       resetOrganizationCache()
       // Другой человек на том же телефоне — кэш прежнего выбрасываем целиком. Ключи
       // кэша не содержат пользователя, и сотрудник иначе увидел бы данные владельца.
@@ -96,13 +99,19 @@ export function App() {
   if (!isSupabaseConfigured) return <NotConfigured/>
   if (session === undefined) return <Booting/>
 
+  // Вход по коду из письма — это ещё не доступ к приложению: пока пароль не сменён,
+  // любой адрес ведёт на экран нового пароля.
+  const recovering = Boolean(session) && isRecovering()
+
   return <Routes>
     {/* Стенд кита — вне авторизации: он не читает данные, а смотреть его нужно с телефона. */}
     <Route path="/kit" element={<Suspense fallback={<Booting/>}><KitStand/></Suspense>}/>
-    <Route path="/login" element={session ? <Navigate to="/" replace/> : <Suspense fallback={<Booting/>}><Login/></Suspense>}/>
+    <Route path="/login" element={session ? <Navigate to={recovering ? '/reset' : '/'} replace/> : <Suspense fallback={<Booting/>}><Login/></Suspense>}/>
     {/* Регистрация: без сессии первый шаг создаёт аккаунт, с сессией — сразу организацию.
         Организацию App узнаёт только в конце: иначе после второго шага экран сменился бы на приложение. */}
-    <Route path="/register" element={session && hasOrganization
+    <Route path="/register" element={recovering
+      ? <Navigate to="/reset" replace/>
+      : session && hasOrganization
       ? <Navigate to="/" replace/>
       : <Suspense fallback={<Booting/>}><Onboarding session={session} onDone={async () => { if (session) await checkOrganization(session) }}/></Suspense>}/>
     <Route path="/reset" element={session ? <Suspense fallback={<Booting/>}><ResetPassword/></Suspense> : <Navigate to="/login" replace/>}/>
@@ -111,6 +120,7 @@ export function App() {
     </Suspense>}/>
     <Route path="/*" element={
       !session ? <Navigate to="/login" replace/>
+        : recovering ? <Navigate to="/reset" replace/>
         : hasOrganization === undefined ? <Booting/>
           : !hasOrganization ? <Navigate to="/register" replace/>
             : <ProductRoutes role={role}/>

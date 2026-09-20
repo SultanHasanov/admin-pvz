@@ -4,6 +4,7 @@ import { Button } from '../../shared/kit/Button'
 import { Banner, TextField } from '../../shared/kit/Field'
 import { haptics } from '../../shared/kit/haptics'
 import { OTP_MAX, OTP_MIN, otpDigits } from '../../shared/otp'
+import { clearRecovery, markRecovery } from '../../lib/recovery'
 import { appUrl, supabase } from '../../lib/supabase'
 import { AuthLayout, Logo } from './AuthLayout'
 
@@ -51,10 +52,13 @@ export default function Login() {
   async function verifyResetCode() {
     if (!supabase) return
     setBusy(true); setError(undefined)
+    // Пометку ставим до проверки: сессия появится раньше, чем вернётся этот вызов,
+    // и App не должен принять восстановление за обычный вход.
+    markRecovery()
     const result = await supabase.auth.verifyOtp({ email: email.trim(), token: code, type: 'recovery' })
     setBusy(false)
-    if (result.error) { haptics.error(); setError(authError(result.error.message)); return }
-    if (!result.data.session) { setError('Не удалось подтвердить код — попробуйте ещё раз'); return }
+    if (result.error) { clearRecovery(); haptics.error(); setError(authError(result.error.message)); return }
+    if (!result.data.session) { clearRecovery(); setError('Не удалось подтвердить код — попробуйте ещё раз'); return }
     navigate('/reset', { replace: true })
   }
 
