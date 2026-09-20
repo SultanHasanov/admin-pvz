@@ -13,3 +13,7 @@ visual/.artifacts
 
 # Служебный кэш Supabase CLI
 supabase/.temp
+
+.vercel
+.env*
+!.env.example

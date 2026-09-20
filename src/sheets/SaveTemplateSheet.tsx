@@ -25,7 +25,9 @@ export default function SaveTemplateSheet({ plans, pointId, startsAt, endsAt, pa
 
   const employeeIds = [...new Set(plans.flatMap(plan => plan.pattern.kind === 'cycle'
     ? plan.pattern.participants.map(participant => participant.employeeId)
-    : Object.keys(plan.pattern.byEmployee)))]
+    : plan.pattern.kind === 'alternatingBlocks'
+      ? [plan.pattern.firstId, plan.pattern.secondId].filter(Boolean)
+      : Object.keys(plan.pattern.byEmployee)))]
 
   const write = useWrite({
     run: () => saveScheduleTemplate({

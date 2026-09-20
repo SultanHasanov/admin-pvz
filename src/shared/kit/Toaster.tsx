@@ -22,19 +22,25 @@ export const Toaster = () => <Sonner
 const mark = (symbol:string, color:string) =>
   <span className="flex size-[22px] flex-none items-center justify-center rounded-full text-[13px] font-semibold" style={{ background: color, color: '#fff' }}>{symbol}</span>
 
+const messageRow = (symbol:string, color:string, message:string) =>
+  <div className="flex w-full items-center gap-2.5">
+    {mark(symbol, color)}
+    <span className="min-w-0 flex-1 leading-[1.3]">{message}</span>
+  </div>
+
 /** Подтверждение действия: операция добавлена, смена назначена, аванс выдан. */
 export const toastDone = (message:string) => {
   haptics.success()
-  sonner.custom(() => <>{mark('✓', 'var(--color-ok)')}<span>{message}</span></>)
+  sonner.custom(() => messageRow('✓', 'var(--color-ok)', message))
 }
 
 /** Действие прошло, но с оговоркой: часть дней пропущена, месяц уже закрыт. */
 export const toastWarn = (message:string) => {
   haptics.warn()
-  sonner.custom(() => <>{mark('!', 'var(--color-warn)')}<span>{message}</span></>)
+  sonner.custom(() => messageRow('!', 'var(--color-warn)', message))
 }
 
 export const toastError = (message:string) => {
   haptics.error()
-  sonner.custom(() => <>{mark('✕', 'var(--color-bad)')}<span>{message}</span></>)
+  sonner.custom(() => messageRow('✕', 'var(--color-bad)', message))
 }

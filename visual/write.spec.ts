@@ -107,7 +107,7 @@ test.describe('запись из шторок', () => {
     await page.waitForSelector('text=Смена не занята')
     await page.screenshot({ path: 'visual/shots/app/sheet-day.png' })
 
-    await page.getByRole('button', { name: 'Поставить сотрудника' }).click()
+    await page.getByRole('button', { name: 'Добавить сотрудника' }).click()
     await page.screenshot({ path: 'visual/shots/app/sheet-candidate.png' })
 
     await page.getByText('Дмитрий Орлов').click()

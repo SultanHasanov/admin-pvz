@@ -7,6 +7,7 @@ import { AppShell } from './Shell'
 const Home = lazy(() => import('../screens/Home'))
 const Metric = lazy(() => import('../screens/Metric'))
 const Schedule = lazy(() => import('../screens/Schedule'))
+const ScheduleBuilder = lazy(() => import('../screens/ScheduleBuilder'))
 const People = lazy(() => import('../screens/People'))
 const Employee = lazy(() => import('../screens/Employee'))
 const EmployeeNew = lazy(() => import('../screens/EmployeeNew'))
@@ -52,6 +53,7 @@ export function AppRoutes() {
       <Route path="/home/metric/:key" element={<Metric/>}/>
 
       <Route path="/sched" element={<Schedule/>}/>
+      <Route path="/sched/build" element={<ScheduleBuilder/>}/>
       <Route path="/sched/wizard" element={<Wizard/>}/>
       <Route path="/sched/templates" element={<Templates/>}/>
       <Route path="/sched/share" element={<Share/>}/>

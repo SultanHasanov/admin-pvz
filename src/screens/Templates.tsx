@@ -129,7 +129,7 @@ export default function Templates() {
               title={template.name}
               sub={[
                 `мест: ${plans.length}`,
-                first?.kind === 'cycle' ? `${first.on} через ${first.off}` : 'по дням недели',
+                first?.kind === 'cycle' ? `${first.on} через ${first.off}` : first?.kind === 'alternatingBlocks' ? `${first.firstDays} дня / ${first.secondDays} дня` : 'по дням недели',
                 `${template.startsAt}–${template.endsAt}`,
                 template.pickupPointId ? pointName(template.pickupPointId) : null,
               ].filter(Boolean).join(' · ')}

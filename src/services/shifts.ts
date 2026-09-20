@@ -92,7 +92,7 @@ export async function createShiftSeries(input:Omit<ShiftInput, 'date'> & { from:
  */
 export async function updateShiftPlan(id:string, input:ShiftInput) {
   const organization_id = await organizationId()
-  const { organization_id: _org, employee_id: _employee, ...plan } = rowFrom(organization_id, input)
+  const { organization_id: _org, ...plan } = rowFrom(organization_id, input)
   const { error } = await client().from('shifts').update({ ...plan, updated_at: new Date().toISOString() }).eq('id', id)
   if (error) throw error
 }

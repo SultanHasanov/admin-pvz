@@ -17,7 +17,10 @@ export interface CycleParticipant { employeeId:string; offset:number }
 /** «N через M»: сотрудники разнесены по фазам одного цикла длиной on + off. */
 export interface CyclePattern { kind:'cycle'; on:number; off:number; anchor:string; participants:CycleParticipant[] }
 
-export type SchedulePattern = WeekdayPattern | CyclePattern
+/** Два сотрудника чередуют блоки разной длины без сброса в начале недели. */
+export interface AlternatingBlocksPattern { kind:'alternatingBlocks'; anchor:string; firstId:string; secondId:string; firstDays:number; secondDays:number }
+
+export type SchedulePattern = WeekdayPattern | CyclePattern | AlternatingBlocksPattern
 
 /**
  * Разница в календарных днях. Считаем через startOf('day'), иначе переход на летнее время
@@ -50,6 +53,7 @@ export function generateSlots(pattern:SchedulePattern, from:string, to:string):P
   const slots:PlannedSlot[] = []
   const last = dayjs(to)
   if (pattern.kind === 'cycle' && (pattern.on <= 0 || pattern.off < 0)) return slots
+  if (pattern.kind === 'alternatingBlocks' && (pattern.firstDays <= 0 || pattern.secondDays <= 0)) return slots
 
   for (let cursor = dayjs(from); !cursor.isAfter(last, 'day'); cursor = cursor.add(1, 'day')) {
     const date = cursor.format('YYYY-MM-DD')
@@ -57,6 +61,11 @@ export function generateSlots(pattern:SchedulePattern, from:string, to:string):P
       for (const [employeeId, days] of Object.entries(pattern.byEmployee)) {
         if (days.includes(cursor.day())) slots.push({ employeeId, date })
       }
+    } else if (pattern.kind === 'alternatingBlocks') {
+      const length = pattern.firstDays + pattern.secondDays
+      const phase = ((dayIndex(date, pattern.anchor) % length) + length) % length
+      const employeeId = phase < pattern.firstDays ? pattern.firstId : pattern.secondId
+      if (employeeId) slots.push({ employeeId, date })
     } else {
       for (const participant of pattern.participants) {
         if (worksOnCycle(pattern, participant, date)) slots.push({ employeeId: participant.employeeId, date })

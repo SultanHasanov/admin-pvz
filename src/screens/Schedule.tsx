@@ -11,13 +11,13 @@ import { Segmented } from '../shared/kit/Segmented'
 import { Chip, EmptyState, ErrorNote, SkeletonRows } from '../shared/kit/Misc'
 import { MonthCalendar, type CalendarDay } from '../shared/kit/MonthCalendar'
 import { WeekMatrix, type MatrixCell } from '../shared/kit/WeekMatrix'
-import { Fab } from '../shared/kit/TabBar'
 import { initials, statusTitles } from '../shared/shifts'
 import { payModeTitles } from '../shared/salary'
 import { dayLabel, monthLabel, monthStart, timeLabel, today as todayDate, weekStartOf } from '../shared/dates'
 import { keys } from '../services/queries'
 import { listEmployees } from '../services/employees'
 import { dayView } from '../features/schedule/dayTone'
+import { slotsForDay } from '../entities/slots'
 import { useVacations } from '../features/schedule/useVacations'
 import { useMonthTotals } from '../features/money/useMonthTotals'
 import { useOrg } from '../app/OrgContext'
@@ -72,11 +72,22 @@ export default function Schedule() {
     const result = new Map<string, CalendarDay>()
     for (let index = 0; index < first.daysInMonth(); index += 1) {
       const date = first.add(index, 'day').format('YYYY-MM-DD')
-      result.set(date, { date, ...dayView(byDate.get(date) ?? [], date, today, nameOf, absences) })
+      const shifts = (byDate.get(date) ?? []).filter(shift => !pointId || shift.pickupPointId === pointId)
+      const view = dayView(shifts, date, today, nameOf, absences)
+      const names = shifts.filter(shift => shift.status !== 'REPLACED' && shift.status !== 'NO_SHOW').slice(0, 2).map(shift => `${nameOf(shift.employeeId).split(' ')[0].slice(0, 5)}${shift.payMode === 'HALF' ? ' ½' : ''}`)
+      const need = pointId ? slotsForDay(points.find(point => point.id === pointId)?.slotConfig, date) : 1
+      const missing = date >= today && names.length < need
+      result.set(date, {
+        date, ...view,
+        tone: missing ? 'bad' : names.length ? 'neutral' : view.tone,
+        strong: missing || view.strong,
+        vacant: missing,
+        lines: missing ? names.length ? [names[0], 'ещё 1'] : ['НУЖЕН'] : names.length ? names : shifts.some(shift => shift.status === 'NO_SHOW') ? ['не выш.'] : view.lines,
+      })
     }
     return result
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [byDate, month, today, employees.data, absences])
+  }, [byDate, month, today, employees.data, absences, pointId, points])
 
   const matrixRows = useMemo(() => activePoints.map(point => {
     const cells = new Map<string, MatrixCell>()
@@ -97,7 +108,8 @@ export default function Schedule() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [weekStart, byDate, today, employees.data, absences])
 
-  const gaps = [...monthDays.values()].filter(day => day.strong).length
+  const gaps = [...monthDays.values()].filter(day => day.vacant).length
+  const gapUnit = gaps % 10 === 1 && gaps % 100 !== 11 ? 'день' : gaps % 10 >= 2 && gaps % 10 <= 4 && (gaps % 100 < 12 || gaps % 100 > 14) ? 'дня' : 'дней'
   const dayShifts = picked ? (byDate.get(picked) ?? []) : []
   const openDay = (point:string, date:string) => open('day', { pointId: point, date, pointLabel: pointName(point) })
 
@@ -111,8 +123,13 @@ export default function Schedule() {
       className="mb-3"
       value={mode}
       onChange={setMode}
-      options={[{ value: 'month', label: 'Месяц' }, { value: 'week', label: 'Неделя' }]}
+      options={pointId
+        ? [{ value: 'month', label: 'Месяц' }, { value: 'week', label: 'Неделя' }]
+        : [{ value: 'month', label: 'ПВЗ за неделю' }, { value: 'week', label: 'Дни недели' }]}
     />
+
+    <Button block className="mb-2" onClick={() => push('/sched/build')}>Заполнить график</Button>
+    <div className="mb-3 text-sub text-muted">{pointId ? 'Нажмите на день, чтобы изменить смены. Дни с пустыми местами выделены красной рамкой.' : 'Сейчас показаны все ПВЗ. Выберите один ПВЗ вверху, чтобы увидеть его календарь месяца.'} Перед сохранением нового графика увидите результат на календаре.</div>
 
     {totals.error && <div className="mb-3"><ErrorNote error={totals.error}/></div>}
 
@@ -131,18 +148,24 @@ export default function Schedule() {
               </div>}
               title={day.shifts.length
                 ? [...new Set(day.shifts.map(shift => nameOf(shift.employeeId)))].join(', ')
-                : <span className="text-bad">Нет сотрудника</span>}
+                : <span className="font-semibold text-bad-strong">Нужен сотрудник</span>}
               sub={day.shifts.length
                 ? day.shifts.map(shift => `${pointName(shift.pickupPointId)} ${timeLabel(shift.startsAt)}`).join(' · ')
                 : 'Смена не занята'}
-              pill={{ label: day.shifts.length ? `${day.shifts.length} смен` : 'пусто', tone: day.view.tone }}
+              pill={{ label: day.shifts.length ? `${day.shifts.length} смен` : day.date >= today ? 'назначить' : 'пусто', tone: day.shifts.length ? 'neutral' : day.date >= today ? 'bad' : 'neutral' }}
+              className={!day.shifts.length && day.date >= today ? 'border-l-[3px] border-bad bg-bad-tint/60' : undefined}
               align="start"
               onClick={() => { setPicked(day.date); setMode('month') }}
             />)}
           </List>
         </Card>
         : pointId
-          ? <MonthCalendar month={month} days={monthDays} selected={picked} onPick={setPicked}/>
+          ? <>
+            {!!gaps && <div role="status" className="mb-2 rounded-md border border-bad bg-bad-tint px-3 py-2 text-sub font-medium text-bad-strong">
+              {gaps} {gapUnit} без сотрудника. Нажмите на день с красной рамкой, чтобы назначить.
+            </div>}
+            <MonthCalendar month={month} days={monthDays} selected={picked} onPick={setPicked}/>
+          </>
           : <WeekMatrix
             weekStart={weekStart}
             rows={matrixRows}
@@ -152,9 +175,7 @@ export default function Schedule() {
             onPick={(point, date) => openDay(point, date)}
           />}
 
-    {!totals.loading && mode === 'month' && pointId && <div className="mt-2 text-sub text-muted">
-      {gaps ? `Дней без сотрудника: ${gaps}` : 'Каждый день месяца закрыт сменой'}
-    </div>}
+    {!totals.loading && mode === 'month' && pointId && !gaps && <div className="mt-2 text-sub text-muted">Каждый день месяца закрыт сменой</div>}
 
     {picked && !totals.loading && <>
       <SectionTitle
@@ -174,7 +195,7 @@ export default function Schedule() {
               key={shift.id}
               leading={<Avatar initials={initials(nameOf(shift.employeeId))}/>}
               title={nameOf(shift.employeeId)}
-              sub={`${pointName(shift.pickupPointId)}${shift.payMode === 'FULL' ? '' : ` · ${payModeTitles[shift.payMode]}`}`}
+              sub={`${pointName(shift.pickupPointId)} · ${shift.payMode === 'HALF' ? '½ оплаты' : shift.payMode === 'FULL' ? 'весь день' : payModeTitles[shift.payMode]}`}
               right={`${timeLabel(shift.startsAt)}–${timeLabel(shift.endsAt)}`}
               rightSub={statusTitles[shift.status]}
               rightSubTone={shift.status === 'COMPLETED' ? 'ok' : shift.status === 'NO_SHOW' ? 'bad' : 'neutral'}
@@ -191,11 +212,6 @@ export default function Schedule() {
       >Поставить сотрудника</Button>}
     </>}
 
-    <Fab onClick={() => open('menu', { title: 'Заполнить график', rows: [
-      { title: 'Мастер графика', sub: 'Места на смене, очередь, период', onClick: () => push('/sched/wizard') },
-      { title: 'Применить шаблон', sub: 'Сохранённые графики', onClick: () => push('/sched/templates') },
-      { title: 'Скопировать неделю', sub: 'Повторить на следующие недели', onClick: () => open('copyWeek', { pointId, weekStart }) },
-      { title: 'Поделиться графиком', sub: 'Картинка для сотрудников', onClick: () => push('/sched/share') },
-    ] })}/>
+    <div className="mt-3 flex flex-wrap gap-x-4"><TextButton onClick={() => push('/sched/templates')}>Сохранённые шаблоны</TextButton><TextButton onClick={() => push('/sched/share')}>Поделиться</TextButton></div>
   </Screen>
 }

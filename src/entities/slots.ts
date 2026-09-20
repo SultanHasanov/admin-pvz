@@ -27,8 +27,9 @@ export const mondayIndex = (date:string) => (dayjs(date).day() + 6) % 7
 /** Сколько человек должно выйти на точку в этот день. */
 export function slotsForDay(config:SlotConfig | null | undefined, date:string):number {
   const settings = config ?? DEFAULT_SLOTS
+  const dayOverride = settings.dates?.[date]
   const exception = settings.wd?.[mondayIndex(date)]
-  return Math.max(1, exception ?? settings.def)
+  return Math.max(1, dayOverride ?? exception ?? settings.def)
 }
 
 /** Отсутствие сотрудника: отпуск, больничный или согласованная заявка. */

@@ -5,11 +5,13 @@ import { haptics } from './haptics'
 
 export interface CalendarDay {
   date:string
-  /** Что написать под числом: инициалы вышедших, «нет» для пустого дня. */
+  /** Что написать под числом: имена вышедших или действие для незакрытого места. */
   lines:string[]
   tone:Tone
   /** Пустая клетка требует внимания — её рамку рисуем сплошным цветом тона. */
   strong?:boolean
+  /** Незакрытое место выделяется независимо от цветового статуса смены. */
+  vacant?:boolean
 }
 
 const WEEKDAYS = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
@@ -18,10 +20,11 @@ const WEEKDAYS = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
  * Сетка месяца. Клетка 52px — минимальная, в которую влезают число и строка инициалов,
  * и при этом семь колонок помещаются в 390px без горизонтальной прокрутки.
  */
-export function MonthCalendar({ month, days, selected, onPick }:{
+export function MonthCalendar({ month, days, selected, selectedDates, onPick }:{
   month:string
   days:Map<string, CalendarDay>
   selected?:string
+  selectedDates?:Set<string>
   onPick?:(date:string) => void
 }) {
   const first = dayjs(`${month}-01`)
@@ -46,18 +49,21 @@ export function MonthCalendar({ month, days, selected, onPick }:{
         const entry = days.get(date)
         const palette = tones[entry?.tone ?? 'neutral']
         const isToday = date === today
-        const isSelected = date === selected
+        const isSelected = date === selected || selectedDates?.has(date)
 
         return <button
           key={date}
           type="button"
+          aria-label={`${day.format('D MMMM')}${entry?.lines.length ? `: ${entry.lines.join(', ')}` : ': свободно'}`}
           className={cn(
-            'tap flex h-[52px] flex-col items-center justify-center gap-px rounded-md border-[1.5px]',
+            'tap flex h-[52px] flex-col items-center justify-center gap-px rounded-md',
+            entry?.vacant ? 'border-[2.5px]' : 'border-[1.5px]',
             date > today && 'opacity-90',
           )}
           style={{
             background: entry ? palette.bg : undefined,
             borderColor: isSelected ? 'var(--color-ink)' : entry?.strong ? palette.fg : entry ? palette.line : 'var(--color-cell-line)',
+            boxShadow: isSelected && entry?.vacant ? 'inset 0 0 0 2px var(--color-bad)' : undefined,
           }}
           onClick={() => { if (onPick) { haptics.tap(); onPick(date) } }}
         >
@@ -67,7 +73,7 @@ export function MonthCalendar({ month, days, selected, onPick }:{
           >{day.date()}</div>
           {entry?.lines.slice(0, 2).map(line => <div
             key={line}
-            className="text-[9px] leading-[1.25] font-semibold"
+            className={cn('text-[9px] leading-[1.25] font-semibold', entry.vacant && 'font-bold')}
             style={{ color: palette.fg }}
           >{line}</div>)}
         </button>

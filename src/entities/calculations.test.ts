@@ -41,6 +41,7 @@ describe('режим оплаты смены', () => {
   it('сотрудник с почасовой оплатой считается по часам и без режима', () => {
     const hourlyRules:SalaryRule[] = [{ id: 'hr', employeeId: 'e', paymentType: 'HOURLY', rateKopecks: 25000, effectiveFrom: '2026-01-01', monthlyNormDays: null, salaryRateId: null, hourlyRateKopecks: null }]
     expect(accrueShifts([shiftOn('a', '2026-09-10')], hourlyRules)).toBe(350000)
+    expect(accrueShifts([half], hourlyRules)).toBe(175000)
   })
 })
 

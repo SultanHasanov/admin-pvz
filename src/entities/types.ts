@@ -17,7 +17,7 @@ export interface PickupPoint { id:string; name:string; address:string; timezone:
 /** Часы работы точки. Становятся временем смен по умолчанию. */
 export interface WorkingHours { from:string; to:string }
 /** Сколько человек выходит на точку в день; исключения по дням недели от понедельника (0). */
-export interface SlotConfig { def:number; wd?:Record<number, number> }
+export interface SlotConfig { def:number; wd?:Record<number, number>; dates?:Record<string, number> }
 export interface Employee { id:string; fullName:string; phone?:string|null; telegramUsername?:string|null; pickupPointIds:string[]; paymentType:PaymentType; rateKopecks:number; monthlyNormDays:number; salaryRateId:string|null; hourlyRateKopecks:number|null; status:'ACTIVE'|'ARCHIVED' }
 export interface SalaryRule { id:string; employeeId:string; paymentType:PaymentType; rateKopecks:number; effectiveFrom:string; monthlyNormDays:number|null; salaryRateId:string|null; hourlyRateKopecks:number|null }
 /** `slotIndex` и `workDate` появились с моделью мест на смене (миграция 0012). */

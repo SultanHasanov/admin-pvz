@@ -79,6 +79,11 @@ function prunePattern<T extends TemplatePattern>(pattern:T, alive:Set<string>):T
     return { ...pattern, slots: pattern.slots.map(slot => ({ ...slot, pattern: prunePattern(slot.pattern, alive) })) }
   }
   if (pattern.kind === 'cycle') return { ...pattern, participants: pattern.participants.filter(p => alive.has(p.employeeId)) }
+  if (pattern.kind === 'alternatingBlocks') return {
+    ...pattern,
+    firstId: alive.has(pattern.firstId) ? pattern.firstId : '',
+    secondId: alive.has(pattern.secondId) ? pattern.secondId : '',
+  }
   const byEmployee = Object.fromEntries(Object.entries(pattern.byEmployee).filter(([id]) => alive.has(id)))
   return { ...pattern, byEmployee }
 }

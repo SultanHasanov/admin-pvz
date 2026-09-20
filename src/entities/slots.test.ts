@@ -34,6 +34,12 @@ describe('число мест на смене', () => {
     expect(slotsForDay(config, '2026-09-21')).toBe(1)
   })
 
+  it('разовая норма дня важнее нормы дня недели и ПВЗ', () => {
+    const config = { def: 2, wd: { 0: 2 }, dates: { '2026-09-21': 1 } }
+    expect(slotsForDay(config, '2026-09-21')).toBe(1)
+    expect(slotsForDay(config, '2026-09-28')).toBe(2)
+  })
+
   it('воскресенье — это 6, а не 0', () => {
     expect(mondayIndex('2026-09-20')).toBe(6)
     expect(mondayIndex('2026-09-21')).toBe(0)

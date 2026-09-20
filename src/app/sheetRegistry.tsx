@@ -152,7 +152,7 @@ export function SheetHost() {
   const entry:SheetEntry | undefined = stack[stack.length - 1]
   const def = entry && sheetRegistry[entry.type]
   const props = entry?.props ?? {}
-  const Component = def?.component ?? NotReady
+  const Component = entry ? def?.component ?? NotReady : null
 
   return <Sheet
     open={!!entry}
@@ -162,7 +162,7 @@ export function SheetHost() {
     sub={def?.sub?.(props)}
   >
     <Suspense fallback={<SkeletonRows rows={2}/>}>
-      <Component {...props} close={close}/>
+      {Component && <Component {...props} close={close}/>}
     </Suspense>
   </Sheet>
 }
