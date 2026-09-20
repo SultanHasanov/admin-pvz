@@ -58,6 +58,7 @@ export default function Telegram() {
 function PointBot({ point, integration }:{ point:PickupPoint; integration?:TelegramIntegrationInfo }) {
   const client = useQueryClient()
   const { open } = useSheets()
+  const { push } = useNav()
   const [token, setToken] = useState('')
   const [pairing, setPairing] = useState<string>()
   const refresh = () => void client.invalidateQueries({ queryKey: keys.telegram })
@@ -96,7 +97,10 @@ function PointBot({ point, integration }:{ point:PickupPoint; integration?:Teleg
             onClick={() => void navigator.clipboard?.writeText(`/start ${pairing}`).then(() => toastDone('Команда скопирована'))}
           >/start {pairing}</button>
         </div>}
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <Button block variant="secondary" className="mt-3" onClick={() => push(`/more/telegram/${point.id}`)}>
+          Напоминания в группу
+        </Button>
+        <div className="mt-2 grid grid-cols-2 gap-2">
           <Button disabled={pair.isPending} onClick={() => pair.mutate()}>Привязать мой Telegram</Button>
           <Button
             variant="secondary"

@@ -1,4 +1,5 @@
 import { db, decryptToken, safeEqual, secretHash, telegram } from '../_telegram.js'
+import { buildReminder, localNow } from '../_reminders.js'
 
 const mainKeyboard = [[{ text: '➕ Удержание' }, { text: '➕ Расход' }], [{ text: '👥 Сотрудники' }, { text: '📅 Смены' }], [{ text: '🔄 Главное меню' }]]
 const money = text => { const value = Number(String(text).replace(',', '.').replace(/[^\d.]/g, '')); return Number.isFinite(value) && value > 0 ? Math.round(value * 100) : null }
@@ -22,12 +23,84 @@ async function getChat(integrationId, chatId) { const rows = await db(`telegram_
 async function setState(id, state) { await db(`telegram_chats?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ state, updated_at: new Date().toISOString() }), prefer: 'return=minimal' }) }
 async function send(token, chatId, text, keyboard = mainKeyboard) { return telegram(token, 'sendMessage', { chat_id: chatId, text, reply_markup: { keyboard, resize_keyboard: true } }) }
 
-async function linkChat(context, chatId, userId, code) {
+const isGroupChat = chat => chat?.type === 'group' || chat?.type === 'supergroup'
+
+/**
+ * Привязка чата по коду из приложения.
+ *
+ * Код помечен тем, куда его ждут: личный код в группе и код группы в личке не сработают.
+ * Иначе любой участник группы, увидев чужой личный код, подписал бы общий чат на сводки
+ * или, наоборот, получил бы в личку права на ввод расходов.
+ */
+async function linkChat(context, message, code) {
+  const chat = message.chat
+  const group = isGroupChat(chat)
   const rows = await db(`telegram_pairing_codes?integration_id=eq.${context.id}&code=eq.${encodeURIComponent(code)}&used_at=is.null&expires_at=gt.${encodeURIComponent(new Date().toISOString())}&select=*`)
-  const pair = rows[0]; if (!pair) return false
-  await db('telegram_chats', { method: 'POST', body: JSON.stringify({ organization_id: context.organization_id, integration_id: context.id, user_id: pair.user_id, telegram_chat_id: chatId, telegram_user_id: userId, role: pair.role, state: { step: 'idle', employeeId: pair.employee_id || null } }), prefer: 'resolution=merge-duplicates,return=minimal' })
+  const pair = rows[0]
+  if (!pair) return 'unknown'
+  if (Boolean(pair.for_group) !== group) return 'wrong_place'
+  await db('telegram_chats?on_conflict=integration_id,telegram_chat_id', {
+    method: 'POST',
+    body: JSON.stringify({
+      organization_id: context.organization_id, integration_id: context.id, user_id: pair.user_id,
+      telegram_chat_id: chat.id, telegram_user_id: message.from.id, role: pair.role,
+      chat_kind: group ? 'GROUP' : 'PRIVATE',
+      title: group ? String(chat.title || '').slice(0, 120) : null,
+      active: true,
+      state: { step: 'idle', employeeId: pair.employee_id || null },
+      updated_at: new Date().toISOString(),
+    }),
+    prefer: 'resolution=merge-duplicates,return=minimal',
+  })
   await db(`telegram_pairing_codes?id=eq.${pair.id}`, { method: 'PATCH', body: JSON.stringify({ used_at: new Date().toISOString() }), prefer: 'return=minimal' })
-  return true
+  return group ? 'group' : 'private'
+}
+
+const deactivateChat = (integrationId, chatId) => db(
+  `telegram_chats?integration_id=eq.${integrationId}&telegram_chat_id=eq.${chatId}`,
+  { method: 'PATCH', body: JSON.stringify({ active: false, updated_at: new Date().toISOString() }), prefer: 'return=minimal' },
+).catch(() => null)
+
+const GROUP_HELP = [
+  'Я присылаю сюда напоминания по этому ПВЗ.',
+  '',
+  '/today — кто на смене сегодня',
+  '/tomorrow — кто выходит завтра',
+  '/week — расписание на неделю',
+  '/gaps — где в графике не хватает людей',
+  '/stop — перестать писать в эту группу',
+  '',
+  'Время напоминаний настраивается в приложении: «Ещё → Telegram-боты».',
+].join('\n')
+
+const GROUP_COMMANDS = { '/today': 'duty_today', '/tomorrow': 'duty_tomorrow', '/week': 'week', '/gaps': 'gaps' }
+
+/**
+ * Группа — это чат живых людей, а не пульт: на обычные сообщения бот обязан молчать,
+ * иначе его выгонят в первый же день. Отвечаем только на свои команды.
+ */
+async function handleGroup(context, chat, text) {
+  const command = text.replace(/@[A-Za-z0-9_]+/g, '').trim().toLowerCase()
+  const reply = value => telegram(context.botToken, 'sendMessage', { chat_id: chat.telegram_chat_id, text: value })
+
+  if (command === '/start' || command === '/help') return reply(GROUP_HELP)
+  if (command === '/stop') {
+    await deactivateChat(context.id, chat.telegram_chat_id)
+    return reply('Больше сюда не пишу. Чтобы вернуть напоминания, создайте новый код в приложении.')
+  }
+
+  const kind = GROUP_COMMANDS[command]
+  if (!kind) return null
+
+  const [point] = await db(`pickup_points?id=eq.${context.pickup_point_id}&select=id,name,timezone,slot_config`)
+  if (!point) return reply('Этот бот больше не привязан к ПВЗ.')
+  const [settings] = await db(`telegram_bot_settings?integration_id=eq.${context.id}&select=*`)
+  const { date } = localNow(point.timezone || 'Europe/Moscow')
+  const message = await buildReminder({
+    kind, point, organizationId: context.organization_id, today: date, preview: true,
+    settings: settings || { gaps_horizon_days: 14, gaps_quiet_when_full: true },
+  })
+  return reply(message || 'Пока нечего показать.')
 }
 
 const listPoints = organizationId => db(`pickup_points?organization_id=eq.${organizationId}&archived_at=is.null&select=id,name&order=name`)
@@ -161,23 +234,56 @@ export default async function handler(req, res) {
       try { await db('telegram_updates', { method:'POST', body:JSON.stringify({ integration_id:context.id, update_id:updateId }), prefer:'return=minimal' }) }
       catch (error) { if (String(error.message).includes('23505') || String(error.message).includes('duplicate')) return res.status(200).json({ ok:true, duplicate:true }); throw error }
     }
-    const message = req.body?.message; if (!message?.chat?.id || !message?.from?.id) return res.status(200).json({ ok: true })
-    const text = String(message.text || '').trim(), match = text.match(/^\/start\s+([A-Z0-9]{8})$/i)
-    if (match) {
-      const linked = await linkChat(context, message.chat.id, message.from.id, match[1].toUpperCase())
-      await send(context.botToken, message.chat.id, linked ? 'PVZ Control подключён. Выберите действие.' : 'Код подключения недействителен или истёк. Создайте новый в админке.')
+    // Бота добавили в группу или выгнали из неё. Без этого напоминания продолжали бы
+    // уходить в чат, из которого бота уже удалили.
+    const membership = req.body?.my_chat_member
+    if (membership?.chat?.id) {
+      const status = membership.new_chat_member?.status
+      if (['left', 'kicked'].includes(status)) await deactivateChat(context.id, membership.chat.id)
+      else if (isGroupChat(membership.chat) && ['member', 'administrator'].includes(status)) {
+        const known = await getChat(context.id, membership.chat.id)
+        if (!known) await telegram(context.botToken, 'sendMessage', {
+          chat_id: membership.chat.id,
+          text: 'Я на месте. Чтобы включить напоминания, откройте в приложении «Ещё → Telegram-боты», создайте код для группы и отправьте сюда: /start КОД',
+        }).catch(() => null)
+      }
       return res.status(200).json({ ok: true })
     }
+
+    const message = req.body?.message; if (!message?.chat?.id || !message?.from?.id) return res.status(200).json({ ok: true })
+    const text = String(message.text || '').trim()
+    const match = text.match(/^\/start(?:@[A-Za-z0-9_]+)?\s+([A-Z0-9]{8})$/i)
+    if (match) {
+      const linked = await linkChat(context, message, match[1].toUpperCase())
+      const answer = linked === 'group' ? 'Группа подключена. Буду присылать сюда напоминания по этому ПВЗ. Команды — /help'
+        : linked === 'private' ? 'PVZ Control подключён. Выберите действие.'
+          : linked === 'wrong_place' ? 'Этот код не для такого чата: код группы отправляют в группу, личный — боту в личке.'
+            : 'Код подключения недействителен или истёк. Создайте новый в приложении.'
+      if (linked === 'private') await send(context.botToken, message.chat.id, answer)
+      else await telegram(context.botToken, 'sendMessage', { chat_id: message.chat.id, text: answer })
+      return res.status(200).json({ ok: true })
+    }
+
     const chat = await getChat(context.id, message.chat.id)
-    if (!chat) { await send(context.botToken, message.chat.id, 'Сначала создайте код подключения в админке и отправьте /start КОД.'); return res.status(200).json({ ok: true }) }
+    if (!chat) {
+      // В чужой группе молчим: бот мог попасть туда до привязки, и подсказка в каждом
+      // сообщении выглядела бы как спам.
+      if (!isGroupChat(message.chat)) await send(context.botToken, message.chat.id, 'Сначала создайте код подключения в админке и отправьте /start КОД.')
+      return res.status(200).json({ ok: true })
+    }
     try {
-      await handleConnected(context, chat, text)
+      if (chat.chat_kind === 'GROUP') await handleGroup(context, chat, text)
+      else await handleConnected(context, chat, text)
     } catch (error) {
       // Пятисотка заставила бы Telegram ретраить апдейт и подвесить очередь чата,
       // поэтому сбой сценария объясняем пользователю и подтверждаем доставку.
       console.error('telegram scenario', error)
-      await setState(chat.id, { step: 'idle' }).catch(() => null)
-      await send(context.botToken, chat.telegram_chat_id, 'Не удалось выполнить действие. Попробуйте ещё раз.').catch(() => null)
+      if (chat.chat_kind === 'GROUP') {
+        await telegram(context.botToken, 'sendMessage', { chat_id: chat.telegram_chat_id, text: 'Не получилось собрать ответ. Попробуйте ещё раз.' }).catch(() => null)
+      } else {
+        await setState(chat.id, { step: 'idle' }).catch(() => null)
+        await send(context.botToken, chat.telegram_chat_id, 'Не удалось выполнить действие. Попробуйте ещё раз.').catch(() => null)
+      }
     }
     return res.status(200).json({ ok: true })
   } catch (error) {

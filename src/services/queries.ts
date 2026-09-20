@@ -35,6 +35,9 @@ export const keys = {
   salaryPeriod: (month:string) => ['salary-period', month] as const,
 
   telegram: ['telegram-integrations'] as const,
+  /** Группа-получатель и расписание напоминаний одного бота. */
+  telegramGroups: (integrationId:string) => ['telegram-bot', integrationId, 'groups'] as const,
+  telegramSettings: (integrationId:string) => ['telegram-bot', integrationId, 'settings'] as const,
   wb: ['wb-integration'] as const,
 
   // Фаза 5: заявки, отпуска, уведомления.
@@ -90,4 +93,6 @@ export const scope = {
   salaryPeriod: ['salary-period'],
   requests: ['shift-requests'],
   vacations: ['vacations'],
+  telegram: ['telegram-integrations'],
+  telegramBot: ['telegram-bot'],
 } as const satisfies Record<string, readonly [string]>

@@ -49,7 +49,6 @@ export default function Onboarding({ session, onDone }:{ session:Session | null;
   const [pendingEmail, setPendingEmail] = useState('')
   const [code, setCode] = useState('')
   const [pointName, setPointName] = useState('')
-  const [address, setAddress] = useState('')
   const [from, setFrom] = useState('09:00')
   const [to, setTo] = useState('21:00')
   const [fullName, setFullName] = useState('')
@@ -102,7 +101,7 @@ export default function Onboarding({ session, onDone }:{ session:Session | null;
       }
       setStep(2)
     } else if (step === 2) {
-      setPointId(await createOrganization({ name: organization, pointName, address, hours: { from, to } }))
+      setPointId(await createOrganization({ name: organization, pointName, hours: { from, to } }))
       setStep(3)
     } else if (step === 3) {
       setEmployeeId(await createEmployee({
@@ -131,7 +130,7 @@ export default function Onboarding({ session, onDone }:{ session:Session | null;
 
   const valid = {
     1: organization.trim().length >= 2 && (session !== null || (pendingEmail ? isOtpReady(code) : email.includes('@') && password.length >= 6)),
-    2: pointName.trim().length > 0 && address.trim().length > 0 && /^\d\d:\d\d$/.test(from) && /^\d\d:\d\d$/.test(to),
+    2: pointName.trim().length > 0 && /^\d\d:\d\d$/.test(from) && /^\d\d:\d\d$/.test(to),
     3: fullName.trim().length > 1 && parseMoney(rate) > 0,
     4: Boolean(employeeId && pointId),
   }[step]
@@ -154,8 +153,7 @@ export default function Onboarding({ session, onDone }:{ session:Session | null;
     </>}
 
     {step === 2 && <>
-      <TextField label="Название пункта" value={pointName} placeholder="ПВЗ Ленина 12" onChange={event => setPointName(event.target.value)}/>
-      <TextField label="Адрес" value={address} placeholder="ул. Ленина, 12" onChange={event => setAddress(event.target.value)}/>
+      <TextField label="Название пункта" value={pointName} placeholder="Ленина 12" onChange={event => setPointName(event.target.value)}/>
       <div className="grid grid-cols-2 gap-2">
         <TextField label="Открытие" type="time" value={from} onChange={event => setFrom(event.target.value)}/>
         <TextField label="Закрытие" type="time" value={to} onChange={event => setTo(event.target.value)}/>

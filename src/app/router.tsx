@@ -34,6 +34,7 @@ const Operations = lazy(() => import('../screens/settings/Operations'))
 const WbCabinet = lazy(() => import('../screens/settings/WbCabinet'))
 const WbSync = lazy(() => import('../screens/settings/WbSync'))
 const Telegram = lazy(() => import('../screens/settings/Telegram'))
+const TelegramBot = lazy(() => import('../screens/settings/TelegramBot'))
 const RateHistory = lazy(() => import('../screens/settings/RateHistory'))
 
 /**
@@ -81,6 +82,8 @@ export function AppRoutes() {
       <Route path="/more/settings" element={<Settings/>}/>
       <Route path="/more/wb" element={<WbCabinet/>}/>
       <Route path="/more/telegram" element={<Telegram/>}/>
+      {/* Напоминания бота конкретной точки: группа-получатель и расписание. */}
+      <Route path="/more/telegram/:pointId" element={<TelegramBot/>}/>
 
       {/* Сотрудник */}
       <Route path="/me" element={<MeHome/>}/>

@@ -20,7 +20,7 @@ import { useSheets } from '../../app/sheets'
 const WEEKDAYS = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 
 /**
- * Пункт выдачи: название, адрес, часы работы и сколько человек выходит в день.
+ * Пункт выдачи: название, часы работы и сколько человек выходит в день.
  *
  * Часы работы становятся временем смен по умолчанию. Места по дням недели — то, из чего
  * считаются дырки в графике: «в выходные двое» задаётся здесь, а не в каждом графике.
@@ -43,7 +43,6 @@ function PointForm({ point, header }:{ point?:PickupPoint; header:ReactElement }
   const { back } = useNav()
   const { open } = useSheets()
   const [name, setName] = useState(point?.name ?? '')
-  const [address, setAddress] = useState(point?.address ?? '')
   const [from, setFrom] = useState(point?.hours?.from ?? '09:00')
   const [to, setTo] = useState(point?.hours?.to ?? '21:00')
   const [slots, setSlots] = useState<SlotConfig>(point?.slotConfig ?? DEFAULT_SLOTS)
@@ -58,7 +57,7 @@ function PointForm({ point, header }:{ point?:PickupPoint; header:ReactElement }
 
   const save = useWrite({
     run: async () => {
-      const input = { name, address, timezone: point?.timezone ?? 'Europe/Moscow', hours: { from, to } }
+      const input = { name, timezone: point?.timezone ?? 'Europe/Moscow', hours: { from, to } }
       let id = point?.id
       if (id) await updatePickupPoint(id, input)
       else id = (await createPickupPoint(input)).id
@@ -84,8 +83,7 @@ function PointForm({ point, header }:{ point?:PickupPoint; header:ReactElement }
     </div>
 
     <Card className="p-4">
-      <TextField label="Название" value={name} placeholder="ПВЗ Ленина 12" onChange={event => setName(event.target.value)}/>
-      <TextField label="Адрес" value={address} placeholder="ул. Ленина, 12" onChange={event => setAddress(event.target.value)}/>
+      <TextField label="Название" value={name} placeholder="Ленина 12" onChange={event => setName(event.target.value)}/>
       <div className="grid grid-cols-2 gap-2">
         <TextField label="Открытие" type="time" value={from} onChange={event => setFrom(event.target.value)}/>
         <TextField label="Закрытие" type="time" value={to} onChange={event => setTo(event.target.value)}/>

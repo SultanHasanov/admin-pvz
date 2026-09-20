@@ -40,7 +40,7 @@ export default function Points() {
             return <ListRow
               key={point.id}
               title={point.name}
-              sub={point.archivedAt ? point.address : `${point.address} · ${hoursLabel(point)}`}
+              sub={point.archivedAt ? point.address || undefined : [point.address, hoursLabel(point)].filter(Boolean).join(' · ')}
               right={point.archivedAt ? 'в архиве' : `${staff} ${plural(staff, 'сотрудник', 'сотрудника', 'сотрудников')}`}
               chevron
               align="start"

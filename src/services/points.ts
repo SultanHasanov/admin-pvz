@@ -2,14 +2,14 @@ import type { PickupPoint, SlotConfig, WorkingHours } from '../entities/types'
 import { DEFAULT_SLOTS } from '../entities/slots'
 import { client, organizationId } from './org'
 
-interface PointRow { id:string; name:string; address:string; timezone:string; archived_at:string | null; slot_config:SlotConfig | null; working_hours:Partial<WorkingHours> | null }
+interface PointRow { id:string; name:string; address:string | null; timezone:string; archived_at:string | null; slot_config:SlotConfig | null; working_hours:Partial<WorkingHours> | null }
 const columns = 'id,name,address,timezone,archived_at,slot_config,working_hours'
 
 /** Колонка jsonb с дефолтом `{}`: пустой объект — часы не заданы. */
 const hoursOf = (value:Partial<WorkingHours> | null):WorkingHours | null =>
   value?.from && value.to ? { from: value.from, to: value.to } : null
 const toPoint = (row:PointRow):PickupPoint => ({
-  id: row.id, name: row.name, address: row.address, timezone: row.timezone, archivedAt: row.archived_at,
+  id: row.id, name: row.name, address: row.address ?? '', timezone: row.timezone, archivedAt: row.archived_at,
   slotConfig: row.slot_config ?? DEFAULT_SLOTS,
   hours: hoursOf(row.working_hours),
 })
@@ -23,12 +23,16 @@ export async function listPickupPoints(includeArchived = false):Promise<PickupPo
   return (data as PointRow[]).map(toPoint)
 }
 
-export interface PointInput { name:string; address:string; timezone:string; hours?:WorkingHours | null }
+/**
+ * Адрес у пункта больше не спрашиваем: название точки и есть её адрес («Ленина 12»).
+ * Поле осталось необязательным ради старых записей — их адреса не затираем.
+ */
+export interface PointInput { name:string; address?:string; timezone:string; hours?:WorkingHours | null }
 
 export async function createPickupPoint(input:PointInput) {
   const organization_id = await organizationId()
   const { data, error } = await client().from('pickup_points').insert({
-    organization_id, name: input.name.trim(), address: input.address.trim(), timezone: input.timezone,
+    organization_id, name: input.name.trim(), address: input.address?.trim() ?? '', timezone: input.timezone,
     working_hours: input.hours ?? {},
   }).select(columns).single()
   if (error) throw error
@@ -37,7 +41,8 @@ export async function createPickupPoint(input:PointInput) {
 
 export async function updatePickupPoint(id:string, input:PointInput) {
   const { error } = await client().from('pickup_points').update({
-    name: input.name.trim(), address: input.address.trim(), timezone: input.timezone,
+    name: input.name.trim(), timezone: input.timezone,
+    ...(input.address !== undefined ? { address: input.address.trim() } : {}),
     ...(input.hours !== undefined ? { working_hours: input.hours ?? {} } : {}),
     updated_at: new Date().toISOString(),
   }).eq('id', id)

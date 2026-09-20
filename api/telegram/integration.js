@@ -21,6 +21,8 @@ export default async function handler(req, res) {
         const secrets = await db(`telegram_bot_secrets?integration_id=eq.${current.id}&select=encrypted_bot_token`)
         if (secrets[0]) await telegram(decryptToken(secrets[0].encrypted_bot_token), 'deleteWebhook', { drop_pending_updates: true }).catch(() => null)
         await db(`telegram_integrations?id=eq.${current.id}`, { method:'PATCH', body:JSON.stringify({ status:'NOT_CONNECTED', bot_id:null, bot_username:null, last_error:null, updated_at:new Date().toISOString() }), prefer:'return=minimal' })
+        // Чаты отвязываем: токена больше нет, и «подключённая группа» в приложении врала бы.
+        await db(`telegram_chats?integration_id=eq.${current.id}`, { method:'PATCH', body:JSON.stringify({ active:false, updated_at:new Date().toISOString() }), prefer:'return=minimal' }).catch(() => null)
         await db(`telegram_bot_secrets?integration_id=eq.${current.id}`, { method:'DELETE', prefer:'return=minimal' })
       }
       return res.status(200).json({ ok:true })
@@ -47,9 +49,29 @@ export default async function handler(req, res) {
     }
     const webhookSecret = crypto.randomBytes(32).toString('base64url')
     await db('telegram_bot_secrets', { method:'POST', body:JSON.stringify({ integration_id:integration.id, organization_id:organizationId, encrypted_bot_token:encryptToken(botToken), webhook_secret_hash:secretHash(webhookSecret), updated_at:now }), prefer:'resolution=merge-duplicates,return=minimal' })
+    // Настройки напоминаний живут отдельной строкой и создаются вместе с ботом:
+    // без неё экран настроек был бы пустым, а планировщику нечего было бы читать.
+    await db('telegram_bot_settings?on_conflict=integration_id', {
+      method:'POST',
+      body:JSON.stringify({ integration_id:integration.id, organization_id:organizationId, pickup_point_id:pickupPointId }),
+      prefer:'resolution=ignore-duplicates,return=minimal',
+    }).catch(() => null)
+
     const webhookUrl = `${publicAppUrl(req)}/api/telegram/webhook?integration=${encodeURIComponent(integration.id)}`
     try {
-      await telegram(botToken, 'setWebhook', { url:webhookUrl, secret_token:webhookSecret, allowed_updates:['message'], drop_pending_updates:false })
+      // my_chat_member — чтобы знать, что бота добавили в группу или выгнали из неё.
+      await telegram(botToken, 'setWebhook', { url:webhookUrl, secret_token:webhookSecret, allowed_updates:['message','my_chat_member'], drop_pending_updates:false })
+      // Подсказка команд в группе: их набирают редко и наизусть не помнят.
+      await telegram(botToken, 'setMyCommands', {
+        scope:{ type:'all_group_chats' },
+        commands:[
+          { command:'today', description:'Кто на смене сегодня' },
+          { command:'tomorrow', description:'Кто выходит завтра' },
+          { command:'week', description:'Расписание на неделю' },
+          { command:'gaps', description:'Где не хватает людей' },
+          { command:'help', description:'Что умеет бот' },
+        ],
+      }).catch(() => null)
       await db(`telegram_integrations?id=eq.${integration.id}`, { method:'PATCH', body:JSON.stringify({ status:'CONNECTED', last_error:null, updated_at:new Date().toISOString() }), prefer:'return=minimal' })
     } catch (error) {
       await db(`telegram_integrations?id=eq.${integration.id}`, { method:'PATCH', body:JSON.stringify({ status:'ERROR', last_error:String(error.message).slice(0,300), updated_at:new Date().toISOString() }), prefer:'return=minimal' })

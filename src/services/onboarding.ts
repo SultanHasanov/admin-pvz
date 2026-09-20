@@ -11,11 +11,13 @@ import { createShiftsBulk } from './shifts'
  * и владелец не должен застрять между шагами с «полуорганизацией».
  * Часы работы RPC не принимает, поэтому пишем их следом.
  */
-export async function createOrganization(input:{ name:string; pointName:string; address:string; hours:WorkingHours }) {
+export async function createOrganization(input:{ name:string; pointName:string; hours:WorkingHours }) {
   const { error } = await client().rpc('create_organization_with_owner', {
     p_name: input.name.trim(),
     p_point_name: input.pointName.trim(),
-    p_point_address: input.address.trim(),
+    // Адрес у пункта больше не спрашиваем — название и есть адрес. RPC аргумент оставлен
+    // обязательным в базе, поэтому передаём пустую строку.
+    p_point_address: '',
     p_timezone: 'Europe/Moscow',
   })
   if (error) throw error
@@ -23,7 +25,7 @@ export async function createOrganization(input:{ name:string; pointName:string; 
   resetOrganizationCache()
   const [point] = await listPickupPoints()
   if (!point) throw new Error('Организация создана, но пункт не найден — обновите страницу')
-  await updatePickupPoint(point.id, { name: point.name, address: point.address, timezone: point.timezone, hours: input.hours })
+  await updatePickupPoint(point.id, { name: point.name, timezone: point.timezone, hours: input.hours })
   return point.id
 }
 
