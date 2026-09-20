@@ -24,7 +24,7 @@ export default function More() {
     {
       label: 'Организация',
       rows: [
-        { title: 'Пункты выдачи', sub: 'Адреса, часы работы и места на смене', to: '/more/points' },
+        { title: 'Пункты выдачи', sub: 'Адреса, часы работы и число сотрудников на смене', to: '/more/points' },
         { title: 'Настройки', sub: 'Налог, ставки, дни выплат', to: '/more/settings' },
       ],
     },

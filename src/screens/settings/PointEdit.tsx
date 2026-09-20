@@ -92,14 +92,14 @@ function PointForm({ point, header }:{ point?:PickupPoint; header:ReactElement }
       </div>
     </Card>
 
-    <SectionTitle>Мест на смене</SectionTitle>
+    <SectionTitle>Сотрудников на смене</SectionTitle>
     <Card className="p-4">
       <div className="flex items-center justify-between gap-3">
         <div className="text-row">Обычно</div>
         <Stepper value={slots.def} min={1} max={4} onChange={def => setSlots(current => ({ ...current, def }))}/>
       </div>
       <div className="mt-2 text-sub leading-[1.4] text-muted">
-        Если в какие-то дни нужно больше людей — задайте ниже. Незанятое место станет дыркой в графике.
+        Если в какие-то дни нужно больше людей — задайте ниже. Нехватка сотрудника будет видна в графике.
       </div>
       <div className="mt-3 border-t border-line-soft">
         {WEEKDAYS.map((label, index) => <div key={label} className="flex items-center justify-between gap-3 border-b border-line-soft py-2 last:border-b-0">

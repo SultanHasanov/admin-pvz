@@ -131,11 +131,11 @@ export default function Wizard() {
       </div>
     </>}
 
-    <SectionTitle>Мест на смене</SectionTitle>
+    <SectionTitle>Сотрудников на смене</SectionTitle>
     <Card className="p-[13px]">
       <div className="flex items-center justify-between gap-3">
         <div className="text-sub leading-[1.4] text-muted">
-          Сколько человек должно выходить в день. У каждого места своя очередь.
+          Сколько человек должно выходить в день. Для каждой позиции задайте очередь сотрудников.
         </div>
         <Stepper value={draft.slots.length} min={1} max={4} onChange={draft.setSlotCount}/>
       </div>

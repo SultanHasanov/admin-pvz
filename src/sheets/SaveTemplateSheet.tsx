@@ -50,7 +50,7 @@ export default function SaveTemplateSheet({ plans, pointId, startsAt, endsAt, pa
       placeholder="Например: Основной 2/2"
       value={name}
       onChange={event => setName(event.target.value)}
-      hint={`Мест на смене: ${plans.length} · сотрудников в очередях: ${employeeIds.length}`}
+      hint={`Сотрудников на смене: ${plans.length} · сотрудников в очередях: ${employeeIds.length}`}
     />
 
     <Button block disabled={!name.trim() || write.isPending} onClick={() => write.mutate(undefined as void)}>
