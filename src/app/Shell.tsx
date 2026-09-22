@@ -1,8 +1,6 @@
 import { useEffect, type ReactNode } from 'react'
 import { useLocation, type Location } from 'react-router-dom'
 import { TabBar } from '../shared/kit/TabBar'
-import { Toaster } from '../shared/kit/Toaster'
-import { UpdatePrompt } from './UpdatePrompt'
 import { useKeyboardInset } from '../shared/kit/useKeyboardInset'
 import { Stack } from './Stack'
 import { SheetHost } from './sheetRegistry'
@@ -56,8 +54,6 @@ export function AppShell({ render }:{ render:(location:Location) => ReactNode })
             : <button type="button" className="rounded-md bg-accent px-4 py-3 text-white" onClick={() => push('/more/points/new')}>Добавить ПВЗ</button>}
         </div>
       </div>}
-    <Toaster/>
-    <UpdatePrompt/>
   </div>
 }
 

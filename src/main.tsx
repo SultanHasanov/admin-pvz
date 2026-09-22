@@ -5,6 +5,9 @@ import { BrowserRouter } from 'react-router-dom'
 import dayjs from 'dayjs'
 import 'dayjs/locale/ru'
 import { App } from './app/App'
+import { AppErrorBoundary } from './app/StartupRecovery'
+import { UpdatePrompt } from './app/UpdatePrompt'
+import { Toaster } from './shared/kit/Toaster'
 import './shared/styles.css'
 
 const queryClient = new QueryClient({
@@ -26,7 +29,11 @@ dayjs.locale('ru')
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter><App/></BrowserRouter>
+      <BrowserRouter>
+        <UpdatePrompt/>
+        <AppErrorBoundary><App/></AppErrorBoundary>
+        <Toaster/>
+      </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,
 )

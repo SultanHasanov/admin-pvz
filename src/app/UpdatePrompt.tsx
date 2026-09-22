@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 
@@ -13,12 +13,23 @@ const CHECK_EVERY = 60 * 60 * 1000
  * форму. Тост висит, пока человек не нажмёт «Обновить» или не смахнёт его.
  */
 export function UpdatePrompt() {
+  const checkTimer = useRef<number | undefined>(undefined)
   const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({
     onRegisteredSW(_url, registration) {
       if (!registration) return
-      setInterval(() => { void registration.update() }, CHECK_EVERY)
+      // Проверяем обновление сразу: приложение могли не открывать неделями.
+      void registration.update().catch(error => console.error('[pwa] update check failed', error))
+      window.clearInterval(checkTimer.current)
+      checkTimer.current = window.setInterval(() => {
+        void registration.update().catch(error => console.error('[pwa] update check failed', error))
+      }, CHECK_EVERY)
+    },
+    onRegisterError(error) {
+      console.error('[pwa] service worker registration failed', error)
     },
   })
+
+  useEffect(() => () => window.clearInterval(checkTimer.current), [])
 
   useEffect(() => {
     if (!needRefresh) return

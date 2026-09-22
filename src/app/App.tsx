@@ -77,7 +77,13 @@ export function App() {
 
   useEffect(() => {
     if (!supabase) { setSession(null); return }
-    void supabase.auth.getSession().then(({ data }) => { userId.current = data.session?.user.id ?? null; setSession(data.session) })
+    void supabase.auth.getSession()
+      .then(({ data }) => { userId.current = data.session?.user.id ?? null; setSession(data.session) })
+      .catch(error => {
+        // Повреждённая локальная сессия не должна навсегда оставлять пустой экран.
+        console.error('[auth] failed to restore session', error)
+        setSession(null)
+      })
     const { data } = supabase.auth.onAuthStateChange((event, next) => {
       // Переход по старой ссылке из письма: Supabase сам объявляет восстановление.
       if (event === 'PASSWORD_RECOVERY') { markRecovery(); navigate('/reset', { replace: true }) }
