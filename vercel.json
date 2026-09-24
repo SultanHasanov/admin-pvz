@@ -1,6 +1,11 @@
 {
   "routes": [
     {
+      "src": "/assets/(.*)",
+      "headers": { "Access-Control-Allow-Origin": "*" },
+      "continue": true
+    },
+    {
       "src": "/(.*)",
       "has": [{ "type": "host", "value": "www.taktab.ru" }],
       "status": 308,
