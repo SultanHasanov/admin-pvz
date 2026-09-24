@@ -13,6 +13,7 @@ import { useMonthTotals } from '../features/money/useMonthTotals'
 import { useAlerts } from '../features/home/useAlerts'
 import { badgeOf } from '../entities/notifications'
 import { useToday } from '../features/home/useToday'
+import { SetupStrip } from '../features/setup/SetupStrip'
 import { useOrg } from '../app/OrgContext'
 import { useNav } from '../app/nav'
 import { useSheets } from '../app/sheets'
@@ -55,6 +56,8 @@ export default function Home() {
     </FilterRow>}
   >
     {totals.error && <div className="mb-3"><ErrorNote error={totals.error}/></div>}
+
+    <SetupStrip/>
 
     <Hero
       label={`Чистая прибыль · ${period}`}

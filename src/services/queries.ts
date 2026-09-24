@@ -37,6 +37,8 @@ export const keys = {
   telegramGroups: (integrationId:string) => ['telegram-bot', integrationId, 'groups'] as const,
   telegramSettings: (integrationId:string) => ['telegram-bot', integrationId, 'settings'] as const,
   wb: ['wb-integration'] as const,
+  /** Задания «Настройка пункта»: что сделано и скрыт ли список. */
+  setup: ['setup-progress'] as const,
 
   // Фаза 5: заявки и уведомления.
   /** Кто я в организации: employee_id участника. У владельца пусто. */
@@ -89,4 +91,5 @@ export const scope = {
   requests: ['shift-requests'],
   telegram: ['telegram-integrations'],
   telegramBot: ['telegram-bot'],
+  setup: ['setup-progress'],
 } as const satisfies Record<string, readonly [string]>

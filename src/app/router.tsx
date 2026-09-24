@@ -8,6 +8,7 @@ import { Split } from './Split'
 // Экраны грузятся лениво: в первый кадр нужен только тот, на котором открылись.
 const Home = lazy(() => import('../screens/Home'))
 const Metric = lazy(() => import('../screens/Metric'))
+const Setup = lazy(() => import('../screens/Setup'))
 const Schedule = lazy(() => import('../screens/Schedule'))
 const ScheduleBuilder = lazy(() => import('../screens/ScheduleBuilder'))
 const People = lazy(() => import('../screens/People'))
@@ -60,6 +61,7 @@ export function AppRoutes() {
       {/* Владелец */}
       <Route path="/home" element={<Home/>}/>
       <Route path="/home/metric/:key" element={<Metric/>}/>
+      <Route path="/home/setup" element={<Setup/>}/>
 
       <Route path="/sched" element={<Schedule/>}/>
       <Route path="/sched/build" element={<ScheduleBuilder/>}/>

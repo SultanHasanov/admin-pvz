@@ -22,8 +22,14 @@ export interface Recorded { method:string; table:string; body:unknown }
 /**
  * `signedIn: false` — без сессии: для экранов входа, регистрации и восстановления.
  * `point` — выбранный ПВЗ; по умолчанию «Все ПВЗ» (пустая строка), как у нового пользователя.
+ * `rpc` — ответы функций по имени (`setup_progress`). Без ответа `setup_progress` даёт `null`
+ * (заданий нет), остальные функции на запись отвечают эхом, на чтение — `null`.
  */
-export async function stubSupabase(page:Page, { signedIn = true, point = '' }:{ signedIn?:boolean; point?:string } = {}) {
+export async function stubSupabase(page:Page, { signedIn = true, point = '', rpc = {} }:{
+  signedIn?:boolean
+  point?:string
+  rpc?:Record<string, unknown>
+} = {}) {
   const ref = projectRef()
   /** Записанные запросы: по ним проверяем, что форма отправила именно то, что показала. */
   const recorded:Recorded[] = []
@@ -60,6 +66,13 @@ export async function stubSupabase(page:Page, { signedIn = true, point = '' }:{ 
       let body:unknown = null
       try { body = request.postDataJSON() } catch { body = request.postData() }
       recorded.push({ method: request.method(), table: path, body })
+      // Функции supabase-js зовёт POST-ом. Заданный ответ важнее эха, а `setup_progress`
+      // эхом не отвечаем вовсе: эхо выглядело бы как «ничего не сделано» и показало бы
+      // задания настройки на всех снимках.
+      const fn = path.startsWith('rpc/') ? path.slice(4) : ''
+      if (fn in rpc || fn === 'setup_progress') return route.fulfill({
+        status: 200, contentType: 'application/json', body: JSON.stringify(rpc[fn] ?? null),
+      })
       // Записи отвечаем эхом: сервисы часто просят `.select().single()` после вставки.
       const rows = (Array.isArray(body) ? body : [body]).map((row, index) => ({ id: `new-${index}`, ...(row as object) }))
       // `.single()` просит объект, как и настоящий PostgREST: иначе `data.id` у вставки пустой.
@@ -71,7 +84,9 @@ export async function stubSupabase(page:Page, { signedIn = true, point = '' }:{ 
       })
     }
 
-    if (path.startsWith('rpc/')) return route.fulfill({ status: 200, contentType: 'application/json', body: 'null' })
+    if (path.startsWith('rpc/')) return route.fulfill({
+      status: 200, contentType: 'application/json', body: JSON.stringify(rpc[path.slice(4)] ?? null),
+    })
 
     const rows = filter(tables[path] ?? [], url.searchParams)
     const single = route.request().headers()['accept']?.includes('vnd.pgrst.object')

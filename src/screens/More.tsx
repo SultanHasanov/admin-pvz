@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase'
 import { useNav } from '../app/nav'
 import { useSheets } from '../app/sheets'
 import { InstallRow } from '../app/InstallRow'
+import { useSetup } from '../features/setup/useSetup'
 
 /**
  * «Ещё»: разделы второго плана. Каждая строка — отдельный экран, поэтому список
@@ -19,6 +20,9 @@ export default function More() {
   const { push } = useNav()
   const { open } = useSheets()
   const organization = useQuery({ queryKey: keys.organization, queryFn: getOrganization })
+  const setup = useSetup()
+  // Сюда возвращаются к скрытым с главной заданиям — пока не выполнено всё.
+  const setupLeft = !setup.loading && !setup.error && setup.available && setup.done < setup.total
 
   const groups = [
     {
@@ -45,6 +49,17 @@ export default function More() {
   ]
 
   return <Screen header={<Header title="Ещё"/>}>
+    {setupLeft && <Card className="mb-1">
+      <ListRow
+        title="Настройка пункта"
+        sub="Задания для быстрого старта"
+        right={`${setup.done} из ${setup.total}`}
+        chevron
+        align="start"
+        onClick={() => push('/home/setup')}
+      />
+    </Card>}
+
     {groups.map(group => <div key={group.label}>
       <SectionTitle>{group.label}</SectionTitle>
       <Card>
