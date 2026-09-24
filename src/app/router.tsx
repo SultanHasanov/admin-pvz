@@ -19,7 +19,6 @@ const Money = lazy(() => import('../screens/Money'))
 const More = lazy(() => import('../screens/More'))
 const Deduction = lazy(() => import('../screens/Deduction'))
 const Wizard = lazy(() => import('../screens/Wizard'))
-const Templates = lazy(() => import('../screens/Templates'))
 const Share = lazy(() => import('../screens/Share'))
 const Invite = lazy(() => import('../screens/Invite'))
 const MeHome = lazy(() => import('../screens/me/MeHome'))
@@ -65,7 +64,6 @@ export function AppRoutes() {
       <Route path="/sched" element={<Schedule/>}/>
       <Route path="/sched/build" element={<ScheduleBuilder/>}/>
       <Route path="/sched/wizard" element={<Wizard/>}/>
-      <Route path="/sched/templates" element={<Templates/>}/>
       <Route path="/sched/share" element={<Share/>}/>
 
       <Route path="/people" element={desktop ? <Split master={<People/>} empty={PERSON}/> : <People/>}/>

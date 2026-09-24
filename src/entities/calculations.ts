@@ -6,8 +6,16 @@ const hours = (shift:Shift) => dayjs(shift.actualEndsAt ?? shift.endsAt).diff(da
 /** Половина смены оплачивается вполовину; часовой режим считается отдельно, по фактическому времени. */
 const factor = (mode:PayMode | undefined) => mode === 'HALF' ? 0.5 : 1
 
-export function calculatePayroll(employee:Employee, shifts:Shift[], month:string, normDays:number):number {
-  const worked = shifts.filter(s => s.employeeId === employee.id && s.status === 'COMPLETED' && s.startsAt.startsWith(month))
+/**
+ * Смена идёт в расчёт, когда её день наступил: стоит в графике — значит, работал.
+ * Подтверждать выход не нужно. Не считаются только заменённые и старые отметки «не вышел».
+ */
+export const countsForPay = (shift:Shift, today = dayjs().format('YYYY-MM-DD')) =>
+  shift.status !== 'REPLACED' && shift.status !== 'NO_SHOW'
+  && (shift.workDate ?? dayjs(shift.startsAt).format('YYYY-MM-DD')) <= today
+
+export function calculatePayroll(employee:Employee, shifts:Shift[], month:string, normDays:number, today?:string):number {
+  const worked = shifts.filter(s => s.employeeId === employee.id && countsForPay(s, today) && s.startsAt.startsWith(month))
   if (employee.paymentType === 'HOURLY') return worked.reduce((sum, s) => sum + Math.round(hours(s) * employee.rateKopecks * factor(s.payMode)), 0)
   if (employee.paymentType === 'SHIFT') {
     return worked.reduce((sum, s) => sum + (s.payMode === 'HOURS' && employee.hourlyRateKopecks
@@ -85,10 +93,12 @@ export function calculateSalarySheet(input:{
   bonuses:Bonus[]; penalties:Penalty[]; deductions:Deduction[]; payments:SalaryPayment[]
   /** Части разделённых удержаний. Без них удержание целиком падает на `employeeId`. */
   parts?:DeductionPart[]
+  /** До какого дня смены считаются отработанными. По умолчанию — сегодня. */
+  today?:string
 }):SalarySheet {
   const { employeeId, month } = input
   const parts = input.parts ?? []
-  const worked = input.shifts.filter(s => s.employeeId === employeeId && s.status === 'COMPLETED' && inMonth(s.startsAt, month))
+  const worked = input.shifts.filter(s => s.employeeId === employeeId && countsForPay(s, input.today) && inMonth(s.startsAt, month))
   const accrued = accrueShifts(worked, input.rules.filter(r => r.employeeId === employeeId))
   const bonuses = input.bonuses.filter(b => b.employeeId === employeeId && inMonth(b.date, month)).reduce((s, b) => s + b.amountKopecks, 0)
   const penalties = input.penalties.filter(p => p.employeeId === employeeId && inMonth(p.date, month) && countedPenalty(p)).reduce((s, p) => s + p.amountKopecks, 0)
@@ -106,10 +116,11 @@ export function ownerLosses(deductions:Deduction[], month:string, parts:Deductio
     .reduce((sum, d) => sum + ownerLossOf(d, parts), 0)
 }
 
-export function calculateSummary(transactions:Transaction[], payroll:number, taxRate:number, shifts:Shift[], losses = 0):DashboardSummary {
+/** `fixed` — постоянные расходы месяца (`entities/fixedCosts`): идут в расходы вместе с разовыми операциями. */
+export function calculateSummary(transactions:Transaction[], payroll:number, taxRate:number, shifts:Shift[], losses = 0, fixed = 0):DashboardSummary {
   const income = transactions.filter(x => x.kind === 'INCOME').reduce((s, x) => s + x.amountKopecks, 0)
-  const expenses = transactions.filter(x => x.kind === 'EXPENSE').reduce((s, x) => s + x.amountKopecks, 0)
-  return { income, expenses, payroll, tax: Math.round(income * taxRate / 100), confirmedLosses: losses, shifts: shifts.filter(s => s.status === 'COMPLETED').length }
+  const expenses = fixed + transactions.filter(x => x.kind === 'EXPENSE').reduce((s, x) => s + x.amountKopecks, 0)
+  return { income, expenses, payroll, tax: Math.round(income * taxRate / 100), confirmedLosses: losses, shifts: shifts.filter(s => countsForPay(s)).length }
 }
 
 export function profit(s:DashboardSummary) { return s.income - s.expenses - s.payroll - s.tax - s.confirmedLosses }

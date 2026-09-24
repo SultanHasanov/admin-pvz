@@ -97,6 +97,7 @@ export default function Home() {
               else if (alert.target.kind === 'recurring') push('/money/recurring')
               else if (alert.target.kind === 'payout') push(`/money?tab=pay${alert.target.advance ? '&adv=1' : ''}`)
               else if (alert.target.kind === 'request') open('req', { id: alert.target.id })
+              else if (alert.target.kind === 'income') open('payoutEntry', { pointId: alert.target.pointId, periodId: alert.target.periodId })
               else if (alert.target.kind === 'day') open('day', { pointId: alert.target.pointId, date: alert.target.date, pointLabel: pointName(alert.target.pointId) })
             }}
           />)}

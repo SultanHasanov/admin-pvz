@@ -96,41 +96,44 @@ export async function deleteTransaction(kind:EntryKind, id:string) {
 export async function listRecurringExpenses():Promise<RecurringExpense[]> {
   const organization_id = await organizationId()
   const { data, error } = await client().from('recurring_expenses')
-    .select('id,pickup_point_id,category_id,amount_kopecks,day_of_month,description,active,expense_categories(name)')
-    .eq('organization_id', organization_id).order('day_of_month')
+    .select('id,pickup_point_id,category_id,amount_kopecks,day_of_month,description,active,start_month,end_month,expense_categories(name)')
+    .eq('organization_id', organization_id).order('created_at')
   if (error) throw error
-  return (data as unknown as { id:string; pickup_point_id:string; category_id:string; amount_kopecks:number; day_of_month:number; description:string|null; active:boolean; expense_categories:{ name:string }|null }[]).map(row => ({
+  return (data as unknown as { id:string; pickup_point_id:string|null; category_id:string; amount_kopecks:number; day_of_month:number; description:string|null; active:boolean; start_month:string|null; end_month:string|null; expense_categories:{ name:string }|null }[]).map(row => ({
     id:row.id, pickupPointId:row.pickup_point_id, categoryId:row.category_id, category:row.expense_categories?.name ?? 'Без категории', amountKopecks:row.amount_kopecks,
-    dayOfMonth:row.day_of_month, description:row.description, active:row.active,
+    dayOfMonth:row.day_of_month, description:row.description, active:row.active, startMonth:row.start_month, endMonth:row.end_month,
   }))
 }
 
-export async function createRecurringExpense(input:{ pickupPointId:string; category:string; amountKopecks:number; dayOfMonth:number; description?:string }) {
+/** Постоянный расход. `startMonth: null` — считается и во всех прошлых месяцах. */
+export async function createRecurringExpense(input:{ pickupPointId:string|null; category:string; amountKopecks:number; startMonth?:string|null }) {
   const organization_id = await organizationId(), category_id = await ensureExpenseCategory(input.category)
-  const { error } = await client().from('recurring_expenses').insert({ organization_id, pickup_point_id:input.pickupPointId, category_id, amount_kopecks:input.amountKopecks, frequency:'MONTHLY', day_of_month:input.dayOfMonth, description:input.description?.trim() || null })
+  const { error } = await client().from('recurring_expenses').insert({ organization_id, pickup_point_id:input.pickupPointId, category_id, amount_kopecks:input.amountKopecks, frequency:'MONTHLY', day_of_month:1, start_month:input.startMonth ?? null })
   if (error) throw error
 }
 
+export async function updateRecurringExpense(id:string, input:{ pickupPointId:string|null; category:string; amountKopecks:number }) {
+  const category_id = await ensureExpenseCategory(input.category)
+  const { error } = await client().from('recurring_expenses').update({ pickup_point_id:input.pickupPointId, category_id, amount_kopecks:input.amountKopecks }).eq('id', id)
+  if (error) throw error
+}
+
+/** Перестаёт считаться после `endMonth`: прошлые месяцы остаются как были. */
+export async function closeRecurringExpense(id:string, endMonth:string) {
+  const { error } = await client().from('recurring_expenses').update({ end_month:endMonth }).eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteRecurringExpense(id:string) {
+  const { error } = await client().from('recurring_expenses').delete().eq('id', id)
+  if (error) throw error
+}
+
+/** Прежние «Оплачено» создавали операции — по ним их узнаём, чтобы не посчитать дважды. */
 export async function listRecurringOccurrences(month:string):Promise<RecurringExpenseOccurrence[]> {
   const organization_id = await organizationId()
   const { data, error } = await client().from('recurring_expense_occurrences').select('id,recurring_expense_id,due_on,status,expense_entry_id')
     .eq('organization_id', organization_id).gte('due_on', `${month}-01`).lt('due_on', dayjs(`${month}-01`).add(1,'month').format('YYYY-MM-DD'))
   if (error) throw error
   return (data as { id:string; recurring_expense_id:string; due_on:string; status:RecurringExpenseOccurrence['status']; expense_entry_id:string|null }[]).map(row => ({ id:row.id, recurringExpenseId:row.recurring_expense_id, dueOn:row.due_on, status:row.status, expenseEntryId:row.expense_entry_id }))
-}
-
-export function recurringDueDate(month:string, dayOfMonth:number) {
-  const first = dayjs(`${month}-01`), day = Math.min(dayOfMonth, first.daysInMonth())
-  return first.date(day).format('YYYY-MM-DD')
-}
-
-export async function confirmRecurringExpense(id:string, dueOn:string) {
-  const { error } = await client().rpc('confirm_recurring_expense', { p_recurring_id:id, p_due_on:dueOn })
-  if (error) throw error
-}
-
-export async function skipRecurringExpense(id:string, dueOn:string) {
-  const organization_id = await organizationId()
-  const { error } = await client().from('recurring_expense_occurrences').upsert({ organization_id, recurring_expense_id:id, due_on:dueOn, status:'SKIPPED', resolved_at:new Date().toISOString() }, { onConflict:'recurring_expense_id,due_on' })
-  if (error) throw error
 }

@@ -1,6 +1,6 @@
 -- ============================================================================
--- «Пункт»: вся схема базы одним файлом — миграции 202609090001_ini … 202609090023_gro по порядку.
--- Собрано 2026-09-20 из supabase/migrations/ (23 файлов). Источник правды —
+-- «Пункт»: вся схема базы одним файлом — миграции 202609090001_ini … 202609090025_poi по порядку.
+-- Собрано 2026-09-24 из supabase/migrations/ (25 файлов). Источник правды —
 -- по-прежнему папка migrations: правите там, этот файл пересобираете.
 --
 -- Для ПУСТОЙ базы Supabase (SQL Editor → вставить → Run). Всё в одной транзакции:
@@ -1570,5 +1570,52 @@ where chat_kind = 'GROUP' and active and approved_at is null;
 -- Коды привязки больше не создаются ни для группы, ни для лички.
 delete from public.telegram_pairing_codes where used_at is null;
 drop function if exists public.create_telegram_group_code(uuid,uuid);
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- 202609090024_fixed_costs.sql
+-- ────────────────────────────────────────────────────────────────────────────
+
+-- Постоянные расходы вместо регулярных с подтверждением.
+--
+-- Раньше регулярный расход каждый месяц ждал «Оплачено» и только тогда становился операцией.
+-- Теперь он сам входит в расходы каждого месяца — аренда, камеры, уборка. Подтверждать нечего.
+--
+-- Сумма со временем меняется, а прошлые месяцы должны остаться как были. Поэтому у строки
+-- есть срок действия:
+--   start_month — первый месяц ('YYYY-MM'); null — с самого начала, то есть и в прошлых;
+--   end_month   — последний месяц; null — без конца.
+-- Правка суммы закрывает старую строку прошлым месяцем и заводит новую с текущего.
+--
+-- pickup_point_id уже допускает null: такой расход общий на все ПВЗ.
+-- day_of_month больше не спрашиваем, но колонка NOT NULL — приложение пишет 1.
+-- Таблица recurring_expense_occurrences остаётся как история прежних «Оплачено».
+set lock_timeout = '5s';
+
+alter table public.recurring_expenses add column if not exists start_month text;
+alter table public.recurring_expenses add column if not exists end_month text;
+
+alter table public.recurring_expenses drop constraint if exists recurring_expenses_months_check;
+alter table public.recurring_expenses add constraint recurring_expenses_months_check check (
+  (start_month is null or start_month ~ '^\d{4}-(0[1-9]|1[0-2])$')
+  and (end_month is null or end_month ~ '^\d{4}-(0[1-9]|1[0-2])$')
+  and (start_month is null or end_month is null or start_month <= end_month)
+);
+
+-- ────────────────────────────────────────────────────────────────────────────
+-- 202609090025_point_marketplace.sql
+-- ────────────────────────────────────────────────────────────────────────────
+
+-- С каким маркетплейсом работает пункт — от этого зависит, как вписывается доход.
+--
+-- WB платит каждый понедельник за прошлую неделю, Ozon — два раза в месяц, в окна
+-- 10–15 и 20–25 числа. Приложение показывает у пункта его периоды выплат за месяц,
+-- и на каждый период вписывается одна сумма: так выплаты не пересекаются и не
+-- считаются дважды. Пункт работает с одним маркетплейсом; прежние пункты — WB.
+set lock_timeout = '5s';
+
+alter table public.pickup_points add column if not exists marketplace text not null default 'WB';
+
+alter table public.pickup_points drop constraint if exists pickup_points_marketplace_check;
+alter table public.pickup_points add constraint pickup_points_marketplace_check check (marketplace in ('WB','OZON'));
 
 commit;

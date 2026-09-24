@@ -234,7 +234,7 @@ test.describe('вход и регистрация', () => {
     await page.waitForURL('**/sched')
   })
 
-  test('онбординг: организация и пункт одним RPC, сотрудник, график 2/2', async ({ page }) => {
+  test('онбординг: организация и пункт одним RPC, затем сотрудник', async ({ page }) => {
     await page.clock.setFixedTime(new Date('2026-09-18T10:00:00+03:00'))
     const recorded = await stubSupabase(page)
     // Пока организации нет, участия нет; после RPC — появляется, как в базе.
@@ -253,7 +253,7 @@ test.describe('вход и регистрация', () => {
 
     await page.goto('/')
     await page.waitForURL('**/register')
-    await expect(page.getByText('Шаг 1 из 4')).toBeVisible()
+    await expect(page.getByText('Шаг 1 из 3')).toBeVisible()
     await page.getByLabel('Название').fill('ИП Ковалёв А. С.')
     await shot(page, 'onboarding-1')
     await page.getByRole('button', { name: 'Далее' }).click()
@@ -262,18 +262,14 @@ test.describe('вход и регистрация', () => {
     await page.getByRole('button', { name: 'Далее' }).click()
 
     await page.getByLabel('ФИО').fill('Ирина Соколова')
-    await page.getByRole('button', { name: 'Далее' }).click()
-    await expect(page.getByText('Шаблон «Основной 2/2»')).toBeVisible()
-    await shot(page, 'onboarding-4')
-    await page.getByRole('button', { name: 'Применить и войти' }).click()
+    await shot(page, 'onboarding-3')
+    await page.getByRole('button', { name: 'Готово' }).click()
 
-    await expect.poll(() => recorded.filter(row => row.table === 'shifts').length).toBeGreaterThan(0)
+    // Шага с шаблоном графика больше нет: после сотрудника — сразу в приложение, смен не ставим.
+    await expect.poll(() => recorded.filter(row => row.table === 'employees').length).toBeGreaterThan(0)
     expect(recorded.find(row => row.table === 'rpc/create_organization_with_owner')!.body).toMatchObject({
-      p_name: 'ИП Ковалёв А. С.', p_point_name: 'ПВЗ Ленина 12', p_point_address: '',
+      p_name: 'ИП Ковалёв А. С.', p_point_name: 'ПВЗ Ленина 12', p_point_address: 'ПВЗ Ленина 12',
     })
-    const shifts = recorded.filter(row => row.table === 'shifts').flatMap(row => row.body as Record<string, unknown>[])
-    // С 18 по 30 сентября по схеме 2/2: 18, 19, 22, 23, 26, 27, 30 — семь смен.
-    expect(shifts).toHaveLength(7)
-    expect(shifts[0]).toMatchObject({ employee_id: 'new-0', pickup_point_id: 'p1' })
+    expect(recorded.filter(row => row.table === 'shifts')).toHaveLength(0)
   })
 })

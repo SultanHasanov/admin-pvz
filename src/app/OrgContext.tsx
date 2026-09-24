@@ -11,8 +11,16 @@ interface OrgValue {
   /** Пустая строка — «Все ПВЗ». */
   pointId:string
   setPointId:(value:string) => void
+  /** Месяц из шапки: по нему строятся главная, деньги и расчёт. */
   month:string
+  /** Выбор месяца в шапке — меняет и `month`, и листаемый месяц графика. */
   setMonth:(value:string) => void
+  /**
+   * Месяц, который листают стрелками в графике. Отдельно от шапки: пролистать график
+   * на май не значит смотреть прибыль за май.
+   */
+  scheduleMonth:string
+  setScheduleMonth:(value:string) => void
   pointName:(id:string | null | undefined) => string
   /** ПВЗ, в который пишем новую запись: выбранный или единственный. */
   defaultPointId:string
@@ -28,7 +36,8 @@ export function OrgProvider({ children }:{ children:ReactNode }) {
   const points = useQuery({ queryKey: keys.points, queryFn: () => listPickupPoints() })
 
   const setPointId = useCallback((value:string) => { setPointIdState(value); store('pvz.point', value) }, [])
-  const setMonth = useCallback((value:string) => { setMonthState(value); store('pvz.month', value) }, [])
+  const [scheduleMonth, setScheduleMonth] = useState(month)
+  const setMonth = useCallback((value:string) => { setMonthState(value); setScheduleMonth(value); store('pvz.month', value) }, [])
 
   const list = useMemo(() => points.data ?? [], [points.data])
   // Выбранный ПВЗ мог быть архивирован в другой вкладке — не оставляем ссылку на исчезнувшую точку.
@@ -41,9 +50,11 @@ export function OrgProvider({ children }:{ children:ReactNode }) {
     setPointId,
     month,
     setMonth,
+    scheduleMonth,
+    setScheduleMonth,
     pointName: id => list.find(p => p.id === id)?.name ?? '—',
     defaultPointId: pointId || (list.length === 1 ? list[0].id : ''),
-  }), [list, points.isLoading, pointId, setPointId, month, setMonth])
+  }), [list, points.isLoading, pointId, setPointId, month, setMonth, scheduleMonth])
 
   return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>
 }

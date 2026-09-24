@@ -43,7 +43,7 @@ export default function MeSchedule() {
     const result = new Map<string, CalendarDay>()
     for (const shift of my.shifts) {
       const date = dateOf(shift.startsAt, shift.workDate)
-      const done = shift.status === 'COMPLETED' || date < today
+      const done = date < today
       result.set(date, {
         date,
         tone: done ? 'neutral' : 'accent',
@@ -83,9 +83,9 @@ export default function MeSchedule() {
         : <List>
           {my.shifts.map(shift => {
             const date = dateOf(shift.startsAt, shift.workDate)
-            const worked = shift.status === 'COMPLETED'
+            const worked = date <= today
             const partners = my.partners(shift)
-            const pay = my.payOf(worked ? shift : { ...shift, status: 'COMPLETED' })
+            const pay = my.payOf(shift)
             return <ListRow
               key={shift.id}
               leading={<div className="w-[52px] flex-none text-row font-semibold tabular-nums">{dayLabel(shift.startsAt)}</div>}

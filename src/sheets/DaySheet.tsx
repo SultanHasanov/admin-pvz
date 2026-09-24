@@ -5,13 +5,14 @@ import { ChoiceChips } from '../shared/kit/PickList'
 import { Card } from '../shared/kit/Card'
 import { Avatar, List, ListRow } from '../shared/kit/ListRow'
 import { EmptyState, SkeletonRows } from '../shared/kit/Misc'
-import { initials, statusTitles } from '../shared/shifts'
+import { initials, shiftState } from '../shared/shifts'
 import { payModeTitles } from '../shared/salary'
 import { rubles } from '../shared/money'
 import { timeLabel, today } from '../shared/dates'
+import type { Shift } from '../entities/types'
 import { keys, scope } from '../services/queries'
 import { listEmployees } from '../services/employees'
-import { listShiftsRange, deleteShiftSafe, setShiftStatus } from '../services/shifts'
+import { listShiftsRange, deleteShiftSafe } from '../services/shifts'
 import { accrueShifts } from '../entities/calculations'
 import { useWrite } from '../features/write'
 import { useMonthTotals } from '../features/money/useMonthTotals'
@@ -60,21 +61,10 @@ export default function DaySheet({ pointId, date, inline }:{
     done: 'Смена снята',
   })
 
-  const noShow = useWrite({
-    run: (shiftId:string) => setShiftStatus(shiftId, 'NO_SHOW'),
-    invalidate: [scope.shifts],
-    done: 'Отмечено: не вышел',
-  })
-
-  // В зарплату идут только подтверждённые смены (COMPLETED). Сотрудник закрывает смену
-  // сам из кабинета, а здесь — владелец, если тот забыл или кабинета у него нет.
-  const worked = useWrite({
-    run: (shiftId:string) => setShiftStatus(shiftId, 'COMPLETED'),
-    invalidate: [scope.shifts],
-    done: 'Отмечено: вышел — смена в расчёте',
-  })
-
   const rows = shifts.data ?? []
+  // Заменить можно только ту смену, что ещё впереди или идёт сегодня.
+  const canSwap = (shift:Shift) => (shift.status === 'PLANNED' || shift.status === 'ON_DUTY') && date >= today()
+  const swap = (shiftId:string) => inline ? open('swap', { pointId, date, shiftId }) : replace('swap', { pointId, date, shiftId })
   const past = date < today()
   const point = points.find(item => item.id === pointId)
   const required = requestedSeats ?? slotsForDay(point?.slotConfig, date)
@@ -113,26 +103,26 @@ export default function DaySheet({ pointId, date, inline }:{
                 title={nameOf(shift.employeeId)}
                 sub={`${timeLabel(shift.startsAt)}–${timeLabel(shift.endsAt)} · ${shift.payMode === 'HALF' ? '½ оплаты' : shift.payMode === 'FULL' ? 'весь день' : payModeTitles[shift.payMode]}`}
                 right={rubles(shift.status === 'NO_SHOW' || shift.status === 'REPLACED' ? 0 : accrueShifts([shift], rules))}
-                rightSub={statusTitles[shift.status]}
-                rightSubTone={shift.status === 'COMPLETED' ? 'ok' : shift.status === 'NO_SHOW' ? 'bad' : 'neutral'}
+                rightSub={shiftState(shift, today()).title}
+                rightSubTone={shiftState(shift, today()).tone}
                 chevron
                 onClick={() => open('menu', {
                   title: nameOf(shift.employeeId),
                   rows: [
-                    ...((shift.status === 'PLANNED' || shift.status === 'ON_DUTY') && date <= today()
-                      ? [{ title: 'Вышел', sub: 'Подтвердить выход — смена попадёт в расчёт', onClick: () => worked.mutate(shift.id) }]
-                      : []),
+                    ...(canSwap(shift) ? [{ title: 'Заменить', sub: 'Не может выйти — найти, кто выйдет вместо', onClick: () => swap(shift.id) }] : []),
                     { title: 'Изменить сотрудника', sub: 'Смена останется на этом месте', onClick: () => open('cand', { pointId, date, shiftId: shift.id }) },
                     { title: 'Изменить оплату', sub: 'Весь день, ½ оплаты или часы', onClick: () => open('partial', { shiftId: shift.id, payMode: shift.payMode, startsAt: shift.startsAt }) },
-                    ...(shift.status === 'PLANNED' || shift.status === 'ON_DUTY'
-                      ? [{ title: 'Не вышел', sub: 'Смена не оплачивается', onClick: () => noShow.mutate(shift.id) }]
-                      : []),
                     { title: 'Убрать из графика', tone: 'bad' as const, onClick: () => remove.mutate(shift.id) },
                   ],
                 })}
               />
             })}
           </List>}
+        {rows.some(canSwap) && <div className="grid gap-2 border-t border-line p-3">
+          {rows.filter(canSwap).map(shift => <Button key={shift.id} block variant="secondary" onClick={() => swap(shift.id)}>
+            Заменить: {nameOf(shift.employeeId).split(' ')[0]}
+          </Button>)}
+        </div>}
       </Card>}
 
     {!shifts.isLoading && free > 0 && rows.length > 0 && <div className="mt-2 text-sub text-bad">Место свободно: {free}. Можно добавить сотрудника на этот день.</div>}

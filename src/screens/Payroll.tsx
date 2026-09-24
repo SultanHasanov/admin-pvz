@@ -8,7 +8,7 @@ import { Button } from '../shared/kit/Button'
 import { EmptyState, ErrorNote, SkeletonRows } from '../shared/kit/Misc'
 import { toastWarn } from '../shared/kit/Toaster'
 import { cn } from '../shared/kit/cn'
-import { accrueShifts, employeeShare, rateForDate } from '../entities/calculations'
+import { accrueShifts, countsForPay, employeeShare, rateForDate } from '../entities/calculations'
 import type { Shift } from '../entities/types'
 import { initials, statusTitles } from '../shared/shifts'
 import { rubles } from '../shared/money'
@@ -23,7 +23,8 @@ import { useSheets } from '../app/sheets'
 /** Неполный выход — главное, что владелец ищет глазами в списке смен. */
 const kindOf = (shift:Shift) => shift.payMode === 'HALF' ? '½ смены' : shift.payMode === 'HOURS' ? 'по часам' : 'полная'
 /** Смена, которая может ещё стать оплаченной: план или идущая. Отмены в прогноз не входят. */
-const pending = (shift:Shift) => shift.status === 'PLANNED' || shift.status === 'ON_DUTY'
+/** Смена в графике, чей день ещё не наступил: в расчёт войдёт, когда наступит. */
+const pending = (shift:Shift) => shift.status !== 'REPLACED' && shift.status !== 'NO_SHOW' && !countsForPay(shift)
 
 /**
  * Расчёт зарплаты одного сотрудника за месяц — `payrollEmp` из прототипа.
@@ -47,9 +48,9 @@ export default function Payroll() {
   const shifts = totals.shifts
     .filter(shift => shift.employeeId === id && shift.startsAt.startsWith(month))
     .sort((a, b) => a.startsAt.localeCompare(b.startsAt))
-  const worked = shifts.filter(shift => shift.status === 'COMPLETED')
+  const worked = shifts.filter(shift => countsForPay(shift))
   // Прогноз — если все оставшиеся плановые смены будут отработаны.
-  const forecast = (sheet?.balance ?? 0) + accrueShifts(shifts.filter(pending).map(shift => ({ ...shift, status: 'COMPLETED' as const })), rules)
+  const forecast = (sheet?.balance ?? 0) + accrueShifts(shifts.filter(pending), rules)
 
   const deductions = totals.deductions
     .filter(row => (row.eventAt ?? row.createdAt).startsWith(month))
@@ -144,19 +145,19 @@ export default function Payroll() {
       {!shifts.length
         ? <EmptyState title={`Смен в ${period} нет`}/>
         : shifts.map(shift => {
-          const done = shift.status === 'COMPLETED'
+          const done = countsForPay(shift)
           return <div key={shift.id} className={cn('flex items-center gap-2.5 border-t border-line-soft px-[15px] py-[11px] first:border-t-0', !done && 'opacity-50')}>
             <div className="w-[54px] flex-none font-mono text-mono text-muted-strong">{dayLabel(shift.startsAt)}</div>
             <div className="min-w-0 flex-1 truncate text-act">{pointName(shift.pickupPointId)}</div>
             <div className={cn('mr-1.5 text-tiny', shift.payMode !== 'FULL' ? 'text-warn' : 'text-muted')}>
               {done || pending(shift) ? kindOf(shift) : statusTitles[shift.status].toLowerCase()}
             </div>
-            <div className="font-mono text-sub font-medium tabular-nums">{rubles(accrueShifts([{ ...shift, status: 'COMPLETED' }], rules))}</div>
+            <div className="font-mono text-sub font-medium tabular-nums">{rubles(accrueShifts([shift], rules))}</div>
           </div>
         })}
     </Card>
-    {shifts.some(shift => pending(shift) && shift.startsAt.slice(0, 10) < today()) && <div className="mt-2 text-sub leading-[1.4] text-muted">
-      Бледные смены не подтверждены и в расчёт не входят. Подтвердить выход — в графике, тап по дню → «Вышел».
+    {shifts.some(pending) && <div className="mt-2 text-sub leading-[1.4] text-muted">
+      Бледные смены ещё впереди: войдут в расчёт в свой день.
     </div>}
 
     <SectionTitle>Вычеты и премии</SectionTitle>

@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Button } from '../../shared/kit/Button'
 import { Banner, TextField } from '../../shared/kit/Field'
 import { haptics } from '../../shared/kit/haptics'
 import { OTP_MAX, OTP_MIN, otpDigits } from '../../shared/otp'
+import { cooldownLabel, useCooldown } from '../../shared/useCooldown'
 import { clearRecovery, markRecovery } from '../../lib/recovery'
 import { appUrl, supabase } from '../../lib/supabase'
 import { AuthLayout, Logo } from './AuthLayout'
@@ -23,12 +24,15 @@ function authError(message:string) {
  */
 export default function Login() {
   const navigate = useNavigate()
-  const [mode, setMode] = useState<'login' | 'forgot' | 'sent'>('login')
-  const [email, setEmail] = useState('')
+  // С регистрации приходят с почтой, по которой аккаунт уже есть: вписываем её сразу.
+  const incoming = (useLocation().state ?? {}) as { email?:string; forgot?:boolean }
+  const [mode, setMode] = useState<'login' | 'forgot' | 'sent'>(incoming.forgot ? 'forgot' : 'login')
+  const [email, setEmail] = useState(incoming.email ?? '')
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
+  const cooldown = useCooldown()
 
   async function signIn() {
     if (!supabase) return
@@ -46,7 +50,7 @@ export default function Login() {
     const result = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: appUrl('/reset') })
     setBusy(false)
     if (result.error) setError(authError(result.error.message))
-    else setMode('sent')
+    else { cooldown.start(); setMode('sent') }
   }
 
   async function verifyResetCode() {
@@ -70,7 +74,9 @@ export default function Login() {
     <TextField label="Код из письма" type="text" inputMode="numeric" autoComplete="one-time-code" maxLength={OTP_MAX} placeholder="000000" value={code} onChange={event => setCode(otpDigits(event.target.value))}/>
     {error && <Banner tone="bad">{error}</Banner>}
     <Button block disabled={code.length < OTP_MIN || busy} onClick={() => void verifyResetCode()}>Подтвердить код</Button>
-    <Button block variant="quiet" className="mt-1" disabled={busy} onClick={() => { setCode(''); void sendReset() }}>Отправить код повторно</Button>
+    <Button block variant="quiet" className="mt-1" disabled={busy || cooldown.left > 0} onClick={() => { setCode(''); void sendReset() }}>
+      {cooldown.left > 0 ? `Отправить повторно через ${cooldownLabel(cooldown.left)}` : 'Отправить код повторно'}
+    </Button>
     <Button block variant="quiet" className="mt-1" onClick={() => setMode('login')}>Вернуться к входу</Button>
   </AuthLayout>
 

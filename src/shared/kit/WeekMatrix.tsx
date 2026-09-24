@@ -3,6 +3,7 @@ import { weekLabel } from '../dates'
 import { cn } from './cn'
 import { tone as tones, type Tone } from './tokens'
 import { haptics } from './haptics'
+import { Chevron } from './icons'
 
 export interface MatrixCell { label:string; tone:Tone; strong?:boolean }
 
@@ -27,16 +28,16 @@ export function WeekMatrix({ weekStart, rows, onWeek, onPick }:{
       <button
         type="button"
         aria-label="Предыдущая неделя"
-        className="tap flex size-[26px] items-center justify-center rounded-xs bg-line-faint text-[15px] leading-none text-muted-strong"
+        className="tap flex size-9 items-center justify-center rounded-xs bg-line-faint text-muted-strong"
         onClick={() => onWeek(dayjs(weekStart).subtract(1, 'week').format('YYYY-MM-DD'))}
-      >‹</button>
+      ><Chevron dir="left" size={20}/></button>
       <div className="flex-1 text-center text-[13px] font-semibold">{label}</div>
       <button
         type="button"
         aria-label="Следующая неделя"
-        className="tap flex size-[26px] items-center justify-center rounded-xs bg-line-faint text-[15px] leading-none text-muted-strong"
+        className="tap flex size-9 items-center justify-center rounded-xs bg-line-faint text-muted-strong"
         onClick={() => onWeek(dayjs(weekStart).add(1, 'week').format('YYYY-MM-DD'))}
-      >›</button>
+      ><Chevron size={20}/></button>
     </div>
 
     <div className="grid items-center gap-[3px]" style={{ gridTemplateColumns: '62px repeat(7, 1fr)' }}>

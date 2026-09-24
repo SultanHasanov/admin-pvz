@@ -10,16 +10,16 @@ export type SheetType =
   // выбор и навигация
   | 'pvzPick' | 'monthPick' | 'datePick' | 'menu' | 'confirm' | 'notifs' | 'quick' | 'role'
   // деньги
-  | 'op' | 'payout' | 'payAll' | 'adj' | 'newDed' | 'status' | 'disagree' | 'newRecur' | 'newCat' | 'renameCat'
+  | 'op' | 'payoutEntry' | 'payoutMonth' | 'payout' | 'payAll' | 'adj' | 'newDed' | 'status' | 'disagree' | 'newRecur' | 'newCat' | 'renameCat'
   // Деления удержания в прототипе нет — части там только в сид-данных. Без шторки
   // таблицу частей нечем наполнить, поэтому она добавлена сверх 38 прототипных.
   | 'split'
   // график
-  | 'day' | 'dayAll' | 'cand' | 'selAssign' | 'partial' | 'copyWeek' | 'saveTpl'
+  | 'day' | 'dayAll' | 'cand' | 'selAssign' | 'partial' | 'copyWeek' | 'swap'
   // люди и заявки
   | 'rate' | 'req' | 'cantWork'
   // настройки
-  | 'setOrg' | 'setTax' | 'setRate' | 'setPayDays'
+  | 'setOrg' | 'setTax' | 'setRate' | 'setPayDays' | 'pointRate'
 
 /**
  * Параметры шторок. Карта растёт по мере появления шторок; у ещё не описанных
@@ -33,6 +33,10 @@ export interface SheetPropsMap {
     tone?:'accent' | 'bad'
     onYes():void
   }
+  /** Сумма выплаты маркетплейса за один период пункта (`entities/payouts`). */
+  payoutEntry:{ pointId:string; periodId:string }
+  /** Весь месяц одной суммой: остаток делится по пустым периодам. */
+  payoutMonth:{ pointId:string; month:string }
 }
 
 export type SheetProps<K extends SheetType> = K extends keyof SheetPropsMap

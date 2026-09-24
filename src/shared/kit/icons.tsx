@@ -42,3 +42,11 @@ export const IconMore = () => <Svg>
   <circle cx="10.5" cy="10.5" r="1.9" fill="currentColor"/>
   <circle cx="16.5" cy="10.5" r="1.9" fill="currentColor"/>
 </Svg>
+
+const turn = { right: 0, down: 90, left: 180, up: 270 } as const
+
+/** Стрелка-уголок: переходы, листание, раскрытие. Толще и крупнее текстовых «›» и «▾». */
+export const Chevron = ({ dir = 'right', size = 18 }:{ dir?:keyof typeof turn; size?:number }) =>
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden className="flex-none" style={{ transform: `rotate(${turn[dir]}deg)` }}>
+    <path d="M7.5 4.5 13 10l-5.5 5.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>

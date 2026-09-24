@@ -15,7 +15,9 @@ export type ShiftRequestKind = 'SHIFT'
 export type ShiftRequestStatus = 'SENT'|'SUBSTITUTE_FOUND'|'ALONE'|'APPROVED'|'DECLINED'
 export type Money = number
 
-export interface PickupPoint { id:string; name:string; address:string; timezone:string; archivedAt:string|null; slotConfig?:SlotConfig; hours?:WorkingHours|null }
+/** С кем работает пункт: WB платит по понедельникам, Ozon — 10–15 и 20–25 числа (`entities/payouts`). */
+export type Marketplace = 'WB' | 'OZON'
+export interface PickupPoint { id:string; name:string; address:string; timezone:string; archivedAt:string|null; slotConfig?:SlotConfig; hours?:WorkingHours|null; marketplace?:Marketplace }
 /** Часы работы точки. Становятся временем смен по умолчанию. */
 export interface WorkingHours { from:string; to:string }
 /** Сколько человек выходит на точку в день; исключения по дням недели от понедельника (0). */
@@ -38,7 +40,11 @@ export interface Invitation { id:string; employeeId:string; code:string; status:
 export interface EntryPreset { id:string; pickupPointId:string; kind:EntryKind; categoryName:string; amountKopecks:number; updatedAt:string }
 export interface SalaryRate { id:string; name:string|null; paymentType:PaymentType; rateKopecks:number; monthlyNormDays:number; isDefault:boolean; archivedAt:string|null }
 export interface ExpenseCategory { id:string; name:string; archivedAt:string|null }
-export interface RecurringExpense { id:string; pickupPointId:string; categoryId:string; category:string; amountKopecks:number; dayOfMonth:number; description:string|null; active:boolean }
+/**
+ * Постоянный расход (`entities/fixedCosts`). `pickupPointId: null` — общий на все ПВЗ.
+ * `startMonth`/`endMonth` — срок действия 'YYYY-MM'; `null` — без границы.
+ */
+export interface RecurringExpense { id:string; pickupPointId:string|null; categoryId:string; category:string; amountKopecks:number; dayOfMonth:number; description:string|null; active:boolean; startMonth:string|null; endMonth:string|null }
 export interface RecurringExpenseOccurrence { id:string; recurringExpenseId:string; dueOn:string; status:'PENDING'|'PAID'|'SKIPPED'; expenseEntryId:string|null }
 /** Заявка сотрудника (миграция 0013). Даты — календарные, без часовых поясов. */
 export interface ShiftRequest { id:string; employeeId:string; pickupPointId:string|null; kind:ShiftRequestKind; dateFrom:string; dateTo:string; reason:string|null; status:ShiftRequestStatus; substituteEmployeeId:string|null; resolutionComment:string|null; resolvedAt:string|null; createdAt:string }

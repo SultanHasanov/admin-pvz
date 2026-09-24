@@ -27,6 +27,5 @@ export const screens:ScreenShot[] = [
   { name: 'deduction', path: '/money/ded/d1', proto: 'wbDetail' },
   { name: 'more', path: '/more', proto: 'more' },
   { name: 'wizard', path: '/sched/wizard', proto: 'wizard' },
-  { name: 'templates', path: '/sched/templates', proto: 'tplList' },
   { name: 'share', path: '/sched/share', proto: 'share' },
 ]

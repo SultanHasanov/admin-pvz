@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { accrueShifts, calculatePayroll, calculateSalarySheet, dailyTotals, employeeShare, ownerLossOf, ownerLosses, profit, rateForDate } from './calculations'
+import { accrueShifts, calculatePayroll, countsForPay, calculateSalarySheet, dailyTotals, employeeShare, ownerLossOf, ownerLosses, profit, rateForDate } from './calculations'
 import type { Bonus, Deduction, DeductionPart, Employee, Penalty, SalaryPayment, SalaryRule, Shift, Transaction } from './types'
 
 const worker:Employee = { id: 'e', fullName: 'Иван', pickupPointIds: ['p'], paymentType: 'SHIFT', rateKopecks: 200000, monthlyNormDays: 22, salaryRateId: null, hourlyRateKopecks: null, status: 'ACTIVE' }
@@ -14,6 +14,25 @@ const rules:SalaryRule[] = [
 describe('payroll calculations', () => {
   it('accrues a completed shift only', () => expect(calculatePayroll(worker, [completed], '2026-09', 22)).toBe(200000))
   it('does not subtract payroll twice from profit', () => expect(profit({ income: 10000, expenses: 2000, payroll: 3000, tax: 500, confirmedLosses: 0, shifts: 1 })).toBe(4500))
+})
+
+describe('смена в графике идёт в расчёт без подтверждения', () => {
+  const planned = (date:string, status:Shift['status'] = 'PLANNED'):Shift => ({ ...shiftOn(date, date), status })
+  it('прошедший и сегодняшний день считаются, будущий — нет', () => {
+    expect(countsForPay(planned('2026-09-10'), '2026-09-24')).toBe(true)
+    expect(countsForPay(planned('2026-09-24'), '2026-09-24')).toBe(true)
+    expect(countsForPay(planned('2026-09-25'), '2026-09-24')).toBe(false)
+  })
+  it('замена и старая отметка «не вышел» не считаются', () => {
+    expect(countsForPay(planned('2026-09-10', 'REPLACED'), '2026-09-24')).toBe(false)
+    expect(countsForPay(planned('2026-09-10', 'NO_SHOW'), '2026-09-24')).toBe(false)
+  })
+  it('ведомость считает плановые смены до сегодняшнего дня', () => {
+    const shifts = [planned('2026-09-10'), planned('2026-09-12', 'ON_DUTY'), planned('2026-09-28')]
+    const sheet = calculateSalarySheet({ employeeId: 'e', month: '2026-09', shifts, rules, bonuses: [], penalties: [], deductions: [], payments: [], today: '2026-09-24' })
+    expect(sheet.shifts).toBe(2)
+    expect(sheet.accrued).toBe(400000)
+  })
 })
 
 describe('rateForDate', () => {

@@ -17,7 +17,6 @@ export const keys = {
   shifts: (month:string, pointId:string) => ['shifts', month, pointId] as const,
   shiftsRange: (from:string, to:string, pointId:string) => ['shifts', 'range', from, to, pointId] as const,
   upcomingShifts: ['upcoming-shifts'] as const,
-  scheduleTemplates: ['schedule-templates'] as const,
 
   transactions: (month:string, pointId:string) => ['transactions', month, pointId] as const,
   categories: (includeArchived = false) => (includeArchived ? ['expense-categories', 'all'] : ['expense-categories']) as readonly string[],
@@ -75,7 +74,6 @@ export const scope = {
   salaryRates: ['salary-rates'],
   shifts: ['shifts'],
   upcomingShifts: ['upcoming-shifts'],
-  scheduleTemplates: ['schedule-templates'],
   transactions: ['transactions'],
   categories: ['expense-categories'],
   presets: ['presets'],

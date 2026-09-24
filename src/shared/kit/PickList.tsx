@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { cn } from './cn'
 import { haptics } from './haptics'
 
@@ -38,13 +39,27 @@ export function ChoiceChips<T extends string>({ value, options, onPick }:{
   </div>
 }
 
-export function PickList<T extends string>({ value, options, onPick }:{
+export function PickList<T extends string>({ value, options, onPick, searchPlaceholder }:{
   value:T
   options:PickOption<T>[]
   onPick:(value:T) => void
+  /** Поле поиска над списком — для длинных списков вроде ПВЗ. */
+  searchPlaceholder?:string
 }) {
+  const [query, setQuery] = useState('')
+  const needle = query.trim().toLowerCase()
+  const shown = needle ? options.filter(option => `${option.name} ${option.sub ?? ''}`.toLowerCase().includes(needle)) : options
   return <div className="grid gap-2">
-    {options.map(option => {
+    {searchPlaceholder && <input
+      type="search"
+      aria-label={searchPlaceholder}
+      placeholder={searchPlaceholder}
+      value={query}
+      onChange={event => setQuery(event.target.value)}
+      className="w-full rounded-md border border-line-strong bg-surface px-[14px] py-3 text-base outline-none placeholder:text-muted-faint focus:border-accent"
+    />}
+    {!shown.length && <div className="px-1 py-3 text-sub text-muted">Ничего не найдено</div>}
+    {shown.map(option => {
       const active = option.value === value
       return <button
         key={option.value}

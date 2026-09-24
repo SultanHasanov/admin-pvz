@@ -31,7 +31,7 @@ export default function More() {
     {
       label: 'Деньги',
       rows: [
-        { title: 'Регулярные расходы', sub: 'Аренда, интернет, уборка', to: '/money/recurring' },
+        { title: 'Постоянные расходы', sub: 'Аренда, камеры, уборка — считаются каждый месяц', to: '/money/recurring' },
         { title: 'Категории расходов', sub: 'Справочник для операций', to: '/money/categories' },
         { title: 'Все операции', sub: 'Журнал доходов и расходов', to: '/money/ops' },
       ],

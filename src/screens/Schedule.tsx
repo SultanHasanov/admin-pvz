@@ -14,17 +14,18 @@ import { useLayout } from '../shared/kit/layout'
 import DaySheet from '../sheets/DaySheet'
 import { WeekMatrix, type MatrixCell } from '../shared/kit/WeekMatrix'
 import { tone as tones, type Tone } from '../shared/kit/tokens'
-import { initials, statusTitles } from '../shared/shifts'
+import { initials, shiftState } from '../shared/shifts'
 import { payModeTitles } from '../shared/salary'
 import { dayLabel, monthLabel, monthStart, timeLabel, today as todayDate, weekStartOf } from '../shared/dates'
 import { keys } from '../services/queries'
 import { listEmployees } from '../services/employees'
+import { listShifts, listShiftsRange } from '../services/shifts'
 import { dayView } from '../features/schedule/dayTone'
 import { slotsForDay } from '../entities/slots'
-import { useMonthTotals } from '../features/money/useMonthTotals'
 import { useOrg } from '../app/OrgContext'
 import { useNav } from '../app/nav'
 import { useSheets } from '../app/sheets'
+import { Chevron } from '../shared/kit/icons'
 
 /**
  * График за месяц.
@@ -35,11 +36,13 @@ import { useSheets } from '../app/sheets'
  */
 export default function Schedule() {
   const [params] = useSearchParams()
-  const { month, pointId, points, pointName } = useOrg()
+  // Стрелки листают только график; месяц главной меняется выбором в шапке.
+  const { scheduleMonth: month, setScheduleMonth, pointId, points, pointName } = useOrg()
   const { open } = useSheets()
   const { push } = useNav()
   const { desktop } = useLayout()
-  const totals = useMonthTotals()
+  const monthShifts = useQuery({ queryKey: keys.shifts(month, pointId), queryFn: () => listShifts(month, pointId || undefined) })
+  const totals = { shifts: monthShifts.data ?? [], loading: monthShifts.isLoading, error: monthShifts.error }
   const employees = useQuery({ queryKey: keys.employees(), queryFn: () => listEmployees() })
 
   const today = todayDate()
@@ -55,6 +58,19 @@ export default function Schedule() {
   }, [month]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const period = monthLabel(month).split(' ')[0]
+  const shiftMonth = (step:number) => setScheduleMonth(dayjs(`${month}-01`).add(step, 'month').format('YYYY-MM'))
+
+  // Куда продолжать: день после последней запланированной смены пункта.
+  const horizon = dayjs(today).add(120, 'day').format('YYYY-MM-DD')
+  const ahead = useQuery({
+    queryKey: keys.shiftsRange(today, horizon, pointId),
+    queryFn: () => listShiftsRange(today, horizon, pointId),
+    enabled: !!pointId,
+  })
+  const lastPlanned = (ahead.data ?? []).filter(shift => shift.status !== 'REPLACED' && shift.status !== 'NO_SHOW')
+    .map(shift => shift.workDate ?? dayjs(shift.startsAt).format('YYYY-MM-DD')).sort().at(-1)
+  const continueFrom = lastPlanned ? dayjs(lastPlanned).add(1, 'day').format('YYYY-MM-DD') : undefined
+  const buildFrom = (date?:string) => push(pointId ? `/sched/build?point=${pointId}${date ? `&from=${date}` : ''}` : '/sched/build')
   const nameOf = (id:string) => employees.data?.find(employee => employee.id === id)?.fullName ?? 'Сотрудник'
   // В клетке телефона помещается пять букв имени; на десктопе — имя целиком и инициал
   // фамилии, чтобы двух Ирин на одной точке можно было различить.
@@ -133,9 +149,8 @@ export default function Schedule() {
   const dayShifts = picked ? (byDate.get(picked) ?? []) : []
   const openDay = (point:string, date:string) => open('day', { pointId: point, date, pointLabel: pointName(point) })
 
-  const links = <div className="mt-4 grid grid-cols-2 gap-2">
-    <Button variant="secondary" onClick={() => push('/sched/templates')}>Шаблоны</Button>
-    <Button variant="secondary" onClick={() => push('/sched/share')}>Поделиться</Button>
+  const links = <div className="mt-4">
+    <Button block variant="secondary" onClick={() => push('/sched/share')}>Поделиться</Button>
   </div>
 
   const board = <>
@@ -148,7 +163,9 @@ export default function Schedule() {
         : [{ value: 'month', label: 'ПВЗ за неделю' }, { value: 'week', label: 'Дни недели' }]}
     />
 
-    <Button block className="mb-2" onClick={() => push('/sched/build')}>Заполнить график</Button>
+    <Button block className="mb-2" onClick={() => buildFrom(continueFrom)}>
+      {continueFrom ? `Продолжить график с ${dayLabel(continueFrom)}` : 'Заполнить график'}
+    </Button>
     <div className="mb-3 text-sub text-muted">{pointId
       ? 'Нажмите на день, чтобы поставить или заменить человека.'
       : 'Нажмите на клетку, чтобы поставить человека. Месяц целиком — у одного ПВЗ, выберите его вверху.'}</div>
@@ -186,6 +203,11 @@ export default function Schedule() {
             {!!gaps && <div role="status" className="mb-2 rounded-md border border-bad bg-bad-tint px-3 py-2 text-sub font-medium text-bad-strong">
               {gaps} {gapUnit} без сотрудника. Нажмите на день с красной рамкой, чтобы назначить.
             </div>}
+            <div className="mb-2 flex items-center justify-between">
+              <button type="button" aria-label="Предыдущий месяц" className="tap flex size-11 items-center justify-center rounded-md border border-line bg-surface text-accent" onClick={() => shiftMonth(-1)}><Chevron dir="left" size={22}/></button>
+              <span className="text-row font-semibold">{monthLabel(month)}</span>
+              <button type="button" aria-label="Следующий месяц" className="tap flex size-11 items-center justify-center rounded-md border border-line bg-surface text-accent" onClick={() => shiftMonth(1)}><Chevron size={22}/></button>
+            </div>
             <MonthCalendar month={month} days={monthDays} selected={picked} onPick={setPicked}/>
           </>
           : <WeekMatrix
@@ -201,6 +223,11 @@ export default function Schedule() {
 
     {!totals.loading && mode === 'month' && pointId && !gaps && <div className="mt-2 text-sub text-muted">Каждый день месяца закрыт сменой</div>}
   </>
+
+  // Другой график с выбранного дня: мастер подхватит прежнюю очередь, останется поменять нужное.
+  const newFromDay = pointId && picked && picked >= today && <Button block variant="secondary" className="mt-2" onClick={() => buildFrom(picked)}>
+    Новый график с {dayLabel(picked)}
+  </Button>
 
   const dayPanel = picked && !totals.loading && <>
       <SectionTitle
@@ -222,8 +249,8 @@ export default function Schedule() {
               title={nameOf(shift.employeeId)}
               sub={`${pointName(shift.pickupPointId)} · ${shift.payMode === 'HALF' ? '½ оплаты' : shift.payMode === 'FULL' ? 'весь день' : payModeTitles[shift.payMode]}`}
               right={`${timeLabel(shift.startsAt)}–${timeLabel(shift.endsAt)}`}
-              rightSub={statusTitles[shift.status]}
-              rightSubTone={shift.status === 'COMPLETED' ? 'ok' : shift.status === 'NO_SHOW' ? 'bad' : 'neutral'}
+              rightSub={shiftState(shift, today).title}
+              rightSubTone={shiftState(shift, today).tone}
               chevron
               onClick={() => openDay(shift.pickupPointId, picked)}
             />)}
@@ -235,6 +262,7 @@ export default function Schedule() {
         className="mt-3"
         onClick={() => openDay(pointId || activePoints[0]?.id || '', picked)}
       >Поставить сотрудника</Button>}
+      {newFromDay}
     </>
 
   const filters = <FilterRow>
@@ -256,6 +284,7 @@ export default function Schedule() {
           ? <>
             <SectionTitle>{dayLabel(picked)} · {dayjs(picked).format('dddd')}</SectionTitle>
             <DaySheet key={`${pointId}-${picked}`} inline pointId={pointId} date={picked}/>
+            {newFromDay}
           </>
           : dayPanel || <Card><EmptyState title="Выберите день" sub="Смены дня появятся здесь — без шторки поверх календаря"/></Card>}
       </div>

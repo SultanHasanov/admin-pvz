@@ -27,10 +27,13 @@ export const weeksOfMonth = (month:string) => {
   return weeks
 }
 
+/** Короткие месяцы без точки и без зависимости от локали dayjs: «сент», «окт». */
+export const SHORT_MONTHS = ['янв','фев','мар','апр','мая','июн','июл','авг','сент','окт','ноя','дек']
+
 /** «7–13 сентября», а внутри месяца-перевёртыша — «28 сент. – 4 окт.». */
 export const weekLabel = (weekStart:string) => {
   const from = dayjs(weekStart), to = from.add(6, 'day')
-  const short = ['янв','фев','мар','апр','мая','июн','июл','авг','сент','окт','ноя','дек']
+  const short = SHORT_MONTHS
   return from.month() === to.month()
     ? `${from.date()}–${to.date()} ${short[to.month()]}`
     : `${from.date()} ${short[from.month()]} – ${to.date()} ${short[to.month()]}`

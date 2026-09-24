@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { cn } from './cn'
 import { haptics } from './haptics'
+import { Chevron } from './icons'
 
 /** Чип-фильтр в шапке экрана: выбранный ПВЗ и месяц. */
 export function Chip({ children, onClick, active }:{ children:ReactNode; onClick:() => void; active?:boolean }) {
@@ -13,7 +14,7 @@ export function Chip({ children, onClick, active }:{ children:ReactNode; onClick
     onClick={() => { haptics.tap(); onClick() }}
   >
     <span className="max-w-36 truncate">{children}</span>
-    <span className="text-axis text-muted">▾</span>
+    <span className="text-muted"><Chevron dir="down" size={16}/></span>
   </button>
 }
 

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { cn } from './cn'
 import { haptics } from './haptics'
 import { ActionSlot, useLayout } from './layout'
+import { Chevron } from './icons'
 
 /**
  * Каркас экрана: шапка и ряд фильтров не двигаются, прокручивается только содержимое.
@@ -78,9 +79,9 @@ export function Header({ title, onBack, action, bell }:{
     {onBack && !narrow && <button
       type="button"
       aria-label="Назад"
-      className="tap -ml-[7px] flex h-[30px] w-7 items-center justify-center pb-[5px] text-[28px] leading-none text-accent"
+      className="tap -ml-[9px] flex size-9 items-center justify-center text-accent"
       onClick={() => { haptics.tap(); onBack() }}
-    >‹</button>}
+    ><Chevron dir="left" size={26}/></button>}
     <div className="flex-1 truncate text-[21px] font-semibold tracking-[-0.025em]">{title}</div>
     {bell && <Bell {...bell}/>}
     {action}

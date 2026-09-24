@@ -1,10 +1,12 @@
 import { useMemo } from 'react'
 import { useQueries, useQuery } from '@tanstack/react-query'
-import { accrueShifts, calculateSummary, dailyTotals, ownerLosses, profit } from '../../entities/calculations'
+import { accrueShifts, calculateSummary, countsForPay, dailyTotals, ownerLosses, profit } from '../../entities/calculations'
+import type { Shift } from '../../entities/types'
 import { keys } from '../../services/queries'
 import { listEmployees, listSalaryRules } from '../../services/employees'
 import { listShifts } from '../../services/shifts'
-import { listTransactions } from '../../services/finance'
+import { listRecurringExpenses, listRecurringOccurrences, listTransactions } from '../../services/finance'
+import { fixedCostsFor, withoutPaidRecurring } from '../../entities/fixedCosts'
 import { listDeductionParts, listDeductions } from '../../services/deductions'
 import { getTaxSettings } from '../../services/settings'
 import { useOrg } from '../../app/OrgContext'
@@ -21,7 +23,7 @@ import { useOrg } from '../../app/OrgContext'
 export function useMonthTotals() {
   const { month, pointId } = useOrg()
 
-  const [transactions, shifts, employees, rules, deductions, tax] = useQueries({
+  const [rawTransactions, shifts, employees, rules, deductions, tax, recurring, occurrences] = useQueries({
     queries: [
       { queryKey: keys.transactions(month, pointId), queryFn: () => listTransactions(month, pointId || undefined) },
       { queryKey: keys.shifts(month, pointId), queryFn: () => listShifts(month, pointId || undefined) },
@@ -29,8 +31,17 @@ export function useMonthTotals() {
       { queryKey: keys.salaryRules, queryFn: listSalaryRules },
       { queryKey: keys.deductions(month, pointId), queryFn: () => listDeductions(month, pointId || undefined) },
       { queryKey: keys.tax, queryFn: getTaxSettings },
+      { queryKey: keys.recurring, queryFn: listRecurringExpenses },
+      { queryKey: keys.recurringOccurrences(month), queryFn: () => listRecurringOccurrences(month) },
     ],
   })
+
+  // Расходы месяца = постоянные (считаются сами) + разовые операции.
+  const fixedCosts = useMemo(() => fixedCostsFor(recurring.data ?? [], month, pointId), [recurring.data, month, pointId])
+  const fixedTotal = fixedCosts.reduce((sum, cost) => sum + cost.amountKopecks, 0)
+  const transactions = useMemo(() => ({
+    data: rawTransactions.data && withoutPaidRecurring(rawTransactions.data, (occurrences.data ?? []).map(row => row.expenseEntryId)),
+  }), [rawTransactions.data, occurrences.data])
 
   // Части разделённых удержаний: без них убыток владельца и вычеты сотрудников
   // считались бы по старому правилу «всё на одном».
@@ -45,8 +56,8 @@ export function useMonthTotals() {
     () => (employees.data ?? []).filter(employee => !pointId || employee.pickupPointIds.includes(pointId)),
     [employees.data, pointId])
 
-  const payrollOf = (filter:(status:string) => boolean) => staff.reduce((total, employee) => total + accrueShifts(
-    (shifts.data ?? []).filter(shift => shift.employeeId === employee.id && filter(shift.status)),
+  const payrollOf = (filter:(shift:Shift) => boolean) => staff.reduce((total, employee) => total + accrueShifts(
+    (shifts.data ?? []).filter(shift => shift.employeeId === employee.id && filter(shift)),
     (rules.data ?? []).filter(rule => rule.employeeId === employee.id),
   ), 0)
 
@@ -54,16 +65,17 @@ export function useMonthTotals() {
     const taxRate = tax.data?.enabled ? tax.data.rate : 0
     return calculateSummary(
       transactions.data ?? [],
-      payrollOf(status => status === 'COMPLETED'),
+      payrollOf(shift => countsForPay(shift)),
       taxRate,
       shifts.data ?? [],
       ownerLosses(deductions.data ?? [], month, parts.data ?? []),
+      fixedTotal,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transactions.data, shifts.data, staff, rules.data, tax.data, deductions.data, parts.data, month])
+  }, [transactions.data, shifts.data, staff, rules.data, tax.data, deductions.data, parts.data, month, fixedTotal])
 
   const forecast = useMemo(
-    () => payrollOf(status => status === 'COMPLETED' || status === 'PLANNED' || status === 'ON_DUTY'),
+    () => payrollOf(shift => shift.status !== 'REPLACED' && shift.status !== 'NO_SHOW'),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [shifts.data, staff, rules.data])
 
@@ -80,12 +92,15 @@ export function useMonthTotals() {
     incomeByDay,
     staff,
     shifts: shifts.data ?? [],
+    /** Разовые операции месяца. Постоянные расходы — отдельно, в `fixedCosts`. */
     transactions: transactions.data ?? [],
+    fixedCosts,
+    fixedTotal,
     deductions: deductions.data ?? [],
     parts: parts.data ?? [],
     rules: rules.data ?? [],
     taxRate: tax.data?.enabled ? tax.data.rate : 0,
-    loading: transactions.isLoading || shifts.isLoading || employees.isLoading,
-    error: transactions.error ?? shifts.error ?? employees.error ?? null,
+    loading: rawTransactions.isLoading || shifts.isLoading || employees.isLoading || recurring.isLoading,
+    error: rawTransactions.error ?? shifts.error ?? employees.error ?? recurring.error ?? null,
   }
 }

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { cn } from './cn'
 import { tone as tones, type Tone } from './tokens'
 import { haptics } from './haptics'
+import { Chevron } from './icons'
 
 /**
  * Список внутри карточки. Разделители — `divide-y`, а не border у каждой строки:
@@ -45,7 +46,7 @@ export function ListRow({
       {rightSub && <div className="mt-[3px] text-[11px] font-semibold" style={{ color: tones[rightSubTone].fg }}>{rightSub}</div>}
     </div>}
     {pill && <Pill tone={pill.tone}>{pill.label}</Pill>}
-    {chevron && <div className="flex-none text-[17px] leading-none text-chevron">›</div>}
+    {chevron && <div className="flex-none text-chevron"><Chevron size={20}/></div>}
   </>
 
   const classes = cn(

@@ -1,11 +1,10 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { EntryKind, Transaction } from '../entities/types'
-import { Button } from '../shared/kit/Button'
+import { Button, TextButton } from '../shared/kit/Button'
 import { Checkbox } from '../shared/kit/Checkbox'
 import { DateField } from '../shared/kit/DateField'
 import { Field, MoneyField, TextField } from '../shared/kit/Field'
-import { ChoiceChips } from '../shared/kit/PickList'
 import { cn } from '../shared/kit/cn'
 import { moneyInput, parseMoney, rubles } from '../shared/money'
 import { today } from '../shared/dates'
@@ -14,8 +13,12 @@ import { createTransaction, deleteTransaction, listExpenseCategories, updateTran
 import { listEntryPresets, rememberAmount } from '../services/presets'
 import { useWrite } from '../features/write'
 import { useOrg } from '../app/OrgContext'
+import { useSheets } from '../app/sheets'
+import { PointButton } from './PointButton'
+import { PayoutPicker } from './PayoutPicker'
 
-const INCOME_CATEGORIES = ['Выручка WB', 'Платное хранение', 'Прочий доход']
+/** Выплаты маркетплейса вписываются по периодам (`PayoutPicker`), здесь — только прочий доход. */
+const INCOME_CATEGORIES = ['Платное хранение', 'Прочий доход']
 
 /**
  * Доход или расход одной формой.
@@ -25,9 +28,19 @@ const INCOME_CATEGORIES = ['Выручка WB', 'Платное хранение
  * Галочка «Запомнить» перезаписывает пресет.
  *
  * С `entry` — правка уже записанной операции из журнала: те же поля, плюс удаление.
+ *
+ * Новый доход по умолчанию — выплата маркетплейса в период пункта (`PayoutPicker`);
+ * полная форма остаётся для прочих доходов.
  */
-export default function OpSheet({ kind: kindProp = 'EXPENSE', entry, close }:{ kind?:EntryKind; entry?:Transaction; close:() => void }) {
+export default function OpSheet(props:{ kind?:EntryKind; entry?:Transaction; pointId?:string; close:() => void }) {
+  const [other, setOther] = useState(false)
+  if (props.kind === 'INCOME' && !props.entry && !other) return <PayoutPicker pointId={props.pointId} onOther={() => setOther(true)}/>
+  return <OpForm {...props}/>
+}
+
+function OpForm({ kind: kindProp = 'EXPENSE', entry, close }:{ kind?:EntryKind; entry?:Transaction; close:() => void }) {
   const kind = entry?.kind ?? kindProp
+  const { open, replace } = useSheets()
   const { points, defaultPointId, pointName } = useOrg()
   const active = points.filter(point => !point.archivedAt)
 
@@ -87,13 +100,12 @@ export default function OpSheet({ kind: kindProp = 'EXPENSE', entry, close }:{ k
   })
 
   return <>
-    {active.length > 1 && <Field label="Пункт выдачи">
-      <ChoiceChips
-        value={pointId}
-        onPick={setPointId}
-        options={active.map(point => ({ value: point.id, label: point.name.replace(/^ПВЗ\s+/, '') }))}
-      />
-    </Field>}
+    {kind === 'EXPENSE' && !entry && <div className="mb-3 text-sub leading-[1.4] text-muted">
+      Разовая покупка — посчитается только в этом месяце. Аренда, камеры, уборка —{' '}
+      <TextButton onClick={() => replace('newRecur', { title: category.trim() || undefined })}>в постоянные расходы</TextButton>
+    </div>}
+
+    <PointButton value={pointId} onPick={setPointId}/>
 
     <Field label="Категория">
       <div className="mb-2 flex flex-wrap gap-2">
@@ -146,7 +158,12 @@ export default function OpSheet({ kind: kindProp = 'EXPENSE', entry, close }:{ k
       variant="danger"
       className="mt-2"
       disabled={remove.isPending}
-      onClick={() => remove.mutate(undefined as void)}
+      onClick={() => open('confirm', {
+        text: `Удалить ${kind === 'INCOME' ? 'доход' : 'расход'} ${rubles(entry.amountKopecks)} · ${entry.category}? Отменить это нельзя.`,
+        yesLabel: 'Удалить',
+        tone: 'bad',
+        onYes: () => remove.mutate(undefined as void),
+      })}
     >Удалить операцию</Button>}
   </>
 }

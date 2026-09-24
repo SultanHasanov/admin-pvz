@@ -25,7 +25,8 @@ export function dayView(shifts:Shift[], date:string, today:string, nameOf:(id:st
 
   if (live.some(shift => shift.status === 'NO_SHOW')) return { tone: 'bad', lines, strong: true }
   if (live.some(shift => shift.payMode !== 'FULL')) return { tone: 'warn', lines }
-  if (live.every(shift => shift.status === 'COMPLETED')) return { tone: 'ok', lines }
+  // Прошедший день со сменами — отработан: выход не подтверждают.
+  if (date < today) return { tone: 'ok', lines }
   // План и идущая смена — акцентные, как `plan`/`now` в прототипе.
   return { tone: 'accent', lines }
 }

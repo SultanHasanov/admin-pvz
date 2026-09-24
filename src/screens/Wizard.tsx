@@ -5,7 +5,7 @@ import { Screen, Header } from '../shared/kit/Screen'
 import { Card } from '../shared/kit/Card'
 import { Avatar, List, ListRow } from '../shared/kit/ListRow'
 import { SectionTitle, Label } from '../shared/kit/Text'
-import { Button, TextButton } from '../shared/kit/Button'
+import { Button } from '../shared/kit/Button'
 import { Segmented, Stepper } from '../shared/kit/Segmented'
 import { Banner } from '../shared/kit/Field'
 import { ChoiceChips } from '../shared/kit/PickList'
@@ -23,7 +23,6 @@ import { dayView } from '../features/schedule/dayTone'
 import { useOrg } from '../app/OrgContext'
 import { defaultShiftTimes } from '../shared/shiftTimes'
 import { useNav } from '../app/nav'
-import { useSheets } from '../app/sheets'
 import { scope } from '../services/queries'
 
 /** Дни недели в нумерации dayjs: 0 — воскресенье, поэтому порядок начинается с 1. */
@@ -38,7 +37,6 @@ const WEEKDAYS = [[1, 'пн'], [2, 'вт'], [3, 'ср'], [4, 'чт'], [5, 'пт'
 export default function Wizard() {
   const { month, pointId, points, defaultPointId, pointName } = useOrg()
   const { back, canBack } = useNav()
-  const { open } = useSheets()
   const client = useQueryClient()
   const totals = useMonthTotals()
 
@@ -97,7 +95,6 @@ export default function Wizard() {
   const header = <Header
     title="Мастер графика"
     onBack={canBack ? back : undefined}
-    action={draft.ready ? <TextButton onClick={() => open('saveTpl', { plans: draft.plans, pointId: target, ...times })}>Шаблон</TextButton> : undefined}
   />
 
   if (totals.loading) return <Screen header={header}><Card><SkeletonRows rows={4}/></Card></Screen>

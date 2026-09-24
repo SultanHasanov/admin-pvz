@@ -33,7 +33,6 @@ export const ownerTabs:TabDef[] = [
     id: 'sched', label: 'График', root: '/sched', icon: <IconSchedule/>,
     subs: [
       { label: 'Заполнить график', to: '/sched/build' },
-      { label: 'Шаблоны', to: '/sched/templates' },
       { label: 'Поделиться', to: '/sched/share' },
     ],
   },
@@ -45,7 +44,7 @@ export const ownerTabs:TabDef[] = [
       { label: 'Зарплаты', to: '/money?tab=pay' },
       { label: 'Удержания', to: '/money?tab=ded', also: /^\/money\/ded\// },
       { label: 'Журнал операций', to: '/money/ops' },
-      { label: 'Регулярные расходы', to: '/money/recurring' },
+      { label: 'Постоянные расходы', to: '/money/recurring' },
       { label: 'Категории', to: '/money/categories' },
     ],
   },

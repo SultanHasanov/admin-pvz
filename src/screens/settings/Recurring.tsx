@@ -1,105 +1,74 @@
-import { useQueries } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Screen, Header } from '../../shared/kit/Screen'
 import { Card } from '../../shared/kit/Card'
 import { Button } from '../../shared/kit/Button'
+import { List, ListRow } from '../../shared/kit/ListRow'
+import { SectionTitle } from '../../shared/kit/Text'
 import { EmptyState, ErrorNote, SkeletonRows } from '../../shared/kit/Misc'
-import { cn } from '../../shared/kit/cn'
-import { useLayout } from '../../shared/kit/layout'
 import { rubles } from '../../shared/money'
-import { dayLabel } from '../../shared/dates'
-import { keys, scope } from '../../services/queries'
-import {
-  confirmRecurringExpense, listRecurringExpenses, listRecurringOccurrences,
-  recurringDueDate, skipRecurringExpense,
-} from '../../services/finance'
-import { recurringState } from '../../features/home/useAlerts'
-import { useWrite } from '../../features/write'
+import { currentMonth } from '../../shared/dates'
+import { isCurrent, SUGGESTED_FIXED_COSTS } from '../../entities/fixedCosts'
+import { keys } from '../../services/queries'
+import { listRecurringExpenses } from '../../services/finance'
 import { useOrg } from '../../app/OrgContext'
 import { useNav } from '../../app/nav'
 import { useSheets } from '../../app/sheets'
 
 /**
- * Регулярные расходы месяца. Каждый ждёт подтверждения: «Оплачено» создаёт операцию
- * в финансах, «Пропустить» закрывает месяц без расхода. Сами они ничего не списывают —
- * аренда может прийти другой суммой, и тихая запись была бы неправдой.
+ * Постоянные расходы: аренда, камеры, уборка. Заводятся один раз и сами входят в расходы
+ * каждого месяца — подтверждать ничего не нужно. Разовые покупки записываются операциями.
  */
 export default function Recurring() {
-  const { month, pointId, pointName } = useOrg()
+  const { pointId, pointName } = useOrg()
   const { back, canBack } = useNav()
   const { open } = useSheets()
-  const { desktop } = useLayout()
 
-  const [recurring, occurrences] = useQueries({
-    queries: [
-      { queryKey: keys.recurring, queryFn: listRecurringExpenses },
-      { queryKey: keys.recurringOccurrences(month), queryFn: () => listRecurringOccurrences(month) },
-    ],
-  })
-
-  const invalidate = [scope.recurring, scope.recurringOccurrences, scope.transactions]
-  const pay = useWrite({
-    run: ({ id, dueOn }:{ id:string; dueOn:string; label:string }) => confirmRecurringExpense(id, dueOn),
-    invalidate,
-    done: vars => `${vars.label} в расходах`,
-  })
-  const skip = useWrite({
-    run: ({ id, dueOn }:{ id:string; dueOn:string }) => skipRecurringExpense(id, dueOn),
-    invalidate,
-    done: 'Пропущено в этом месяце',
-  })
-
+  const recurring = useQuery({ queryKey: keys.recurring, queryFn: listRecurringExpenses })
+  const month = currentMonth()
+  // С фильтром по ПВЗ показываем его расходы и общие: общие тоже про этот пункт.
   const rows = (recurring.data ?? [])
-    .filter(row => row.active && (!pointId || row.pickupPointId === pointId))
-    .map(expense => {
-      const dueOn = recurringDueDate(month, expense.dayOfMonth)
-      const occurrence = occurrences.data?.find(row => row.recurringExpenseId === expense.id && row.dueOn === dueOn)
-      return { expense, dueOn, status: occurrence?.status ?? 'PENDING' }
-    })
-    .sort((a, b) => a.dueOn.localeCompare(b.dueOn))
+    .filter(cost => isCurrent(cost, month) && (!pointId || !cost.pickupPointId || cost.pickupPointId === pointId))
+    .sort((a, b) => (a.pickupPointId ?? '').localeCompare(b.pickupPointId ?? '') || a.category.localeCompare(b.category, 'ru'))
+  const total = rows.reduce((sum, cost) => sum + cost.amountKopecks, 0)
+  const suggestions = SUGGESTED_FIXED_COSTS.filter(name => !rows.some(cost => cost.category.toLowerCase() === name.toLowerCase()))
 
-  return <Screen header={<Header title="Регулярные расходы" onBack={canBack ? back : undefined}/>}>
+  return <Screen header={<Header title="Постоянные расходы" onBack={canBack ? back : undefined}/>}>
     <div className="mb-3 text-row leading-[1.45] text-muted">
-      Каждый месяц эти расходы ждут подтверждения. «Оплачено» создаёт операцию в финансах.
+      Считаются в расходах каждого месяца сами. Разовые покупки — чайник, стул — добавляйте как обычный расход.
     </div>
 
     {recurring.error && <div className="mb-3"><ErrorNote error={recurring.error}/></div>}
-    {recurring.isLoading && <Card><SkeletonRows rows={3}/></Card>}
-    {!recurring.isLoading && !rows.length && <Card>
-      <EmptyState title="Регулярных расходов нет" sub="Аренда, интернет и уборка — добавьте их один раз, дальше они будут напоминать о себе"/>
-    </Card>}
+    {recurring.isLoading
+      ? <Card><SkeletonRows rows={3}/></Card>
+      : <Card>
+        {!rows.length
+          ? <EmptyState title="Постоянных расходов нет" sub="Добавьте аренду, камеры, уборку — дальше они посчитаются сами"/>
+          : <List>
+            {rows.map(cost => <ListRow
+              key={cost.id}
+              title={cost.category}
+              sub={cost.pickupPointId ? pointName(cost.pickupPointId) : 'Все ПВЗ · общий, в итоге по всем пунктам'}
+              right={rubles(cost.amountKopecks)}
+              rightSub="в месяц"
+              chevron
+              onClick={() => open('newRecur', { cost })}
+            />)}
+            <ListRow title={<span className="font-semibold">Итого в месяц</span>} right={<span className="font-semibold">{rubles(total)}</span>}/>
+          </List>}
+      </Card>}
 
-    {/* Десктоп: карточки в две колонки, а не таблица — у ожидающих свои кнопки. */}
-    <div className={cn('grid items-start gap-2', desktop && 'grid-cols-2')}>
-      {rows.map(({ expense, dueOn, status }) => {
-        const due = status === 'PENDING'
-        const state = due ? recurringState(dueOn) : null
-        return <div key={expense.id} className={cn('rounded-lg border bg-surface p-4', due ? 'border-warn-banner-line' : 'border-line')}>
-          <div className="flex items-start gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="text-row font-medium">{expense.category}</div>
-              <div className="mt-0.5 text-sub text-muted">
-                {pointName(expense.pickupPointId)} · {expense.dayOfMonth} число каждого месяца
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-row font-semibold tabular-nums">{rubles(expense.amountKopecks)}</div>
-              <div className={cn('mt-0.5 text-sub', due ? 'text-warn' : status === 'PAID' ? 'text-ok' : 'text-muted')}>
-                {due ? `ожидает оплаты · ${state!.text}` : status === 'PAID' ? 'оплачено' : 'пропущено'}
-              </div>
-            </div>
-          </div>
-          {due && <div className="mt-3 grid grid-cols-2 gap-2">
-            <Button
-              disabled={pay.isPending}
-              onClick={() => pay.mutate({ id: expense.id, dueOn, label: `${expense.category} · ${rubles(expense.amountKopecks)}` })}
-            >Оплачено</Button>
-            <Button variant="secondary" disabled={skip.isPending} onClick={() => skip.mutate({ id: expense.id, dueOn })}>Пропустить</Button>
-          </div>}
-          {due && <div className="mt-2 text-sub text-muted">Срок — {dayLabel(dueOn)}</div>}
-        </div>
-      })}
-    </div>
+    {!recurring.isLoading && !!suggestions.length && <>
+      <SectionTitle>Часто добавляют</SectionTitle>
+      <div className="flex flex-wrap gap-2">
+        {suggestions.map(name => <button
+          key={name}
+          type="button"
+          className="tap rounded-sm border border-line bg-surface px-3 py-[7px] text-act font-medium"
+          onClick={() => open('newRecur', { title: name })}
+        >+ {name}</button>)}
+      </div>
+    </>}
 
-    <Button block variant="secondary" className="mt-3" onClick={() => open('newRecur')}>Добавить регулярный расход</Button>
+    <Button block variant="secondary" className="mt-4" onClick={() => open('newRecur')}>Добавить постоянный расход</Button>
   </Screen>
 }

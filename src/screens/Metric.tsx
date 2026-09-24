@@ -1,15 +1,17 @@
 import { useParams } from 'react-router-dom'
-import { Screen, Header } from '../shared/kit/Screen'
+import { Screen, Header, FilterRow } from '../shared/kit/Screen'
 import { Card, Hero } from '../shared/kit/Card'
 import { Avatar, List, ListRow } from '../shared/kit/ListRow'
 import { SectionTitle } from '../shared/kit/Text'
 import { Button } from '../shared/kit/Button'
-import { EmptyState, SkeletonRows } from '../shared/kit/Misc'
+import { Chip, EmptyState, SkeletonRows } from '../shared/kit/Misc'
 import { initials } from '../shared/shifts'
 import { rubles } from '../shared/money'
 import { dayLabel, monthLabel } from '../shared/dates'
 import { useMonthTotals } from '../features/money/useMonthTotals'
 import { useSalarySheets } from '../features/money/useSalarySheets'
+import { PointPayouts } from '../features/money/PointPayouts'
+import { isPayoutEntry } from '../entities/payouts'
 import { useOrg } from '../app/OrgContext'
 import { useNav } from '../app/nav'
 import { useSheets } from '../app/sheets'
@@ -22,7 +24,7 @@ type Key = 'profit' | 'income' | 'expenses' | 'payroll' | 'tax'
  */
 export default function Metric() {
   const { key = 'profit' } = useParams<{ key:Key }>()
-  const { month, pointName } = useOrg()
+  const { month, pointName, points, pointId } = useOrg()
   const { back, canBack, push } = useNav()
   const { open } = useSheets()
   const totals = useMonthTotals()
@@ -30,8 +32,13 @@ export default function Metric() {
 
   const period = monthLabel(month).split(' ')[0].toLowerCase()
   const header = <Header title="Расчёт" onBack={canBack ? back : undefined}/>
+  // Пункт и месяц — прямо здесь: доход вписывают по пунктам, не уходя на главную.
+  const filters = <FilterRow>
+    <Chip onClick={() => open('pvzPick')}>{pointId ? pointName(pointId) : 'Все ПВЗ'}</Chip>
+    <Chip onClick={() => open('monthPick')}>{monthLabel(month).split(' ')[0]}</Chip>
+  </FilterRow>
 
-  if (totals.loading) return <Screen header={header}><Card><SkeletonRows rows={4}/></Card></Screen>
+  if (totals.loading) return <Screen header={header} filters={filters}><Card><SkeletonRows rows={4}/></Card></Screen>
 
   const operations = (kind:'INCOME' | 'EXPENSE') => totals.transactions
     .filter(entry => entry.kind === kind)
@@ -57,13 +64,36 @@ export default function Metric() {
       label: `Доход · ${period}`,
       value: totals.summary.income,
       note: `Операций: ${operations('INCOME').length}`,
-      body: <OperationList rows={operations('INCOME')} pointName={pointName} sign="+" onEdit={entry => open('op', { entry })}/>,
+      body: <>
+        {points.filter(point => !point.archivedAt && (!pointId || point.id === pointId)).map(point =>
+          <PointPayouts key={point.id} point={point} month={month} entries={totals.transactions}/>)}
+        <SectionTitle>Прочие доходы</SectionTitle>
+        <OperationList rows={operations('INCOME').filter(entry => !isPayoutEntry(entry))} pointName={pointName} sign="+" onEdit={entry => open('op', { entry })}/>
+      </>,
     },
     expenses: {
       label: `Расходы · ${period}`,
       value: totals.summary.expenses,
-      note: `Операций: ${operations('EXPENSE').length}`,
-      body: <OperationList rows={operations('EXPENSE')} pointName={pointName} sign="−" onEdit={entry => open('op', { entry })}/>,
+      note: `Постоянные ${rubles(totals.fixedTotal)} · разовые ${rubles(totals.summary.expenses - totals.fixedTotal)}`,
+      body: <>
+        <Card>
+          {totals.fixedCosts.length === 0
+            ? <EmptyState title="Постоянных расходов нет" sub="Аренда, камеры, уборка — добавьте один раз"/>
+            : <List>
+              {totals.fixedCosts.map(cost => <ListRow
+                key={cost.id}
+                title={cost.category}
+                sub={`Каждый месяц · ${cost.pickupPointId ? pointName(cost.pickupPointId) : 'все ПВЗ'}`}
+                right={`−${rubles(cost.amountKopecks)}`}
+                chevron
+                onClick={() => open('newRecur', { cost })}
+              />)}
+            </List>}
+        </Card>
+        <Button block variant="secondary" className="mt-2" onClick={() => push('/money/recurring')}>Постоянные расходы</Button>
+        <SectionTitle>Разовые · только в {period}</SectionTitle>
+        <OperationList rows={operations('EXPENSE')} pointName={pointName} sign="−" onEdit={entry => open('op', { entry })}/>
+      </>,
     },
     payroll: {
       label: `Зарплаты · ${period}`,
@@ -101,10 +131,10 @@ export default function Metric() {
 
   const view = views[key as Key] ?? views.profit
 
-  return <Screen header={header}>
+  return <Screen header={header} filters={filters}>
     <Hero label={view.label} value={rubles(view.value)} note={view.note}/>
     {key === 'income' && <Button block className="mt-3" onClick={() => open('op', { kind: 'INCOME' })}>Добавить доход</Button>}
-    {key === 'expenses' && <Button block className="mt-3" onClick={() => open('op', { kind: 'EXPENSE' })}>Добавить расход</Button>}
+    {key === 'expenses' && <Button block className="mt-3" onClick={() => open('op', { kind: 'EXPENSE' })}>Добавить разовый расход</Button>}
     {key === 'tax' && <Button block className="mt-3" onClick={() => open('setTax')}>Изменить ставку налога</Button>}
     {key === 'payroll' && <Button block className="mt-3" onClick={() => open('payout', { kind: 'PAYMENT' })}>Добавить выплату</Button>}
     <SectionTitle>Из чего сложилось</SectionTitle>

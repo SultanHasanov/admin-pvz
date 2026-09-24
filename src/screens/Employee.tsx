@@ -6,11 +6,11 @@ import { Avatar, List, ListRow, Pill } from '../shared/kit/ListRow'
 import { SectionTitle, Label } from '../shared/kit/Text'
 import { Button, TextButton } from '../shared/kit/Button'
 import { EmptyState, SkeletonRows } from '../shared/kit/Misc'
-import { accrueShifts } from '../entities/calculations'
-import { initials, statusTitles } from '../shared/shifts'
+import { accrueShifts, countsForPay } from '../entities/calculations'
+import { initials, shiftState } from '../shared/shifts'
 import { payModeTitles } from '../shared/salary'
 import { rubles } from '../shared/money'
-import { dayLabel, monthLabel, timeLabel } from '../shared/dates'
+import { dayLabel, monthLabel, timeLabel, today } from '../shared/dates'
 import { keys, scope } from '../services/queries'
 import { listEmployees, setEmployeeStatus } from '../services/employees'
 import { useWrite } from '../features/write'
@@ -144,9 +144,9 @@ export default function Employee() {
             key={shift.id}
             title={`${dayLabel(shift.startsAt)} · ${timeLabel(shift.startsAt)}–${timeLabel(shift.endsAt)}`}
             sub={`${pointName(shift.pickupPointId)}${shift.payMode === 'FULL' ? '' : ` · ${payModeTitles[shift.payMode]}`}`}
-            right={rubles(accrueShifts([shift].filter(row => row.status === 'COMPLETED'), rules))}
-            rightSub={statusTitles[shift.status]}
-            rightSubTone={shift.status === 'COMPLETED' ? 'ok' : shift.status === 'NO_SHOW' ? 'bad' : 'neutral'}
+            right={rubles(accrueShifts([shift].filter(row => countsForPay(row)), rules))}
+            rightSub={shiftState(shift, today()).title}
+            rightSubTone={shiftState(shift, today()).tone}
           />)}
         </List>}
     </Card>

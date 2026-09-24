@@ -11,6 +11,8 @@ import { listSalaryRates } from '../../services/rates'
 import { getPayoutSettings } from '../../services/payoutSettings'
 import { listExpenseCategories, listRecurringExpenses } from '../../services/finance'
 import { listTelegramIntegrations } from '../../services/telegram'
+import { isCurrent } from '../../entities/fixedCosts'
+import { currentMonth } from '../../shared/dates'
 import { useOrg } from '../../app/OrgContext'
 import { useNav } from '../../app/nav'
 import { useSheets } from '../../app/sheets'
@@ -59,7 +61,7 @@ export default function Settings() {
       rows: [
         { title: 'Категории расходов', right: `${categories.data?.length ?? 0} активных`, onClick: () => push('/money/categories') },
         { title: 'Пункты выдачи', right: `${points.filter(point => !point.archivedAt).length} активных`, onClick: () => push('/more/points') },
-        { title: 'Регулярные расходы', right: String((recurring.data ?? []).filter(row => row.active).length), onClick: () => push('/money/recurring') },
+        { title: 'Постоянные расходы', right: String((recurring.data ?? []).filter(row => isCurrent(row, currentMonth())).length), onClick: () => push('/money/recurring') },
       ],
     },
     {

@@ -65,6 +65,7 @@ function OwnerFeed({ close }:{ close:() => void }) {
     // Заявку и день открываем шторкой на месте: уводить с экрана ради одного
     // решения незачем, а «Назад» вернёт в ленту.
     else if (item.target.kind === 'request') replace('req', { id: item.target.id })
+    else if (item.target.kind === 'income') replace('payoutEntry', { pointId: item.target.pointId, periodId: item.target.periodId })
     else if (item.target.kind === 'day') replace('day', { pointId: item.target.pointId, date: item.target.date, pointLabel: pointName(item.target.pointId) })
   }}/>
 }

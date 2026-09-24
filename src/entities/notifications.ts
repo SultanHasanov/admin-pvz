@@ -1,6 +1,7 @@
 import dayjs from 'dayjs'
 import type { ShiftRequestKind } from './types'
 import type { Tone } from '../shared/kit/tokens'
+import type { PayoutReminder } from './payouts'
 
 /**
  * Лента уведомлений собирается здесь и нигде не хранится.
@@ -15,7 +16,7 @@ import type { Tone } from '../shared/kit/tokens'
  */
 
 /** `substitute` и `payment` — только в ленте сотрудника. */
-export type FeedKind = 'request' | 'deduction' | 'hole' | 'recurring' | 'payout' | 'substitute' | 'payment'
+export type FeedKind = 'request' | 'deduction' | 'hole' | 'recurring' | 'payout' | 'wbPayout' | 'substitute' | 'payment'
 
 /** Отметка прочтения: пара, по которой строка ленты сходится со строкой в базе. */
 export interface FeedRead { kind:FeedKind; refId:string }
@@ -41,6 +42,7 @@ export interface FeedItem {
     | { kind:'recurring' }
     | { kind:'day'; pointId:string; date:string }
     | { kind:'payout'; advance:boolean }
+    | { kind:'income'; pointId:string; periodId:string }
     // Кабинет сотрудника: ведут в его разделы, а не в экраны владельца.
     | { kind:'mySched' }
     | { kind:'myMoney' }
@@ -87,6 +89,8 @@ export interface FeedInput {
   deductions:FeedDeduction[]
   recurring:FeedRecurring[]
   payout:FeedPayout | null
+  /** Не вписана выплата маркетплейса (`entities/payouts`). */
+  wbPayout?:PayoutReminder | null
 }
 
 /** «19 сент» — тот же короткий вид, что и в остальном приложении. */
@@ -160,6 +164,18 @@ export function buildFeed(input:FeedInput):FeedItem[] {
       tone: input.payout.tone,
       date: input.payout.date,
       target: { kind: 'payout', advance: input.payout.advance },
+    })
+  }
+
+  if (input.wbPayout) {
+    push({
+      kind: 'wbPayout',
+      refId: input.wbPayout.refId,
+      title: input.wbPayout.title,
+      sub: input.wbPayout.sub,
+      tone: 'warn',
+      date: input.wbPayout.date,
+      target: { kind: 'income', pointId: input.wbPayout.pointId, periodId: input.wbPayout.periodId },
     })
   }
 

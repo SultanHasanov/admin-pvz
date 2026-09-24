@@ -51,6 +51,14 @@ export const sheetRegistry:Partial<Record<SheetType, SheetDef>> = {
     title: props => props.entry ? 'Изменить операцию' : props.kind === 'INCOME' ? 'Новый доход' : 'Новый расход',
     component: load(() => import('../sheets/OpSheet')),
   },
+  payoutEntry: {
+    title: () => 'Выплата',
+    component: load(() => import('../sheets/PayoutEntrySheet')),
+  },
+  payoutMonth: {
+    title: () => 'Выплата за месяц',
+    component: load(() => import('../sheets/PayoutMonthSheet')),
+  },
   newDed: {
     title: () => 'Новое удержание WB',
     component: load(() => import('../sheets/DeductionSheet')),
@@ -77,6 +85,11 @@ export const sheetRegistry:Partial<Record<SheetType, SheetDef>> = {
     sub: props => props.pointLabel as string | undefined,
     component: load(() => import('../sheets/DaySheet')),
   },
+  swap: {
+    title: () => 'Замена',
+    sub: props => dayTitle(props.date as string),
+    component: load(() => import('../sheets/SwapSheet')),
+  },
   cand: {
     // Замена по заявке — отдельный вопрос: не «кого поставить», а «кто выйдет вместо».
     title: props => props.requestId ? 'Кто выйдет вместо?' : props.shiftId ? 'Поменять сотрудника' : 'Кого поставить?',
@@ -86,10 +99,6 @@ export const sheetRegistry:Partial<Record<SheetType, SheetDef>> = {
   partial: {
     title: () => 'Неполный выход',
     component: load(() => import('../sheets/PartialSheet')),
-  },
-  saveTpl: {
-    title: () => 'Сохранить шаблон',
-    component: load(() => import('../sheets/SaveTemplateSheet')),
   },
   copyWeek: {
     title: () => 'Скопировать неделю',
@@ -117,8 +126,9 @@ export const sheetRegistry:Partial<Record<SheetType, SheetDef>> = {
   setPayDays: { title: () => 'Дни выплат', component: load(() => import('../sheets/settings/SetPayDaysSheet')) },
   newCat: { title: () => 'Новая категория', component: load(() => import('../sheets/settings/CategorySheet')) },
   renameCat: { title: () => 'Переименовать категорию', component: load(() => import('../sheets/settings/CategorySheet')) },
-  newRecur: { title: () => 'Регулярный расход', component: load(() => import('../sheets/settings/NewRecurSheet')) },
+  newRecur: { title: props => props.cost ? 'Постоянный расход' : 'Новый постоянный расход', component: load(() => import('../sheets/settings/NewRecurSheet')) },
   rate: { title: () => 'Новая ставка', component: load(() => import('../sheets/settings/RateSheet')) },
+  pointRate: { title: () => 'Ставка всем на пункте', component: load(() => import('../sheets/settings/PointRateSheet')) },
   split: {
     title: () => 'Кто платит за удержание',
     sub: () => 'Остаток — убыток владельца',
