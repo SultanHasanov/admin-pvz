@@ -26,7 +26,7 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         // prompt, а не autoUpdate: новая версия не должна перезагрузить экран посреди
-        // заполнения формы — человек сам жмёт «Обновить» (см. app/UpdatePrompt.tsx).
+        // заполнения формы — включаем её сами, когда шторки закрыты (см. app/UpdatePrompt.tsx).
         registerType: 'prompt',
         injectRegister: false,
         // Манифест лежит в public/ и подключён в index.html — плагин его не генерирует.

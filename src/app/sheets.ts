@@ -61,6 +61,9 @@ const useStore = create<SheetsStore>(set => ({
 /** Верхняя шторка прямо сейчас, без ожидания рендера. */
 export const currentTopSheet = () => useStore.getState().stack.at(-1)
 
+/** Открыта ли сейчас хоть одна шторка — формы живут в шторках. */
+export const useAnySheetOpen = () => useStore(state => state.stack.length > 0)
+
 const sheetDepthOf = (state:unknown) =>
   typeof state === 'object' && state !== null && 'sheetDepth' in state && typeof state.sheetDepth === 'number'
     ? state.sheetDepth
