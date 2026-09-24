@@ -10,6 +10,16 @@ export interface TabDef {
   /** Корень таба. Пустой — таб недоступен в этой роли. */
   root:string
   icon:ReactNode
+  /** Подпункты второго уровня — только в сайдбаре десктопа, на телефоне их роль играют экраны. */
+  subs?:SubDef[]
+}
+
+export interface SubDef {
+  label:string
+  /** Адрес, в том числе с вкладкой: `/money?tab=pay`. */
+  to:string
+  /** Вложенные адреса, при которых подпункт тоже подсвечен: карточка удержания — под «Удержаниями». */
+  also?:RegExp
 }
 
 /**
@@ -19,19 +29,60 @@ export interface TabDef {
  */
 export const ownerTabs:TabDef[] = [
   { id: 'home', label: 'Главная', root: '/home', icon: <IconHome/> },
-  { id: 'sched', label: 'График', root: '/sched', icon: <IconSchedule/> },
+  {
+    id: 'sched', label: 'График', root: '/sched', icon: <IconSchedule/>,
+    subs: [
+      { label: 'Заполнить график', to: '/sched/build' },
+      { label: 'Шаблоны', to: '/sched/templates' },
+      { label: 'Поделиться', to: '/sched/share' },
+    ],
+  },
   { id: 'people', label: 'Люди', root: '/people', icon: <IconPeople/> },
-  { id: 'money', label: 'Деньги', root: '/money', icon: <IconMoney/> },
-  { id: 'more', label: 'Ещё', root: '/more', icon: <IconMore/> },
+  {
+    id: 'money', label: 'Деньги', root: '/money', icon: <IconMoney/>,
+    subs: [
+      { label: 'Операции', to: '/money?tab=fin' },
+      { label: 'Зарплаты', to: '/money?tab=pay' },
+      { label: 'Удержания', to: '/money?tab=ded', also: /^\/money\/ded\// },
+      { label: 'Журнал операций', to: '/money/ops' },
+      { label: 'Регулярные расходы', to: '/money/recurring' },
+      { label: 'Категории', to: '/money/categories' },
+    ],
+  },
+  {
+    id: 'more', label: 'Ещё', root: '/more', icon: <IconMore/>,
+    subs: [
+      { label: 'Пункты выдачи', to: '/more/points' },
+      { label: 'Настройки', to: '/more/settings' },
+      { label: 'Telegram-боты', to: '/more/telegram' },
+    ],
+  },
 ]
 
 export const employeeTabs:TabDef[] = [
   { id: 'home', label: 'Главная', root: '/me', icon: <IconHome/> },
   { id: 'sched', label: 'График', root: '/me/sched', icon: <IconSchedule/> },
   { id: 'people', label: 'Люди', root: '', icon: <IconPeople/> },
-  { id: 'money', label: 'Деньги', root: '/me/money', icon: <IconMoney/> },
+  {
+    id: 'money', label: 'Деньги', root: '/me/money', icon: <IconMoney/>,
+    subs: [{ label: 'Мои удержания', to: '/me/money/deductions' }],
+  },
   { id: 'more', label: 'Профиль', root: '/me/profile', icon: <IconMore/> },
 ]
+
+/**
+ * Подсвечен ли подпункт. Вкладка сравнивается с `?tab=`, а её отсутствие — с первой
+ * вкладкой: `/money` без параметра и есть «Операции».
+ */
+export function subActive(sub:SubDef, pathname:string, search:string) {
+  const [path, query] = sub.to.split('?')
+  if (sub.also?.test(pathname)) return true
+  if (!query) return pathname === path || pathname.startsWith(`${path}/`)
+  if (pathname !== path) return false
+  const tabIn = (to:string) => new URLSearchParams(to.split('?')[1]).get('tab')
+  const siblings = tabsFor(roleOf(pathname)).flatMap(tab => tab.subs ?? []).filter(item => item.to.startsWith(`${path}?`))
+  return (new URLSearchParams(search).get('tab') ?? tabIn(siblings[0].to)) === tabIn(sub.to)
+}
 
 export const tabsFor = (role:AppRole) => role === 'employee' ? employeeTabs : ownerTabs
 

@@ -1,10 +1,11 @@
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Screen, FilterRow } from '../shared/kit/Screen'
 import { Card, Hero } from '../shared/kit/Card'
-import { Avatar, List, ListRow, Pill } from '../shared/kit/ListRow'
+import { Avatar, List, ListRow } from '../shared/kit/ListRow'
 import { SectionTitle } from '../shared/kit/Text'
 import { Button } from '../shared/kit/Button'
 import { Segmented } from '../shared/kit/Segmented'
+import { DataList } from '../shared/kit/DataList'
 import { Chip, EmptyState, ErrorNote, SkeletonRows } from '../shared/kit/Misc'
 import { Fab } from '../shared/kit/TabBar'
 import type { Tone } from '../shared/kit/tokens'
@@ -17,10 +18,6 @@ import { useSalarySheets } from '../features/money/useSalarySheets'
 import { useOrg } from '../app/OrgContext'
 import { useNav } from '../app/nav'
 import { useSheets } from '../app/sheets'
-import { scope } from '../services/queries'
-import { closeSalaryPeriod, reopenSalaryPeriod } from '../services/salary'
-import { useWrite } from '../features/write'
-import { toastWarn } from '../shared/kit/Toaster'
 
 type Tab = 'fin' | 'pay' | 'ded'
 
@@ -38,9 +35,17 @@ const deductionTitles:Record<DeductionStatus, string> = {
  * Деньги: три вкладки одного раздела — операции, ведомость и удержания WB.
  * Вкладка живёт в адресе (?tab=), чтобы ссылка из уведомления открывала нужную.
  */
-export default function Money() {
+export default function Money({ tab: pinned }:{
+  /**
+   * Десктоп: список удержаний слева от карточки удержания. Адрес там — карточки,
+   * поэтому вкладка берётся отсюда, а смена вкладки уводит обратно на `/money`.
+   */
+  tab?:Tab
+} = {}) {
   const [params, setParams] = useSearchParams()
-  const tab = (params.get('tab') as Tab) ?? 'fin'
+  const navigate = useNavigate()
+  const tab = pinned ?? (params.get('tab') as Tab) ?? 'fin'
+  const { id: selected } = useParams()
   const { month, pointId, pointName } = useOrg()
   const { push } = useNav()
   const { open } = useSheets()
@@ -49,21 +54,7 @@ export default function Money() {
 
   const period = monthLabel(month).split(' ')[0]
 
-  // Закрытие сохраняет снимок ведомости по всем сотрудникам — с фильтром ПВЗ в него
-  // попала бы только часть людей, поэтому закрываем только при «Все ПВЗ».
-  const togglePeriod = useWrite({
-    run: () => salary.closed ? reopenSalaryPeriod(month) : closeSalaryPeriod(month, salary.sheets),
-    invalidate: [scope.salaryPeriod],
-    done: salary.closed ? `${period}: месяц снова открыт` : `${period}: месяц закрыт, расчёт сохранён`,
-  })
-  const askTogglePeriod = () => {
-    if (!salary.closed && pointId) { toastWarn('Закрыть месяц можно, когда выбраны «Все ПВЗ»'); return }
-    open('confirm', salary.closed
-      ? { text: `Открыть ${period.toLowerCase()} снова? Суммы начнут пересчитываться по текущему графику и ставкам.`, yesLabel: 'Открыть', tone: 'accent', onYes: () => togglePeriod.mutate(undefined as void) }
-      : { text: `Закрыть ${period.toLowerCase()}? Расчёт сохранится, а правки графика за этот месяц потребуют перерасчёта.`, yesLabel: 'Закрыть месяц', tone: 'accent', onYes: () => togglePeriod.mutate(undefined as void) })
-  }
-
-  const setTab = (next:Tab) => setParams(current => {
+  const setTab = (next:Tab) => pinned ? navigate(`/money?tab=${next}`, { state: { depth: 0 } }) : setParams(current => {
     const copy = new URLSearchParams(current)
     copy.set('tab', next)
     return copy
@@ -91,9 +82,8 @@ export default function Money() {
       period={period}
       onOpen={id => push(`/people/${id}/payroll`)}
       onPayAll={kind => open('payAll', { kind })}
-      onTogglePeriod={askTogglePeriod}
     />}
-    {!totals.loading && tab === 'ded' && <DeductionsTab totals={totals} onOpen={id => push(`/money/ded/${id}`)} pointName={pointName}/>}
+    {!totals.loading && tab === 'ded' && <DeductionsTab totals={totals} selected={selected} onOpen={id => push(`/money/ded/${id}`)} pointName={pointName}/>}
 
     <Fab onClick={() => open('quick')}/>
   </Screen>
@@ -122,26 +112,39 @@ function FinanceTab({ totals, period, pointName }:{
     <Card>
       {operations.length === 0
         ? <EmptyState title="Операций за месяц нет" sub="Доходы и расходы появятся здесь после первой записи"/>
-        : <List>
-          {operations.map(operation => <ListRow
-            key={`${operation.kind}-${operation.id}`}
-            title={operation.category}
-            sub={`${dayLabel(operation.date)} · ${pointName(operation.pickupPointId)}${operation.description ? ` · ${operation.description}` : ''}`}
-            right={<span className={operation.kind === 'INCOME' ? 'text-ok' : 'text-bad-strong'}>
-              {operation.kind === 'INCOME' ? '+' : '−'}{rubles(operation.amountKopecks)}
-            </span>}
-          />)}
-        </List>}
+        : <DataList
+          rows={operations}
+          rowKey={operation => `${operation.kind}-${operation.id}`}
+          row={operation => ({
+            title: operation.category,
+            sub: `${dayLabel(operation.date)} · ${pointName(operation.pickupPointId)}${operation.description ? ` · ${operation.description}` : ''}`,
+            right: <SignedAmount operation={operation}/>,
+          })}
+          columns={[
+            { label: 'Дата', width: '96px', cell: operation => dayLabel(operation.date) },
+            { label: 'Категория', width: 'minmax(0,1.2fr)', cell: operation => <span className="font-medium">{operation.category}</span> },
+            { label: 'ПВЗ', width: 'minmax(0,1fr)', cell: operation => pointName(operation.pickupPointId) },
+            { label: 'Сумма', width: '120px', align: 'right', cell: operation => <SignedAmount operation={operation}/> },
+          ]}
+        />}
     </Card>
   </>
 }
 
-function PayrollTab({ salary, period, onOpen, onPayAll, onTogglePeriod }:{
+const SignedAmount = ({ operation }:{ operation:{ kind:'INCOME' | 'EXPENSE'; amountKopecks:number } }) =>
+  <span className={operation.kind === 'INCOME' ? 'text-ok' : 'text-bad-strong'}>
+    {operation.kind === 'INCOME' ? '+' : '−'}{rubles(operation.amountKopecks)}
+  </span>
+
+/**
+ * Ведомость месяца. Закрытия месяца нет: начисления идут из графика, выплаты — из записей
+ * о выплатах, и остаток всегда считается заново (решение владельца проекта, 24.09.2026).
+ */
+function PayrollTab({ salary, period, onOpen, onPayAll }:{
   salary:ReturnType<typeof useSalarySheets>
   period:string
   onOpen:(employeeId:string) => void
   onPayAll:(kind:'ADVANCE' | 'PAYMENT') => void
-  onTogglePeriod:() => void
 }) {
   return <>
     <Hero
@@ -155,39 +158,45 @@ function PayrollTab({ salary, period, onOpen, onPayAll, onTogglePeriod }:{
       <Button className="flex-1" variant="secondary" onClick={() => onPayAll('ADVANCE')}>Аванс</Button>
     </div>
 
-    <SectionTitle count={salary.sheets.length} action={salary.closed ? <Pill tone="ok">месяц закрыт</Pill> : undefined}>
-      Ведомость
-    </SectionTitle>
+    <SectionTitle count={salary.sheets.length}>Ведомость</SectionTitle>
     <Card>
       {salary.sheets.length === 0
         ? <EmptyState title="Начислений за месяц нет" sub="Ведомость появится, когда сотрудники отработают смены"/>
-        : <List>
-          {salary.sheets.map(sheet => <ListRow
-            key={sheet.employeeId}
-            leading={<Avatar initials={initials(sheet.fullName)}/>}
-            title={sheet.fullName}
-            sub={`${sheet.shifts} смен · начислено ${rubles(sheet.accrued)}`}
-            right={rubles(sheet.balance)}
-            rightSub={sheet.balance > 0 ? 'к выплате' : 'закрыто'}
-            rightSubTone={sheet.balance > 0 ? 'warn' : 'ok'}
-            onClick={() => onOpen(sheet.employeeId)}
-          />)}
-        </List>}
+        : <DataList
+          rows={salary.sheets}
+          rowKey={sheet => sheet.employeeId}
+          onOpen={sheet => onOpen(sheet.employeeId)}
+          row={sheet => ({
+            leading: <Avatar initials={initials(sheet.fullName)}/>,
+            title: sheet.fullName,
+            sub: `${sheet.shifts} смен · начислено ${rubles(sheet.accrued)}`,
+            right: rubles(sheet.balance),
+            rightSub: sheet.balance > 0 ? 'к выплате' : 'закрыто',
+            rightSubTone: sheet.balance > 0 ? 'warn' : 'ok',
+          })}
+          columns={[
+            { label: 'Сотрудник', width: 'minmax(0,1.6fr)', cell: sheet => <span className="font-medium">{sheet.fullName}</span> },
+            { label: 'Смен', width: '64px', align: 'right', cell: sheet => sheet.shifts },
+            { label: 'Начислено', width: '120px', align: 'right', cell: sheet => rubles(sheet.accrued) },
+            { label: 'Выплачено', width: '120px', align: 'right', cell: sheet => rubles(sheet.paid) },
+            {
+              label: 'Остаток', width: '120px', align: 'right',
+              cell: sheet => <span className={sheet.balance > 0 ? 'font-semibold text-warn-ink' : 'text-ok'}>{rubles(sheet.balance)}</span>,
+            },
+          ]}
+        />}
     </Card>
 
-    <Button block variant="secondary" className="mt-3" onClick={onTogglePeriod}>
-      {salary.closed ? 'Открыть месяц снова' : 'Закрыть месяц — выплачено'}
-    </Button>
     <div className="mt-2 text-sub leading-[1.4] text-muted">
-      {salary.closed
-        ? 'Месяц закрыт: расчёт сохранён. Если поправить график задним числом, суммы разойдутся.'
-        : 'Закройте месяц, когда всё выплачено: расчёт сохранится и не поплывёт от будущих правок.'}
+      Суммы считаются сами по подтверждённым сменам, премиям, штрафам и выплатам — закрывать месяц не нужно.
     </div>
   </>
 }
 
-function DeductionsTab({ totals, onOpen, pointName }:{
+function DeductionsTab({ totals, selected, onOpen, pointName }:{
   totals:ReturnType<typeof useMonthTotals>
+  /** Открытое справа удержание — на десктопе его строка подсвечена. */
+  selected?:string
   onOpen:(id:string) => void
   pointName:(id:string | null | undefined) => string
 }) {
@@ -212,6 +221,7 @@ function DeductionsTab({ totals, onOpen, pointName }:{
             sub={`${dayLabel(deduction.eventAt ?? deduction.createdAt)} · ${pointName(deduction.pickupPointId)}`}
             right={rubles(deduction.amountKopecks)}
             pill={{ label: deductionTitles[deduction.status], tone: deductionTone[deduction.status] }}
+            selected={deduction.id === selected}
             onClick={() => onOpen(deduction.id)}
           />)}
         </List>}

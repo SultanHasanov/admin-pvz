@@ -1,4 +1,4 @@
-import type { Bonus, Penalty, PenaltyStatus, SalaryPayment, SalarySheet } from '../entities/types'
+import type { Bonus, Penalty, PenaltyStatus, SalaryPayment } from '../entities/types'
 import { monthEnd, monthStart } from '../shared/dates'
 import { client, organizationId } from './org'
 
@@ -69,32 +69,3 @@ export async function deleteSalaryPayment(id:string) {
   if (error) throw error
 }
 
-export async function getSalaryPeriod(month:string) {
-  const organization_id = await organizationId()
-  const { from } = range(month)
-  const { data, error } = await client().from('salary_periods').select('id,starts_on,ends_on,status,closed_at').eq('organization_id', organization_id).eq('starts_on', from).maybeSingle()
-  if (error) throw error
-  return data as { id:string; starts_on:string; ends_on:string; status:'OPEN' | 'CLOSED'; closed_at:string | null } | null
-}
-
-/** Закрытие месяца: сохраняем снимок расчёта, чтобы позже он не «поплыл» из-за правок ставок. */
-export async function closeSalaryPeriod(month:string, sheets:SalarySheet[]) {
-  const db = client()
-  const organization_id = await organizationId()
-  const starts_on = monthStart(month)
-  const ends_on = new Date(new Date(monthEnd(month)).getTime() - 86_400_000).toISOString().slice(0, 10)
-  const period = await db.from('salary_periods').upsert({ organization_id, starts_on, ends_on, status: 'CLOSED', closed_at: new Date().toISOString() }, { onConflict: 'organization_id,starts_on,ends_on' }).select('id').single()
-  if (period.error) throw period.error
-  if (!sheets.length) return
-  const { error } = await db.from('salary_accruals').upsert(sheets.map(sheet => ({
-    organization_id, salary_period_id: period.data.id, employee_id: sheet.employeeId,
-    amount_kopecks: sheet.balance, calculation: sheet as unknown as Record<string, number>,
-  })), { onConflict: 'salary_period_id,employee_id' })
-  if (error) throw error
-}
-
-export async function reopenSalaryPeriod(month:string) {
-  const organization_id = await organizationId()
-  const { error } = await client().from('salary_periods').update({ status: 'OPEN', closed_at: null }).eq('organization_id', organization_id).eq('starts_on', monthStart(month))
-  if (error) throw error
-}

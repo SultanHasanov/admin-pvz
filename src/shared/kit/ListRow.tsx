@@ -24,13 +24,15 @@ export interface ListRowProps {
   chevron?:boolean
   /** Заголовок в две строки — тогда содержимое выравнивается по верху. */
   align?:'center' | 'start'
+  /** Десктоп, master–detail: запись этой строки открыта справа. */
+  selected?:boolean
   onClick?:() => void
   className?:string
 }
 
 export function ListRow({
   leading, title, sub, right, rightSub, rightSubTone = 'neutral',
-  pill, chevron, align = 'center', onClick, className,
+  pill, chevron, align = 'center', selected, onClick, className,
 }:ListRowProps) {
   const inner = <>
     {leading}
@@ -49,13 +51,15 @@ export function ListRow({
   const classes = cn(
     'flex w-full gap-[11px] px-[15px] py-3 text-left',
     align === 'start' ? 'items-start' : 'items-center',
+    selected && 'bg-accent-tint',
     className,
   )
 
   if (!onClick) return <div className={classes}>{inner}</div>
   return <button
     type="button"
-    className={cn(classes, 'tap active:bg-surface-soft')}
+    aria-current={selected || undefined}
+    className={cn(classes, 'tap active:bg-surface-soft', !selected && 'hover:bg-surface-soft')}
     onClick={() => { haptics.tap(); onClick() }}
   >{inner}</button>
 }

@@ -10,6 +10,8 @@ import { Button, TextButton } from '../shared/kit/Button'
 import { Segmented } from '../shared/kit/Segmented'
 import { Chip, EmptyState, ErrorNote, SkeletonRows } from '../shared/kit/Misc'
 import { MonthCalendar, type CalendarDay } from '../shared/kit/MonthCalendar'
+import { useLayout } from '../shared/kit/layout'
+import DaySheet from '../sheets/DaySheet'
 import { WeekMatrix, type MatrixCell } from '../shared/kit/WeekMatrix'
 import { initials, statusTitles } from '../shared/shifts'
 import { payModeTitles } from '../shared/salary'
@@ -17,7 +19,7 @@ import { dayLabel, monthLabel, monthStart, timeLabel, today as todayDate, weekSt
 import { keys } from '../services/queries'
 import { listEmployees } from '../services/employees'
 import { dayView } from '../features/schedule/dayTone'
-import { slotsForDay } from '../entities/slots'
+import { isAbsent, slotsForDay } from '../entities/slots'
 import { useVacations } from '../features/schedule/useVacations'
 import { useMonthTotals } from '../features/money/useMonthTotals'
 import { useOrg } from '../app/OrgContext'
@@ -36,6 +38,7 @@ export default function Schedule() {
   const { month, pointId, points, pointName } = useOrg()
   const { open } = useSheets()
   const { push } = useNav()
+  const { desktop } = useLayout()
   const totals = useMonthTotals()
   const { absences } = useVacations(month)
   const employees = useQuery({ queryKey: keys.employees(), queryFn: () => listEmployees() })
@@ -54,6 +57,12 @@ export default function Schedule() {
 
   const period = monthLabel(month).split(' ')[0]
   const nameOf = (id:string) => employees.data?.find(employee => employee.id === id)?.fullName ?? 'Сотрудник'
+  // В клетке телефона помещается пять букв имени; на десктопе — имя целиком и инициал
+  // фамилии, чтобы двух Ирин на одной точке можно было различить.
+  const cellName = (fullName:string) => {
+    const [first, last] = fullName.split(' ')
+    return desktop ? `${first}${last ? ` ${last[0]}.` : ''}` : first.slice(0, 5)
+  }
   const activePoints = points.filter(point => !point.archivedAt)
 
   const byDate = useMemo(() => {
@@ -74,20 +83,24 @@ export default function Schedule() {
       const date = first.add(index, 'day').format('YYYY-MM-DD')
       const shifts = (byDate.get(date) ?? []).filter(shift => !pointId || shift.pickupPointId === pointId)
       const view = dayView(shifts, date, today, nameOf, absences)
-      const names = shifts.filter(shift => shift.status !== 'REPLACED' && shift.status !== 'NO_SHOW').slice(0, 2).map(shift => `${nameOf(shift.employeeId).split(' ')[0].slice(0, 5)}${shift.payMode === 'HALF' ? ' ½' : ''}`)
+      // Человек в отпуске смену не отработает — его имя в клетке обманывало бы.
+      const working = shifts.filter(shift => shift.status !== 'REPLACED' && shift.status !== 'NO_SHOW' && !isAbsent(absences, shift.employeeId, date))
+      const names = working.slice(0, desktop ? 3 : 2).map(shift => `${cellName(nameOf(shift.employeeId))}${shift.payMode === 'HALF' ? ' ½' : ''}`)
       const need = pointId ? slotsForDay(points.find(point => point.id === pointId)?.slotConfig, date) : 1
       const missing = date >= today && names.length < need
+      // День опустел из-за отпуска: остаётся синим «отп», как в dayView, но с рамкой незакрытого.
+      const vacationGap = missing && !names.length && view.lines[0] === 'отп'
       result.set(date, {
         date, ...view,
-        tone: missing ? 'bad' : names.length ? 'neutral' : view.tone,
+        tone: vacationGap ? 'info' : missing ? 'bad' : names.length ? 'neutral' : view.tone,
         strong: missing || view.strong,
         vacant: missing,
-        lines: missing ? names.length ? [names[0], 'ещё 1'] : ['НУЖЕН'] : names.length ? names : shifts.some(shift => shift.status === 'NO_SHOW') ? ['не выш.'] : view.lines,
+        lines: vacationGap ? ['отп'] : missing ? names.length ? [names[0], 'ещё 1'] : ['НУЖЕН'] : names.length ? names : shifts.some(shift => shift.status === 'NO_SHOW') ? ['не выш.'] : view.lines,
       })
     }
     return result
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [byDate, month, today, employees.data, absences, pointId, points])
+  }, [byDate, month, today, employees.data, absences, pointId, points, desktop])
 
   const matrixRows = useMemo(() => activePoints.map(point => {
     const cells = new Map<string, MatrixCell>()
@@ -113,12 +126,9 @@ export default function Schedule() {
   const dayShifts = picked ? (byDate.get(picked) ?? []) : []
   const openDay = (point:string, date:string) => open('day', { pointId: point, date, pointLabel: pointName(point) })
 
-  return <Screen
-    filters={<FilterRow>
-      <Chip onClick={() => open('pvzPick')}>{pointId ? pointName(pointId) : 'Все ПВЗ'}</Chip>
-      <Chip onClick={() => open('monthPick')}>{period}</Chip>
-    </FilterRow>}
-  >
+  const links = <div className="mt-3 flex flex-wrap gap-x-4"><TextButton onClick={() => push('/sched/templates')}>Сохранённые шаблоны</TextButton><TextButton onClick={() => push('/sched/share')}>Поделиться</TextButton></div>
+
+  const board = <>
     <Segmented
       className="mb-3"
       value={mode}
@@ -176,8 +186,9 @@ export default function Schedule() {
           />}
 
     {!totals.loading && mode === 'month' && pointId && !gaps && <div className="mt-2 text-sub text-muted">Каждый день месяца закрыт сменой</div>}
+  </>
 
-    {picked && !totals.loading && <>
+  const dayPanel = picked && !totals.loading && <>
       <SectionTitle
         count={dayShifts.length}
         action={pointId
@@ -210,8 +221,30 @@ export default function Schedule() {
         className="mt-3"
         onClick={() => openDay(pointId || activePoints[0]?.id || '', picked)}
       >Поставить сотрудника</Button>}
-    </>}
+    </>
 
-    <div className="mt-3 flex flex-wrap gap-x-4"><TextButton onClick={() => push('/sched/templates')}>Сохранённые шаблоны</TextButton><TextButton onClick={() => push('/sched/share')}>Поделиться</TextButton></div>
+  const filters = <FilterRow>
+    <Chip onClick={() => open('pvzPick')}>{pointId ? pointName(pointId) : 'Все ПВЗ'}</Chip>
+    <Chip onClick={() => open('monthPick')}>{period}</Chip>
+  </FilterRow>
+
+  if (!desktop) return <Screen filters={filters}>{board}{dayPanel}{links}</Screen>
+
+  // Master–detail десктопа: календарь слева, выбранный день справа, а не под календарём —
+  // на широком экране день под сеткой уезжает за нижний край.
+  return <Screen wide filters={filters}>
+    <div className="grid grid-cols-[minmax(0,1fr)_340px] items-start gap-6">
+      <div>{board}{links}</div>
+      {/* Первый блок колонки встаёт вровень с переключателем слева — без отступа заголовка раздела. */}
+      <div className="sticky top-0 [&>:first-child]:mt-0">
+        {/* День точки правится прямо здесь — то же содержимое, что в шторке дня на телефоне. */}
+        {picked && pointId
+          ? <>
+            <SectionTitle>{dayLabel(picked)} · {dayjs(picked).format('dddd')}</SectionTitle>
+            <DaySheet key={`${pointId}-${picked}`} inline pointId={pointId} date={picked}/>
+          </>
+          : dayPanel || <Card><EmptyState title="Выберите день" sub="Смены дня появятся здесь — без шторки поверх календаря"/></Card>}
+      </div>
+    </div>
   </Screen>
 }

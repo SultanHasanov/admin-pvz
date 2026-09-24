@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { useLocation, type Location } from 'react-router-dom'
 import { AnimatePresence, motion, useReducedMotion, type PanInfo } from 'motion/react'
 import { depthOf, useNav } from './nav'
+import { splitGroup } from './Split'
 
 /** Пружина iOS-перехода: быстрый разгон и мягкая остановка без отката. */
 const spring = { type: 'spring', stiffness: 420, damping: 38, mass: 0.9 } as const
@@ -13,12 +14,17 @@ const spring = { type: 'spring', stiffness: 420, damping: 38, mass: 0.9 } as con
  * сдвигает новый экран справа, «назад» — возвращает его вправо, а смена таба меняет
  * содержимое без сдвига (иначе переключение табов читается как углубление).
  */
-export function Stack({ render }:{
+export function Stack({ render, desktop }:{
   /**
    * Содержимое экрана строится от переданного адреса, а не от контекста router:
    * уходящий экран должен догореть со своим содержимым, а не с содержимым нового.
    */
   render:(location:Location) => ReactNode
+  /**
+   * Десктоп: смена экрана мгновенная, без сдвига и без жеста «назад» — мышью край
+   * не тянут, а сдвиг на всю ширину монитора выглядит тяжело.
+   */
+  desktop?:boolean
 }) {
   const location = useLocation()
   const { back } = useNav()
@@ -44,6 +50,11 @@ export function Stack({ render }:{
   // Пересобираем содержимое только при смене адреса: открытие шторки этого не делает,
   // а уходящий экран сохраняет свой элемент внутри AnimatePresence.
   const content = useMemo(() => render(location), [screenKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Без memo: уходящего экрана, которому нужно старое содержимое, здесь нет.
+  if (desktop) return <div key={splitGroup(location.pathname, location.search)} className="flex min-h-0 flex-1 flex-col">
+    {render(location)}
+  </div>
 
   if (reduced) return <div key={screenKey} className="flex min-h-0 flex-1 flex-col">{content}</div>
 

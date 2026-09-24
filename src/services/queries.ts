@@ -32,7 +32,6 @@ export const keys = {
   bonuses: (month:string) => ['bonuses', month] as const,
   penalties: (month:string) => ['penalties', month] as const,
   payments: (month:string) => ['salary-payments', month] as const,
-  salaryPeriod: (month:string) => ['salary-period', month] as const,
 
   telegram: ['telegram-integrations'] as const,
   /** Группа-получатель и расписание напоминаний одного бота. */
@@ -90,7 +89,6 @@ export const scope = {
   bonuses: ['bonuses'],
   penalties: ['penalties'],
   payments: ['salary-payments'],
-  salaryPeriod: ['salary-period'],
   requests: ['shift-requests'],
   vacations: ['vacations'],
   telegram: ['telegram-integrations'],

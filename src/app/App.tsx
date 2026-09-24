@@ -51,6 +51,23 @@ function NotConfigured() {
   </div>
 }
 
+const read = (key:string) => { try { return localStorage.getItem(key) } catch { return null } }
+const write = (key:string, value:string | null) => {
+  try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value) } catch { /* приватный режим браузера */ }
+}
+
+/** Чей кэш React Query лежит на диске (main.tsx сохраняет его между перезагрузками). */
+const CACHE_USER = 'pvz.cacheUser'
+/** Роль и наличие организации с прошлого входа: без них каждый запуск ждал бы запроса на экране «П». */
+const MEMBER = 'pvz.member'
+interface MemberCache { userId:string; hasOrganization:boolean; role:MemberRole | null }
+function cachedMember(userId:string):MemberCache | null {
+  try {
+    const value = JSON.parse(read(MEMBER) ?? 'null') as MemberCache | null
+    return value?.userId === userId ? value : null
+  } catch { return null }
+}
+
 /** Сотрудник живёт только в своём кабинете: экраны владельца RLS отдал бы ему пустыми. */
 function ProductRoutes({ role }:{ role:MemberRole | null }) {
   const { pathname } = useLocation()
@@ -66,19 +83,37 @@ export function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined)
   const [hasOrganization, setHasOrganization] = useState<boolean>()
   const [role, setRole] = useState<MemberRole | null>(null)
-  const userId = useRef<string | null>(null)
+  // Начинаем с владельца сохранённого кэша, а не с null: иначе первое же событие
+  // INITIAL_SESSION выглядело бы как смена пользователя и стирало восстановленный кэш.
+  const userId = useRef<string | null>(read(CACHE_USER))
 
   async function checkOrganization(current:Session) {
     if (!supabase) return setHasOrganization(true)
     const { data, error } = await supabase.from('organization_members').select('organization_id,role').eq('user_id', current.user.id).limit(1)
-    setHasOrganization(!error && Boolean(data?.length))
-    setRole((data?.[0]?.role as MemberRole | undefined) ?? null)
+    const has = !error && Boolean(data?.length)
+    const nextRole = (data?.[0]?.role as MemberRole | undefined) ?? null
+    setHasOrganization(has)
+    setRole(nextRole)
+    if (!error) write(MEMBER, JSON.stringify({ userId: current.user.id, hasOrganization: has, role: nextRole } satisfies MemberCache))
   }
 
   useEffect(() => {
     if (!supabase) { setSession(null); return }
+    // Другой человек на том же телефоне (или выход) — кэш прежнего выбрасываем целиком,
+    // и из памяти, и с диска. Ключи кэша не содержат пользователя, и сотрудник иначе
+    // увидел бы данные владельца.
+    const adopt = (next:Session | null) => {
+      const nextUser = next?.user.id ?? null
+      if (nextUser !== userId.current) {
+        queryClient.clear()
+        write(MEMBER, null)
+        write(CACHE_USER, nextUser)
+      }
+      userId.current = nextUser
+      setSession(next)
+    }
     void supabase.auth.getSession()
-      .then(({ data }) => { userId.current = data.session?.user.id ?? null; setSession(data.session) })
+      .then(({ data }) => adopt(data.session))
       .catch(error => {
         // Повреждённая локальная сессия не должна навсегда оставлять пустой экран.
         console.error('[auth] failed to restore session', error)
@@ -90,17 +125,19 @@ export function App() {
       // Пометка живёт до смены пароля, но чужой сессии она не касается.
       if (event === 'SIGNED_OUT') clearRecovery()
       resetOrganizationCache()
-      // Другой человек на том же телефоне — кэш прежнего выбрасываем целиком. Ключи
-      // кэша не содержат пользователя, и сотрудник иначе увидел бы данные владельца.
-      const nextUser = next?.user.id ?? null
-      if (nextUser !== userId.current) queryClient.clear()
-      userId.current = nextUser
-      setSession(next)
+      adopt(next)
     })
     return () => data.subscription.unsubscribe()
   }, [queryClient, navigate])
 
-  useEffect(() => { if (session) void checkOrganization(session); else setHasOrganization(undefined) }, [session])
+  useEffect(() => {
+    if (!session) { setHasOrganization(undefined); return }
+    // Повторный вход: открываем приложение сразу по прошлому ответу, а свежий
+    // приходит в фоне — если роль изменилась, сработают те же редиректы.
+    const cached = cachedMember(session.user.id)
+    if (cached) { setHasOrganization(cached.hasOrganization); setRole(cached.role) }
+    void checkOrganization(session)
+  }, [session])
 
   if (!isSupabaseConfigured) return <NotConfigured/>
   if (session === undefined) return <Booting/>

@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useParams } from 'react-router-dom'
 import { Screen, FilterRow } from '../shared/kit/Screen'
 import { Card } from '../shared/kit/Card'
 import { Avatar, List, ListRow } from '../shared/kit/ListRow'
@@ -29,6 +30,8 @@ export default function People() {
   const { month, pointId, pointName } = useOrg()
   const { push } = useNav()
   const { open } = useSheets()
+  // Десктоп: список стоит слева от карточки, и открытый сотрудник подсвечен.
+  const { id: selected } = useParams()
   const totals = useMonthTotals()
   const salary = useSalarySheets(totals)
   const { vacations } = useVacations(month)
@@ -83,6 +86,7 @@ export default function People() {
               ].filter(Boolean).join(' · ')}
               right={sheet ? rubles(sheet.accrued) : undefined}
               rightSub={sheet ? `${sheet.shifts} смен` : undefined}
+              selected={employee.id === selected}
               onClick={() => push(`/people/${employee.id}`)}
             />
           })}

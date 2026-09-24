@@ -64,6 +64,9 @@ test.describe('запись из шторок', () => {
   })
 
   test('мастер графика ставит по два человека в день и пишет места', async ({ page }) => {
+    // В сентябре первое место на Ленина 12 уже занято сменами фикстур, и мастер его
+    // не перезаписывает. «4 недели» от 18-го захватывают пустой октябрь.
+    await page.clock.setFixedTime(new Date('2026-09-18T10:00:00+03:00'))
     const recorded = await stubSupabase(page)
     await page.goto('/sched/wizard')
     await page.waitForSelector('[data-screen]')
@@ -77,7 +80,7 @@ test.describe('запись из шторок', () => {
     await page.getByRole('button', { name: 'Место 2' }).click()
     await page.getByText('Камила Юсупова').click()
 
-    await page.getByRole('button', { name: 'Эта неделя' }).click()
+    await page.getByRole('button', { name: '4 недели' }).click()
     await page.screenshot({ path: 'visual/shots/app/wizard-filled.png' })
 
     await page.getByRole('button', { name: /Поставить \d+ смен/ }).click()
@@ -98,6 +101,8 @@ test.describe('запись из шторок', () => {
   })
 
   test('смена ставится на выбранный день', async ({ page }) => {
+    // Неделя 14–20 сентября: на Ленина 12 пусто 19-е.
+    await page.clock.setFixedTime(new Date('2026-09-18T10:00:00+03:00'))
     const recorded = await stubSupabase(page)
     await page.goto('/sched')
     await page.waitForSelector('[data-screen]')

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Screen, Header, FilterRow } from '../../shared/kit/Screen'
 import { Card } from '../../shared/kit/Card'
-import { List, ListRow } from '../../shared/kit/ListRow'
+import { DataList } from '../../shared/kit/DataList'
 import { Segmented } from '../../shared/kit/Segmented'
 import { Chip, EmptyState, ErrorNote, SkeletonRows } from '../../shared/kit/Misc'
 import { Fab } from '../../shared/kit/TabBar'
@@ -66,23 +66,29 @@ export default function Operations() {
         ? <SkeletonRows rows={5}/>
         : !rows.length
           ? <EmptyState title="Операций нет" sub="За выбранный месяц ничего не записано"/>
-          : <List>
-            {rows.map(row => <ListRow
-              key={`${row.kind}-${row.id}`}
-              leading={<div className={row.kind === 'INCOME'
+          : <DataList
+            rows={rows}
+            rowKey={row => `${row.kind}-${row.id}`}
+            onOpen={row => open('op', { entry: row })}
+            row={row => ({
+              leading: <div className={row.kind === 'INCOME'
                 ? 'flex h-8 w-8 flex-none items-center justify-center rounded-full bg-ok-tint-2 font-semibold text-ok'
                 : 'flex h-8 w-8 flex-none items-center justify-center rounded-full bg-bad-tint-2 font-semibold text-bad-strong'}
-              >{row.kind === 'INCOME' ? '+' : '−'}</div>}
-              title={row.category}
-              sub={[pointName(row.pickupPointId), dayLabel(row.date), row.description].filter(Boolean).join(' · ')}
-              right={<span className={row.kind === 'INCOME' ? 'text-ok' : undefined}>
-                {row.kind === 'INCOME' ? '+' : '−'}{rubles(row.amountKopecks)}
-              </span>}
-              align="start"
-              chevron
-              onClick={() => open('op', { entry: row })}
-            />)}
-          </List>}
+              >{row.kind === 'INCOME' ? '+' : '−'}</div>,
+              title: row.category,
+              sub: [pointName(row.pickupPointId), dayLabel(row.date), row.description].filter(Boolean).join(' · '),
+              right: <Amount row={row}/>,
+              align: 'start',
+              chevron: true,
+            })}
+            columns={[
+              { label: 'Дата', width: '96px', cell: row => dayLabel(row.date) },
+              { label: 'Категория', width: 'minmax(0,1.2fr)', cell: row => <span className="font-medium">{row.category}</span> },
+              { label: 'ПВЗ', width: 'minmax(0,1fr)', cell: row => pointName(row.pickupPointId) },
+              { label: 'Комментарий', width: 'minmax(0,1.4fr)', cell: row => <span className="text-muted">{row.description || '—'}</span> },
+              { label: 'Сумма', width: '120px', align: 'right', cell: row => <Amount row={row}/> },
+            ]}
+          />}
     </Card>
 
     {rows.length > 0 && <div className="mt-2 text-sub text-muted">
@@ -92,3 +98,8 @@ export default function Operations() {
     <Fab onClick={() => open('quick')}/>
   </Screen>
 }
+
+const Amount = ({ row }:{ row:{ kind:EntryKind; amountKopecks:number } }) =>
+  <span className={row.kind === 'INCOME' ? 'text-ok' : undefined}>
+    {row.kind === 'INCOME' ? '+' : '−'}{rubles(row.amountKopecks)}
+  </span>

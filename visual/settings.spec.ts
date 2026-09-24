@@ -70,7 +70,7 @@ test.describe('настройки', () => {
     await shot(page, 'points')
 
     await page.getByText('ПВЗ Ленина 12').click()
-    await page.waitForSelector('text=Мест на смене')
+    await page.waitForSelector('text=Сотрудников на смене')
     await page.getByLabel('Открытие').fill('10:00')
     // Суббота — шестая строка (индекс 5 от понедельника): там нужен второй человек.
     await page.getByRole('button', { name: 'Увеличить' }).nth(6).click()
@@ -221,7 +221,8 @@ test.describe('вход и регистрация', () => {
     }))
     await page.goto('/login')
     await page.getByLabel('Почта').fill('owner@example.test')
-    await page.getByLabel('Пароль').fill('secret123')
+    // Рядом с полем кнопка «Показать пароль» с тем же словом в подписи.
+    await page.getByRole('textbox', { name: 'Пароль' }).fill('secret123')
     await page.getByRole('button', { name: 'Войти' }).click()
     await page.waitForURL('**/home')
     await expect(page.locator('[data-screen]')).toBeVisible()
@@ -258,7 +259,6 @@ test.describe('вход и регистрация', () => {
     await page.getByRole('button', { name: 'Далее' }).click()
 
     await page.getByLabel('Название пункта').fill('ПВЗ Ленина 12')
-    await page.getByLabel('Адрес').fill('ул. Ленина, 12')
     await page.getByRole('button', { name: 'Далее' }).click()
 
     await page.getByLabel('ФИО').fill('Ирина Соколова')
@@ -269,7 +269,7 @@ test.describe('вход и регистрация', () => {
 
     await expect.poll(() => recorded.filter(row => row.table === 'shifts').length).toBeGreaterThan(0)
     expect(recorded.find(row => row.table === 'rpc/create_organization_with_owner')!.body).toMatchObject({
-      p_name: 'ИП Ковалёв А. С.', p_point_name: 'ПВЗ Ленина 12', p_point_address: 'ул. Ленина, 12',
+      p_name: 'ИП Ковалёв А. С.', p_point_name: 'ПВЗ Ленина 12', p_point_address: '',
     })
     const shifts = recorded.filter(row => row.table === 'shifts').flatMap(row => row.body as Record<string, unknown>[])
     // С 18 по 30 сентября по схеме 2/2: 18, 19, 22, 23, 26, 27, 30 — семь смен.

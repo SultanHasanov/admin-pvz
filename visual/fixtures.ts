@@ -174,7 +174,6 @@ export const tables:Record<string, unknown[]> = {
   bonuses: withOrg(bonuses),
   employee_penalties: withOrg(penalties),
   salary_payments: withOrg(payments),
-  salary_periods: [],
   tax_settings: [{ organization_id: 'org-1', rate: 6, enabled: true }],
   enabled_modules: modules,
   entry_presets: [],

@@ -2,6 +2,7 @@ import dayjs from 'dayjs'
 import { cn } from './cn'
 import { tone as tones, type Tone } from './tokens'
 import { haptics } from './haptics'
+import { useLayout } from './layout'
 
 export interface CalendarDay {
   date:string
@@ -19,6 +20,9 @@ const WEEKDAYS = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
 /**
  * Сетка месяца. Клетка 52px — минимальная, в которую влезают число и строка инициалов,
  * и при этом семь колонок помещаются в 390px без горизонтальной прокрутки.
+ *
+ * На десктопе колонки те же семь, но клетка выше и шире: в неё помещаются три строки
+ * с именами целиком, и график читается без нажатия на день.
  */
 export function MonthCalendar({ month, days, selected, selectedDates, onPick }:{
   month:string
@@ -27,6 +31,8 @@ export function MonthCalendar({ month, days, selected, selectedDates, onPick }:{
   selectedDates?:Set<string>
   onPick?:(date:string) => void
 }) {
+  const { desktop, narrow } = useLayout()
+  const roomy = desktop && !narrow
   const first = dayjs(`${month}-01`)
   const lead = (first.day() + 6) % 7
   const total = first.daysInMonth()
@@ -56,7 +62,8 @@ export function MonthCalendar({ month, days, selected, selectedDates, onPick }:{
           type="button"
           aria-label={`${day.format('D MMMM')}${entry?.lines.length ? `: ${entry.lines.join(', ')}` : ': свободно'}`}
           className={cn(
-            'tap flex h-[52px] flex-col items-center justify-center gap-px rounded-md',
+            'tap flex min-w-0 flex-col gap-px rounded-md',
+            roomy ? 'h-[84px] items-start justify-start px-2 pt-1.5 hover:brightness-[0.97]' : 'h-[52px] items-center justify-center',
             entry?.vacant ? 'border-[2.5px]' : 'border-[1.5px]',
             date > today && 'opacity-90',
           )}
@@ -68,12 +75,16 @@ export function MonthCalendar({ month, days, selected, selectedDates, onPick }:{
           onClick={() => { if (onPick) { haptics.tap(); onPick(date) } }}
         >
           <div
-            className="text-tiny leading-[1.1] font-semibold tabular-nums"
+            className={cn('leading-[1.1] font-semibold tabular-nums', roomy ? 'mb-0.5 text-sub' : 'text-tiny')}
             style={{ color: isToday ? 'var(--color-accent)' : entry ? palette.fg : 'var(--color-muted)' }}
           >{day.date()}</div>
-          {entry?.lines.slice(0, 2).map(line => <div
+          {entry?.lines.slice(0, roomy ? 3 : 2).map(line => <div
             key={line}
-            className={cn('text-[9px] leading-[1.25] font-semibold', entry.vacant && 'font-bold')}
+            className={cn(
+              'font-semibold',
+              roomy ? 'w-full truncate text-left text-[11px] leading-[1.3]' : 'text-[9px] leading-[1.25]',
+              entry.vacant && 'font-bold',
+            )}
             style={{ color: palette.fg }}
           >{line}</div>)}
         </button>

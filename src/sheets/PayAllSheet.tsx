@@ -63,8 +63,8 @@ export default function PayAllSheet({ kind = 'ADVANCE', close }:{ kind?:'ADVANCE
   </Card>
 
   return <>
-    {kind === 'PAYMENT' && !salary.closed && <Banner>
-      Месяц ещё не закрыт: смены после сегодняшнего дня в остаток не попали.
+    {kind === 'PAYMENT' && totals.month >= today().slice(0, 7) && <Banner>
+      Месяц ещё идёт: смены после сегодняшнего дня в остаток не попали.
     </Banner>}
 
     <Card>

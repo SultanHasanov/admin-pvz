@@ -19,13 +19,16 @@ function projectRef() {
 
 export interface Recorded { method:string; table:string; body:unknown }
 
-/** `signedIn: false` — без сессии: для экранов входа, регистрации и восстановления. */
-export async function stubSupabase(page:Page, { signedIn = true }:{ signedIn?:boolean } = {}) {
+/**
+ * `signedIn: false` — без сессии: для экранов входа, регистрации и восстановления.
+ * `point` — выбранный ПВЗ; по умолчанию «Все ПВЗ» (пустая строка), как у нового пользователя.
+ */
+export async function stubSupabase(page:Page, { signedIn = true, point = '' }:{ signedIn?:boolean; point?:string } = {}) {
   const ref = projectRef()
   /** Записанные запросы: по ним проверяем, что форма отправила именно то, что показала. */
   const recorded:Recorded[] = []
 
-  await page.addInitScript(({ key, month, signedIn }) => {
+  await page.addInitScript(({ key, month, signedIn, point }) => {
     const session = {
       access_token: 'stub-access-token',
       refresh_token: 'stub-refresh-token',
@@ -38,8 +41,9 @@ export async function stubSupabase(page:Page, { signedIn = true }:{ signedIn?:bo
     if (signedIn) localStorage.setItem(key, JSON.stringify(session))
     // Экраны берут месяц и ПВЗ из localStorage — фиксируем, чтобы снимки не зависели от даты.
     localStorage.setItem('pvz.month', month)
-    localStorage.setItem('pvz.point', '')
-  }, { key: `sb-${ref}-auth-token`, month: MONTH, signedIn })
+    // ПВЗ — только при первом заходе: перезагрузка должна видеть то, что сохранило приложение.
+    if (localStorage.getItem('pvz.point') === null) localStorage.setItem('pvz.point', point)
+  }, { key: `sb-${ref}-auth-token`, month: MONTH, signedIn, point })
 
   await page.route('**/auth/v1/**', route => route.fulfill({
     status: 200, contentType: 'application/json',

@@ -1,6 +1,8 @@
-import type { ReactNode } from 'react'
+import { useContext, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { cn } from './cn'
 import { haptics } from './haptics'
+import { ActionSlot, useLayout } from './layout'
 
 export interface TabItem {
   id:string
@@ -43,8 +45,19 @@ export function TabBar({ items, active, onSelect }:{
 /**
  * Кнопка главного действия экрана. Висит над панелью табов, поэтому её низ считается
  * от `--tabbar-space`: иначе на телефонах с жестовой панелью она прилипает к краю.
+ *
+ * На десктопе таб-бара нет, и та же кнопка становится кнопкой топбара с подписью.
  */
 export function Fab({ onClick, label = 'Добавить' }:{ onClick:() => void; label?:string }) {
+  const { desktop } = useLayout()
+  const slot = useContext(ActionSlot)
+
+  if (desktop) return slot && createPortal(<button
+    type="button"
+    className="tap flex items-center gap-1.5 rounded-md bg-accent px-3.5 py-2 text-act font-semibold whitespace-nowrap text-white"
+    onClick={() => { haptics.tap(); onClick() }}
+  ><span aria-hidden className="text-[18px] leading-none font-light">+</span>{label}</button>, slot)
+
   return <button
     type="button"
     aria-label={label}

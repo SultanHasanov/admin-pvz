@@ -56,16 +56,20 @@ test('перенесено из старой панели: правка и от�
   expect(recorded.filter(row => row.table.startsWith('employees') && row.method === 'PATCH')[1].body).toMatchObject({ status: 'ARCHIVED' })
 })
 
-test('перенесено из старой панели: закрытие месяца и удаление удержания', async ({ page }) => {
+// Закрытия месяца нет (24.09): ведомость считается сама по графику и выплатам.
+test('ведомость без закрытия месяца', async ({ page }) => {
   await pinToday(page)
   const recorded = await stubSupabase(page)
   await page.goto('/money?tab=pay')
   await page.waitForSelector('[data-screen]')
-  await page.getByRole('button', { name: /Закрыть месяц/ }).click()
-  await page.getByRole('dialog').getByRole('button', { name: 'Закрыть месяц' }).click()
-  await expect.poll(() => recorded.filter(row => row.table.startsWith('salary_accruals')).length).toBe(1)
-  expect(recorded.find(row => row.table.startsWith('salary_periods'))!.body).toMatchObject({ status: 'CLOSED', starts_on: '2026-09-01' })
+  await expect(page.getByText('Ирина Соколова')).toBeVisible()
+  await expect(page.getByRole('button', { name: /Закрыть месяц/ })).toHaveCount(0)
+  expect(recorded.filter(row => row.table.startsWith('salary_periods'))).toHaveLength(0)
+})
 
+test('перенесено из старой панели: удаление удержания', async ({ page }) => {
+  await pinToday(page)
+  const recorded = await stubSupabase(page)
   await page.goto('/money/ded/d3')
   await page.waitForSelector('[data-screen]')
   await page.getByRole('button', { name: 'Удалить удержание' }).click()

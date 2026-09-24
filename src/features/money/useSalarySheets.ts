@@ -3,7 +3,7 @@ import { useQueries } from '@tanstack/react-query'
 import type { SalarySheet } from '../../entities/types'
 import { calculateSalarySheet } from '../../entities/calculations'
 import { keys } from '../../services/queries'
-import { getSalaryPeriod, listBonuses, listPenalties, listSalaryPayments } from '../../services/salary'
+import { listBonuses, listPenalties, listSalaryPayments } from '../../services/salary'
 import { useMonthTotals } from './useMonthTotals'
 
 export interface StaffSheet extends SalarySheet {
@@ -18,16 +18,17 @@ export interface StaffSheet extends SalarySheet {
  * Считает чистая функция `calculateSalarySheet` из entities — здесь только загрузка
  * и сборка. Смены, ставки и удержания приходят из useMonthTotals: экраны «Люди»
  * и «Деньги» не должны грузить одно и то же дважды.
+ *
+ * Закрытия месяца нет: ведомость всегда считается заново из графика и выплат.
  */
 export function useSalarySheets(totals:ReturnType<typeof useMonthTotals>) {
   const { month } = totals
 
-  const [bonuses, penalties, payments, period] = useQueries({
+  const [bonuses, penalties, payments] = useQueries({
     queries: [
       { queryKey: keys.bonuses(month), queryFn: () => listBonuses(month) },
       { queryKey: keys.penalties(month), queryFn: () => listPenalties(month) },
       { queryKey: keys.payments(month), queryFn: () => listSalaryPayments(month) },
-      { queryKey: keys.salaryPeriod(month), queryFn: () => getSalaryPeriod(month) },
     ],
   })
 
@@ -55,7 +56,6 @@ export function useSalarySheets(totals:ReturnType<typeof useMonthTotals>) {
     toPay: sheets.reduce((sum, sheet) => sum + Math.max(0, sheet.balance), 0),
     accrued: sheets.reduce((sum, sheet) => sum + sheet.accrued, 0),
     paid: sheets.reduce((sum, sheet) => sum + sheet.paid, 0),
-    closed: period.data?.status === 'CLOSED',
     bonuses: bonuses.data ?? [],
     penalties: penalties.data ?? [],
     payments: payments.data ?? [],

@@ -4,6 +4,7 @@ import { Card } from '../../shared/kit/Card'
 import { Button } from '../../shared/kit/Button'
 import { EmptyState, ErrorNote, SkeletonRows } from '../../shared/kit/Misc'
 import { cn } from '../../shared/kit/cn'
+import { useLayout } from '../../shared/kit/layout'
 import { rubles } from '../../shared/money'
 import { dayLabel } from '../../shared/dates'
 import { keys, scope } from '../../services/queries'
@@ -26,6 +27,7 @@ export default function Recurring() {
   const { month, pointId, pointName } = useOrg()
   const { back, canBack } = useNav()
   const { open } = useSheets()
+  const { desktop } = useLayout()
 
   const [recurring, occurrences] = useQueries({
     queries: [
@@ -66,7 +68,8 @@ export default function Recurring() {
       <EmptyState title="Регулярных расходов нет" sub="Аренда, интернет и уборка — добавьте их один раз, дальше они будут напоминать о себе"/>
     </Card>}
 
-    <div className="grid gap-2">
+    {/* Десктоп: карточки в две колонки, а не таблица — у ожидающих свои кнопки. */}
+    <div className={cn('grid items-start gap-2', desktop && 'grid-cols-2')}>
       {rows.map(({ expense, dueOn, status }) => {
         const due = status === 'PENDING'
         const state = due ? recurringState(dueOn) : null

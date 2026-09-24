@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { useParams } from 'react-router-dom'
 import { Screen, Header } from '../../shared/kit/Screen'
 import { Card } from '../../shared/kit/Card'
 import { List, ListRow } from '../../shared/kit/ListRow'
@@ -15,6 +16,8 @@ import { useNav } from '../../app/nav'
 /** Пункты выдачи: активные сверху, архив отдельной группой — прошлые расчёты по нему остаются. */
 export default function Points() {
   const { push, back, canBack } = useNav()
+  // Десктоп: список стоит слева от карточки пункта, и открытый пункт подсвечен.
+  const { id: selected } = useParams()
   const points = useQuery({ queryKey: keys.pointsAll, queryFn: () => listPickupPoints(true) })
   const employees = useQuery({ queryKey: keys.employees(), queryFn: () => listEmployees() })
 
@@ -44,6 +47,7 @@ export default function Points() {
               right={point.archivedAt ? 'в архиве' : `${staff} ${plural(staff, 'сотрудник', 'сотрудника', 'сотрудников')}`}
               chevron
               align="start"
+              selected={point.id === selected}
               onClick={() => push(`/more/points/${point.id}`)}
             />
           })}

@@ -27,8 +27,17 @@ import { toastWarn } from '../shared/kit/Toaster'
  *
  * Запрос идёт ровно на этот день, а не берётся из месячной выборки: шторку открывают
  * и из уведомления о дырке в графике, где месяц в шапке может быть другим.
+ *
+ * `inline` — то же содержимое в правой колонке графика на десктопе, без шторки вокруг.
+ * Закрывать там нечего, а «Кого поставить» открывается новой шторкой, а не подменой:
+ * подменять нечего, и шторка без записи в истории потом не закрылась бы.
  */
-export default function DaySheet({ pointId, date, close }:{ pointId:string; date:string; close:() => void }) {
+export default function DaySheet({ pointId, date, close, inline }:{
+  pointId:string
+  date:string
+  close?:() => void
+  inline?:boolean
+}) {
   const [requestedSeats, setRequestedSeats] = useState<number | null>(null)
   const { pointName, points } = useOrg()
   const { open, replace } = useSheets()
@@ -149,13 +158,16 @@ export default function DaySheet({ pointId, date, close }:{ pointId:string; date
           toastWarn('На этом ПВЗ нет сотрудников')
           return
         }
-        replace('cand', { pointId, date, seats: required })
+        const cand = { pointId, date, seats: required }
+        if (inline) open('cand', cand)
+        else replace('cand', cand)
       }}
     >{free > 1 ? 'Добавить сотрудников' : 'Добавить сотрудника'}</Button>
 
-    <Button block variant="secondary" className="mt-2" onClick={close}>Закрыть</Button>
-
-    {/* Дату показываем в подзаголовке шторки, поэтому здесь только день недели. */}
-    <div className="lbl mt-3 text-center">{dayjs(date).format('dddd')}</div>
+    {!inline && <>
+      <Button block variant="secondary" className="mt-2" onClick={close}>Закрыть</Button>
+      {/* Дату показываем в подзаголовке шторки, поэтому здесь только день недели. */}
+      <div className="lbl mt-3 text-center">{dayjs(date).format('dddd')}</div>
+    </>}
   </>
 }

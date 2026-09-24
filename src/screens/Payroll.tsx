@@ -5,7 +5,6 @@ import { Card } from '../shared/kit/Card'
 import { Avatar, List, ListRow } from '../shared/kit/ListRow'
 import { SectionTitle } from '../shared/kit/Text'
 import { Button } from '../shared/kit/Button'
-import { Banner } from '../shared/kit/Field'
 import { EmptyState, ErrorNote, SkeletonRows } from '../shared/kit/Misc'
 import { toastWarn } from '../shared/kit/Toaster'
 import { cn } from '../shared/kit/cn'
@@ -134,15 +133,11 @@ export default function Payroll() {
         <div className="w-[15px] flex-none font-mono text-[13px] text-muted-soft">=</div>
         <div className="min-w-0 flex-1">
           <div className="text-row font-semibold">К выплате</div>
-          <div className="mt-0.5 text-mono text-muted">{salary.closed ? 'месяц закрыт' : `прогноз на месяц: ${rubles(forecast)}`}</div>
+          <div className="mt-0.5 text-mono text-muted">прогноз на месяц: {rubles(forecast)}</div>
         </div>
         <div className="font-mono text-[21px] font-semibold text-accent tabular-nums">{rubles(sheet?.balance ?? 0)}</div>
       </div>
     </Card>
-
-    {salary.closed && <div className="mt-[11px]">
-      <Banner tone="warn">Месяц помечен «Выплачено». Если изменить график за этот месяц, суммы разойдутся — понадобится перерасчёт.</Banner>
-    </div>}
 
     <SectionTitle>Смены · {shifts.length} {plural(shifts.length, 'смена', 'смены', 'смен')} в графике, {worked.length} отработано</SectionTitle>
     <Card>
