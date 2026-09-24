@@ -65,7 +65,6 @@ export interface FeedHole {
   count:number
   label:string
   onlyPartial:boolean
-  absence:boolean
 }
 
 export interface FeedDeduction { id:string; title:string; sub:string; date:string }
@@ -93,11 +92,9 @@ export interface FeedInput {
 /** «19 сент» — тот же короткий вид, что и в остальном приложении. */
 const day = (date:string) => dayjs(date).format('D MMM').replace('.', '')
 
-/** «Иван не сможет выйти 25 сент» / «Иван просит отпуск 20 сент–27 сент». */
+/** «Иван не сможет выйти 25 сент». */
 export function requestTitle(request:FeedRequest) {
-  return request.kind === 'SHIFT'
-    ? `${request.employeeName} не сможет выйти ${day(request.dateFrom)}`
-    : `${request.employeeName} просит отпуск ${day(request.dateFrom)}–${day(request.dateTo)}`
+  return `${request.employeeName} не сможет выйти ${day(request.dateFrom)}`
 }
 
 export function buildFeed(input:FeedInput):FeedItem[] {
@@ -123,9 +120,7 @@ export function buildFeed(input:FeedInput):FeedItem[] {
       kind: 'hole',
       refId: `${hole.pointId}|${hole.firstDate}`,
       title: `${hole.pointName}: ${hole.onlyPartial ? 'не хватает человека' : 'нет сотрудника'} ${hole.label}`,
-      sub: hole.absence
-        ? 'Совпало с отпуском — нужна замена'
-        : hole.onlyPartial ? 'Место на смене не занято' : `Пустых дней: ${hole.count}`,
+      sub: hole.onlyPartial ? 'Место на смене не занято' : `Пустых дней: ${hole.count}`,
       tone: hole.onlyPartial ? 'warn' : 'bad',
       date: hole.firstDate,
       target: { kind: 'day', pointId: hole.pointId, date: hole.firstDate },
@@ -261,9 +256,7 @@ export function buildEmployeeFeed(input:EmployeeFeedInput):FeedItem[] {
       kind: 'request',
       // Статус в ссылке: решение по уже виденной заявке — новое событие, бейдж должен загореться.
       refId: `${request.id}|${request.status}`,
-      title: request.kind === 'SHIFT'
-        ? `Запрос на ${day(request.dateFrom)}`
-        : `Запрос отпуска ${day(request.dateFrom)}–${day(request.dateTo)}`,
+      title: `Запрос на ${day(request.dateFrom)}`,
       sub: request.statusText,
       tone: request.status === 'SENT' ? 'warn' : request.status === 'DECLINED' ? 'bad' : 'ok',
       date: request.createdAt.slice(0, 10),

@@ -95,29 +95,19 @@ export function slotsForDay(config, date) {
   return Math.max(1, byDate ?? byWeekday ?? settings.def ?? 1)
 }
 
-/**
- * Смены и отпуска точки на отрезке дат.
- *
- * Отпуск важен так же, как отсутствие смены: человек в графике стоит, но не выйдет,
- * и день на деле пустой. В приложении это же правило живёт в findHoles.
- */
-export async function loadSchedule({ organizationId, pointId, from, to }) {
+/** Смены точки на отрезке дат. */
+export async function loadSchedule({ pointId, from, to }) {
   const shifts = await db(`shifts?pickup_point_id=eq.${pointId}&work_date=gte.${from}&work_date=lte.${to}`
     + `&status=in.(${ACTIVE_SHIFT_STATUSES.join(',')})`
     + '&select=work_date,slot_index,status,planned_start,planned_end,employee_id,employees(full_name)&order=work_date,slot_index')
-  const vacations = await db(`vacations?organization_id=eq.${organizationId}&date_from=lte.${to}&date_to=gte.${from}&select=employee_id,date_from,date_to`)
-  return { shifts, vacations }
+  return { shifts }
 }
 
-const onVacation = (vacations, employeeId, date) =>
-  vacations.some(row => row.employee_id === employeeId && date >= row.date_from && date <= row.date_to)
-
-/** Кто реально выходит в этот день: без отпускников и без задвоенных мест. */
-export function dayCrew({ shifts, vacations, date }) {
+/** Кто реально выходит в этот день: без задвоенных мест. */
+export function dayCrew({ shifts, date }) {
   const taken = new Map()
   for (const shift of shifts) {
     if (shift.work_date !== date) continue
-    if (onVacation(vacations, shift.employee_id, date)) continue
     if (!taken.has(shift.slot_index)) taken.set(shift.slot_index, shift)
   }
   return [...taken.values()].sort((first, second) => first.slot_index - second.slot_index)
@@ -133,8 +123,8 @@ const nameOf = shift => shift.employees?.full_name || 'сотрудник'
 
 // ── Тексты ──────────────────────────────────────────────────────────────────
 
-function dutyText({ point, shifts, vacations, date, title }) {
-  const crew = dayCrew({ shifts, vacations, date })
+function dutyText({ point, shifts, date, title }) {
+  const crew = dayCrew({ shifts, date })
   const need = slotsForDay(point.slot_config, date)
   const head = `🗓 ${title}, ${humanDate(date)} — ${point.name}`
   if (!crew.length) return `${head}\n\n❗️ На смену никто не поставлен, нужно ${need} ${plural(need, 'человек', 'человека', 'человек')}.`
@@ -144,12 +134,12 @@ function dutyText({ point, shifts, vacations, date, title }) {
   return `${head}\n${lines.join('\n')}`
 }
 
-function gapsText({ point, shifts, vacations, from, horizon }) {
+function gapsText({ point, shifts, from, horizon }) {
   const gaps = []
   for (let offset = 0; offset < horizon; offset += 1) {
     const date = addDays(from, offset)
     const need = slotsForDay(point.slot_config, date)
-    const crew = dayCrew({ shifts, vacations, date })
+    const crew = dayCrew({ shifts, date })
     if (crew.length < need) gaps.push({ date, need, has: crew.length })
   }
   if (!gaps.length) return null
@@ -159,11 +149,11 @@ function gapsText({ point, shifts, vacations, from, horizon }) {
   return `⚠️ Не закрыт график — ${point.name}\n${lines.join('\n')}\n\nБлижайшие ${horizon} ${plural(horizon, 'день', 'дня', 'дней')}. Поставьте людей в приложении.`
 }
 
-function weekText({ point, shifts, vacations, from }) {
+function weekText({ point, shifts, from }) {
   const lines = []
   for (let offset = 0; offset < 7; offset += 1) {
     const date = addDays(from, offset)
-    const crew = dayCrew({ shifts, vacations, date })
+    const crew = dayCrew({ shifts, date })
     const need = slotsForDay(point.slot_config, date)
     const who = crew.length ? crew.map(nameOf).join(', ') : '— никого'
     lines.push(`• ${humanDate(date, { weekday: true })}: ${who}${crew.length < need ? ` (не хватает ${need - crew.length})` : ''}`)
@@ -193,14 +183,14 @@ export async function buildReminder({ kind, point, settings, organizationId, tod
 
   if (kind === 'duty_today' || kind === 'duty_tomorrow') {
     const date = kind === 'duty_today' ? today : addDays(today, 1)
-    const { shifts, vacations } = await loadSchedule({ organizationId, pointId: point.id, from: date, to: date })
-    return dutyText({ point, shifts, vacations, date, title: kind === 'duty_today' ? 'Сегодня' : 'Завтра' })
+    const { shifts } = await loadSchedule({ pointId: point.id, from: date, to: date })
+    return dutyText({ point, shifts, date, title: kind === 'duty_today' ? 'Сегодня' : 'Завтра' })
   }
 
   if (kind === 'gaps') {
     const to = addDays(today, horizon - 1)
-    const { shifts, vacations } = await loadSchedule({ organizationId, pointId: point.id, from: today, to })
-    const text = gapsText({ point, shifts, vacations, from: today, horizon })
+    const { shifts } = await loadSchedule({ pointId: point.id, from: today, to })
+    const text = gapsText({ point, shifts, from: today, horizon })
     if (text) return text
     // Пробную отправку тишиной подтверждать нельзя: владелец решит, что бот не работает.
     if (preview) return `✅ ${point.name}: график закрыт на ${horizon} ${plural(horizon, 'день', 'дня', 'дней')} вперёд.`
@@ -209,8 +199,8 @@ export async function buildReminder({ kind, point, settings, organizationId, tod
 
   if (kind === 'week') {
     const to = addDays(today, 6)
-    const { shifts, vacations } = await loadSchedule({ organizationId, pointId: point.id, from: today, to })
-    return weekText({ point, shifts, vacations, from: today })
+    const { shifts } = await loadSchedule({ pointId: point.id, from: today, to })
+    return weekText({ point, shifts, from: today })
   }
 
   if (kind === 'money') return moneyText({ point, organizationId, date: today })

@@ -14,8 +14,8 @@ import { useMonthTotals } from '../features/money/useMonthTotals'
 import { useOrg } from '../app/OrgContext'
 import { useSheets } from '../app/sheets'
 
-/** Решение по заявке трогает смены и отпуска, поэтому сбрасываем и график тоже. */
-const INVALIDATE = [scope.requests, scope.vacations, scope.shifts, scope.upcomingShifts]
+/** Решение по заявке трогает смены, поэтому сбрасываем и график тоже. */
+const INVALIDATE = [scope.requests, scope.shifts, scope.upcomingShifts]
 
 /**
  * Решение владельца по заявке сотрудника.
@@ -50,13 +50,6 @@ export default function RequestSheet({ id, close }:{ id:string; close:() => void
   const point = points.find(row => row.id === pointId)
   const need = point && date ? slotsForDay(point.slotConfig, date) : 1
 
-  const approve = useWrite({
-    run: () => resolveShiftRequest(id, 'APPROVED'),
-    invalidate: INVALIDATE,
-    done: 'Отпуск подтверждён',
-    onDone: close,
-  })
-
   const alone = useWrite({
     // Сначала снимаем смену просившего, потом фиксируем решение: наоборот заявка
     // закрылась бы, а человек остался бы стоять в графике.
@@ -83,17 +76,9 @@ export default function RequestSheet({ id, close }:{ id:string; close:() => void
     <EmptyState title="Запрос уже обработан" sub="Решение по нему принято — в ленте его больше нет"/>
   </Card>
 
-  const busy = approve.isPending || alone.isPending || decline.isPending
-  const vacation = request.kind !== 'SHIFT'
+  const busy = alone.isPending || decline.isPending
 
   const rows = [
-    ...(vacation ? [{
-      key: 'approve',
-      title: 'Подтвердить отпуск',
-      sub: `${dayLabel(request.dateFrom)} – ${dayLabel(request.dateTo)} · дни станут «нужна замена»`,
-      tone: 'accent' as const,
-      onClick: () => approve.mutate(undefined as void),
-    }] : []),
     {
       key: 'substitute',
       title: 'Назначить замену',
@@ -117,9 +102,7 @@ export default function RequestSheet({ id, close }:{ id:string; close:() => void
     },
   ]
 
-  const what = request.kind === 'SHIFT'
-    ? `не сможет выйти ${dayLabel(request.dateFrom)}`
-    : `просит отпуск ${dayLabel(request.dateFrom)}–${dayLabel(request.dateTo)}`
+  const what = `не сможет выйти ${dayLabel(request.dateFrom)}`
 
   return <>
     <div className="mb-3 text-row leading-[1.45] text-muted">

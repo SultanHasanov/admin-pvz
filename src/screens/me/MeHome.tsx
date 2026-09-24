@@ -6,7 +6,6 @@ import { Card, StatTile, StatTiles } from '../../shared/kit/Card'
 import { List, ListRow, Pill } from '../../shared/kit/ListRow'
 import { SectionTitle } from '../../shared/kit/Text'
 import { EmptyState, ErrorNote, SkeletonRows } from '../../shared/kit/Misc'
-import { Fab } from '../../shared/kit/TabBar'
 import { c } from '../../shared/kit/tokens'
 import { rubles } from '../../shared/money'
 import { plural } from '../../shared/format'
@@ -155,7 +154,5 @@ export default function MeHome() {
             })}
           </List>}
     </Card>
-
-    <Fab label="Запросить выходной или отпуск" onClick={() => open('reqVac')}/>
   </Screen>
 }

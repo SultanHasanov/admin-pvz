@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import dayjs from 'dayjs'
 import { Button } from '../shared/kit/Button'
 import { ChoiceChips } from '../shared/kit/PickList'
 import { Card } from '../shared/kit/Card'
@@ -32,7 +31,7 @@ import { toastWarn } from '../shared/kit/Toaster'
  * Закрывать там нечего, а «Кого поставить» открывается новой шторкой, а не подменой:
  * подменять нечего, и шторка без записи в истории потом не закрылась бы.
  */
-export default function DaySheet({ pointId, date, close, inline }:{
+export default function DaySheet({ pointId, date, inline }:{
   pointId:string
   date:string
   close?:() => void
@@ -163,11 +162,7 @@ export default function DaySheet({ pointId, date, close, inline }:{
         else replace('cand', cand)
       }}
     >{free > 1 ? 'Добавить сотрудников' : 'Добавить сотрудника'}</Button>
-
-    {!inline && <>
-      <Button block variant="secondary" className="mt-2" onClick={close}>Закрыть</Button>
-      {/* Дату показываем в подзаголовке шторки, поэтому здесь только день недели. */}
-      <div className="lbl mt-3 text-center">{dayjs(date).format('dddd')}</div>
-    </>}
+    {/* Отдельной «Закрыть» нет: у шторки есть крестик и жест вниз, вторая кнопка
+        закрытия спорила с главным действием. */}
   </>
 }

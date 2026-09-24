@@ -59,7 +59,7 @@ export default function KitCatalogue() {
           onClick={() => {}}
         />
         <ListRow leading={<Dot tone="bad"/>} align="start" title="Ленина 12: нет сотрудника 19 сент" sub="Пустой день в графике" chevron onClick={() => {}}/>
-        <ListRow leading={<Avatar initials="ДО" tone="info"/>} title="Дмитрий Орлов" sub="Ленина 12" pill={{ label: 'в отпуске', tone: 'info' }} onClick={() => {}}/>
+        <ListRow leading={<Avatar initials="ДО" tone="info"/>} title="Дмитрий Орлов" sub="Ленина 12" pill={{ label: 'отключён', tone: 'neutral' }} onClick={() => {}}/>
         <ListRow title="Смена 09:00–21:00" sub="Мира 5 · место 2" right={<Num>1 100 ₽</Num>}/>
       </List>
     </Card>

@@ -4,17 +4,8 @@ import type { Tone } from './kit/tokens'
 /** Причины, которые сотрудник выбирает в «Не смогу выйти». Свободного ввода в прототипе нет. */
 export const SHIFT_REASONS = ['Болезнь', 'Семейные обстоятельства', 'Учёба', 'Другое'] as const
 
-/** Причины отпуска. «Личные дела» — тот же неоплачиваемый отпуск, отличается только формулировкой. */
-export const VACATION_REASONS:{ label:string; kind:ShiftRequestKind }[] = [
-  { label: 'Отпуск', kind: 'VACATION' },
-  { label: 'Больничный', kind: 'SICK' },
-  { label: 'Личные дела', kind: 'VACATION' },
-]
-
 export const requestKindTitles:Record<ShiftRequestKind, string> = {
   SHIFT: 'Не смогу выйти',
-  VACATION: 'Отпуск',
-  SICK: 'Больничный',
 }
 
 export const requestStatusTones:Record<ShiftRequestStatus, Tone> = {

@@ -3,10 +3,10 @@ import { mkdir } from 'node:fs/promises'
 import { stubSupabase } from './stub'
 
 /**
- * Заявки, отпуска и лента уведомлений (фаза 5).
+ * Заявки и лента уведомлений (фаза 5).
  *
  * Как и write.spec, проверяет не вёрстку, а то, что ушло в базу: решение по заявке —
- * это вызов RPC с правильным статусом, отпуск — строка с правильными датами и типом.
+ * это вызов RPC с правильным статусом.
  * Попутно снимает шторки для контактного листа.
  */
 
@@ -33,10 +33,12 @@ async function signInAsEmployee(page:Page) {
   })
 }
 
-test.describe('заявки и отпуска', () => {
+test.describe('заявки', () => {
   test.beforeAll(async () => { await mkdir('visual/shots/app', { recursive: true }) })
 
   test('колокольчик показывает заявку и гасит бейдж', async ({ page }) => {
+    // 18-е: впереди пустое 19-е на Ленина 12 — в ленте есть и заявка, и дырка.
+    await page.clock.setFixedTime(new Date('2026-09-18T10:00:00+03:00'))
     const recorded = await stubSupabase(page)
     await page.goto('/home')
     await page.waitForSelector('[data-screen]')
@@ -104,38 +106,6 @@ test.describe('заявки и отпуска', () => {
     expect(recorded.filter(row => row.table === 'shifts')).toHaveLength(0)
   })
 
-  test('владелец отмечает больничный из карточки сотрудника', async ({ page }) => {
-    const recorded = await stubSupabase(page)
-    await page.goto('/people/e3')
-    await page.waitForSelector('[data-screen]')
-
-    // Отпуск Алины из фикстур виден в карточке ещё до того, как он начался.
-    await expect(page.getByText('Отпуск 20 сент – 27 сент')).toBeVisible()
-    await page.getByText('Отпуск или больничный').click()
-
-    const sheet = page.getByRole('dialog')
-    await sheet.getByRole('button', { name: 'Больничный', exact: true }).click()
-    await shot(page, 'sheet-vacation')
-    await sheet.getByRole('button', { name: 'Сохранить' }).click()
-
-    await expect.poll(() => recorded.filter(row => row.table === 'vacations').length).toBe(1)
-    const vacation = recorded.find(row => row.table === 'vacations')!.body as Record<string, unknown>
-    expect(vacation).toMatchObject({ employee_id: 'e3', kind: 'SICK', organization_id: 'org-1' })
-    expect(String(vacation.date_to) >= String(vacation.date_from)).toBe(true)
-  })
-
-  test('отпуск в сетке месяца — синий день «отп»', async ({ page }) => {
-    await stubSupabase(page)
-    // Сетка месяца строится только на одной точке; Алина в отпуске на p2.
-    await page.addInitScript(() => localStorage.setItem('pvz.point', 'p2'))
-    await page.goto('/sched')
-    await page.waitForSelector('[data-screen]')
-
-    // С 20 по 27 сентября по очереди 2/2 Алина стоит 21, 22, 25 и 26-го.
-    await expect(page.getByText('отп', { exact: true })).toHaveCount(4)
-    await shot(page, 'sched-vacation')
-  })
-
   test('сотрудник сообщает, что не выйдет', async ({ page }) => {
     const recorded = await stubSupabase(page)
     await signInAsEmployee(page)
@@ -155,24 +125,5 @@ test.describe('заявки и отпуска', () => {
       employee_id: 'e6', pickup_point_id: 'p3', kind: 'SHIFT',
       date_from: '2026-09-24', date_to: '2026-09-24', reason: 'Учёба', status: 'SENT',
     })
-  })
-
-  test('сотрудник просит больничный', async ({ page }) => {
-    const recorded = await stubSupabase(page)
-    await signInAsEmployee(page)
-    await page.goto('/home')
-    await page.waitForSelector('[data-screen]')
-
-    await openSheet(page, 'reqVac')
-    const sheet = page.getByRole('dialog')
-    await sheet.getByRole('button', { name: 'Больничный' }).click()
-    await shot(page, 'sheet-req-vac')
-    await sheet.getByRole('button', { name: 'Отправить запрос' }).click()
-
-    await expect.poll(() => recorded.filter(row => row.table === 'shift_requests').length).toBe(1)
-    const request = recorded.find(row => row.table === 'shift_requests')!.body as Record<string, unknown>
-    expect(request).toMatchObject({ employee_id: 'e6', kind: 'SICK', reason: 'Больничный', status: 'SENT' })
-    // Отпуск по умолчанию — неделя с 20-го следующего месяца.
-    expect(String(request.date_from).slice(8)).toBe('20')
   })
 })

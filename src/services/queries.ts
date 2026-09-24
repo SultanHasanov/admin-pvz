@@ -39,12 +39,11 @@ export const keys = {
   telegramSettings: (integrationId:string) => ['telegram-bot', integrationId, 'settings'] as const,
   wb: ['wb-integration'] as const,
 
-  // Фаза 5: заявки, отпуска, уведомления.
+  // Фаза 5: заявки и уведомления.
   /** Кто я в организации: employee_id участника. У владельца пусто. */
   me: ['me'] as const,
   /** `open` — только ждущие решения (лента владельца), `all` — вся история (кабинет сотрудника). */
   requests: (scope:'open' | 'all') => ['shift-requests', scope] as const,
-  vacations: (from:string, to:string) => ['vacations', from, to] as const,
   notificationReads: ['notification-reads'] as const,
   payoutSettings: ['payout-settings'] as const,
 
@@ -90,7 +89,6 @@ export const scope = {
   penalties: ['penalties'],
   payments: ['salary-payments'],
   requests: ['shift-requests'],
-  vacations: ['vacations'],
   telegram: ['telegram-integrations'],
   telegramBot: ['telegram-bot'],
 } as const satisfies Record<string, readonly [string]>

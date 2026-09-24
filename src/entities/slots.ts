@@ -32,12 +32,6 @@ export function slotsForDay(config:SlotConfig | null | undefined, date:string):n
   return Math.max(1, dayOverride ?? exception ?? settings.def)
 }
 
-/** Отсутствие сотрудника: отпуск, больничный или согласованная заявка. */
-export interface Absence { employeeId:string; from:string; to:string }
-
-export const isAbsent = (absences:Absence[], employeeId:string, date:string) =>
-  absences.some(absence => absence.employeeId === employeeId && date >= absence.from && date <= absence.to)
-
 /** Правило для одного места на смене. */
 export interface SlotPlan { slotIndex:number; pattern:SchedulePattern }
 
@@ -49,18 +43,15 @@ export interface PlannedCell extends PlannedSlot, Cell {}
 /**
  * Раскрывает правила по местам в список выходов.
  *
- * Отсутствующих не ставим: в отпуске человек не выходит, и место остаётся пустым —
- * это и есть сигнал «нужна замена», который потом ловит `findHoles`.
  * Лишние выходы за пределами числа мест в этот день отбрасываем: правило могло быть
  * задано на два места, а в будни точка работает с одним.
  */
-export function generateCells({ plans, pointId, from, to, config, absences = [] }:{
+export function generateCells({ plans, pointId, from, to, config }:{
   plans:SlotPlan[]
   pointId:string
   from:string
   to:string
   config?:SlotConfig | null
-  absences?:Absence[]
 }):PlannedCell[] {
   const cells:PlannedCell[] = []
   const taken = new Set<string>()
@@ -68,7 +59,6 @@ export function generateCells({ plans, pointId, from, to, config, absences = [] 
   for (const plan of plans) {
     for (const slot of generateSlots(plan.pattern, from, to)) {
       if (plan.slotIndex >= slotsForDay(config, slot.date)) continue
-      if (isAbsent(absences, slot.employeeId, slot.date)) continue
 
       // Одно место — один человек, и один человек — одна смена в день, даже если
       // он попал в очереди двух разных мест.
@@ -121,8 +111,6 @@ export function planCells(cells:PlannedCell[], existing:Shift[]):CellPlan {
 }
 
 export interface Hole extends Cell {
-  /** Почему место пустое: никого не поставили или поставленный в отпуске. */
-  reason:'empty' | 'absence'
   /** Сколько мест занято и сколько нужно — для строки «1 из 2 на смене». */
   occupied:number
   need:number
@@ -135,13 +123,12 @@ export interface Hole extends Cell {
  * цвет значит топить настоящую проблему в шуме. Смены со статусами «не вышел» и «замена»
  * место не занимают.
  */
-export function findHoles({ pointId, config, shifts, from, to, absences = [] }:{
+export function findHoles({ pointId, config, shifts, from, to }:{
   pointId:string
   config?:SlotConfig | null
   shifts:Shift[]
   from:string
   to:string
-  absences?:Absence[]
 }):Hole[] {
   const holes:Hole[] = []
   const last = dayjs(to)
@@ -157,20 +144,12 @@ export function findHoles({ pointId, config, shifts, from, to, absences = [] }:{
     const filled = new Map<number, Shift>()
     for (const shift of onDay) filled.set(shift.slotIndex ?? 0, shift)
 
-    const occupied = [...filled.values()].filter(shift => !isAbsent(absences, shift.employeeId, date)).length
+    const occupied = filled.size
     if (occupied >= need) continue
 
     for (let slotIndex = 0; slotIndex < need; slotIndex += 1) {
-      const shift = filled.get(slotIndex)
-      if (shift && !isAbsent(absences, shift.employeeId, date)) continue
-      holes.push({
-        pointId,
-        date,
-        slotIndex,
-        reason: shift ? 'absence' : 'empty',
-        occupied,
-        need,
-      })
+      if (filled.has(slotIndex)) continue
+      holes.push({ pointId, date, slotIndex, occupied, need })
     }
   }
 

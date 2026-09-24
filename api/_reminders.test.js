@@ -71,26 +71,16 @@ describe('кто выходит в день', () => {
     employee_id: 'e1', employees: { full_name: 'Ирина' }, ...overrides,
   })
 
-  it('отпускник не занимает место: день считается незакрытым', () => {
-    const crew = dayCrew({
-      shifts: [shift()],
-      vacations: [{ employee_id: 'e1', date_from: '2026-09-20', date_to: '2026-09-25' }],
-      date: '2026-09-21',
-    })
-    expect(crew).toEqual([])
-  })
-
   it('две смены на одно место считаются за одного человека', () => {
     const crew = dayCrew({
       shifts: [shift(), shift({ employee_id: 'e2', employees: { full_name: 'Пётр' } })],
-      vacations: [],
       date: '2026-09-21',
     })
     expect(crew.map(row => row.employee_id)).toEqual(['e1'])
   })
 
   it('смены других дней в расчёт не идут', () => {
-    const crew = dayCrew({ shifts: [shift({ work_date: '2026-09-22' })], vacations: [], date: '2026-09-21' })
+    const crew = dayCrew({ shifts: [shift({ work_date: '2026-09-22' })], date: '2026-09-21' })
     expect(crew).toEqual([])
   })
 })

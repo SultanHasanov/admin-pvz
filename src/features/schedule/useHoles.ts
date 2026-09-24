@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import dayjs from 'dayjs'
-import { findHoles, type Absence, type Hole } from '../../entities/slots'
+import { findHoles, type Hole } from '../../entities/slots'
 import { monthEnd, monthStart, today } from '../../shared/dates'
 import { useOrg } from '../../app/OrgContext'
 import { useMonthTotals } from '../money/useMonthTotals'
@@ -12,11 +12,8 @@ export interface PointHole extends Hole { pointName:string }
  *
  * Считаем только от сегодняшнего дня и вперёд: прошлое уже не изменить, а красить
  * закрытые дни в тревожный цвет значит утопить настоящую проблему в шуме.
- *
- * Отпуск освобождает место: человек стоит в графике, но не выйдет, и день считается
- * незакрытым с причиной `absence` — «нужна замена», а не «забыли поставить».
  */
-export function useHoles(totals:ReturnType<typeof useMonthTotals>, absences:Absence[] = []) {
+export function useHoles(totals:ReturnType<typeof useMonthTotals>) {
   const { points, pointId, pointName } = useOrg()
 
   return useMemo(() => {
@@ -32,10 +29,9 @@ export function useHoles(totals:ReturnType<typeof useMonthTotals>, absences:Abse
         shifts: totals.shifts,
         from,
         to,
-        absences,
       }).map<PointHole>(hole => ({ ...hole, pointName: pointName(point.id) })))
       .sort((first, second) => first.date.localeCompare(second.date))
-  }, [points, pointId, pointName, totals.shifts, totals.month, absences])
+  }, [points, pointId, pointName, totals.shifts, totals.month])
 }
 
 /** Дырки, сгруппированные по точке: «Ленина 12: нет сотрудника 19 и 21 сент». */
@@ -54,7 +50,6 @@ export function groupHoles(holes:PointHole[]) {
       // «19, 21, 23 сент и ещё 4» — точные числа важнее общего «есть проблемы».
       label: `${short}${dates.length > 3 ? ` и ещё ${dates.length - 3}` : ''} ${dayjs(dates[0]).format('MMM')}`,
       onlyPartial: group.every(hole => hole.occupied > 0),
-      absence: group.some(hole => hole.reason === 'absence'),
     }
   })
 }

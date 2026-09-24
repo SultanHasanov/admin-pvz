@@ -115,7 +115,8 @@ test.describe('запись из шторок', () => {
     await page.getByRole('button', { name: 'Добавить сотрудника' }).click()
     await page.screenshot({ path: 'visual/shots/app/sheet-candidate.png' })
 
-    await page.getByText('Дмитрий Орлов').click()
+    // Имя есть и в легенде под сеткой — кликаем именно в шторке.
+    await page.getByRole('dialog').getByText('Дмитрий Орлов').click()
     await expect.poll(() => recorded.filter(row => row.table === 'shifts').length).toBe(1)
 
     const shift = recorded.find(row => row.table === 'shifts')!.body as Record<string, unknown>

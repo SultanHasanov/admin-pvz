@@ -3,14 +3,12 @@ import { useQueries, useQuery } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import type { Shift } from '../../entities/types'
 import { accrueShifts, calculateSalarySheet, employeeShare } from '../../entities/calculations'
-import { isAbsent } from '../../entities/slots'
 import { keys } from '../../services/queries'
 import { listShifts, listShiftsRange } from '../../services/shifts'
 import { listSalaryRules } from '../../services/employees'
 import { listBonuses, listPenalties, listSalaryPayments } from '../../services/salary'
 import { listDeductionParts, listDeductions } from '../../services/deductions'
 import { today as todayDate } from '../../shared/dates'
-import { useVacations } from '../schedule/useVacations'
 import { shortName, useMe } from './useMe'
 
 /** Смена «моя и живая»: заменённую или сорванную не показываем как предстоящую работу. */
@@ -37,7 +35,6 @@ function partnersOf(shifts:Shift[], shift:Shift, nameOf:(id:string) => string) {
  */
 export function useMyMonth(month:string) {
   const { employeeId, nameOf } = useMe()
-  const { absences } = useVacations(month)
 
   const [shifts, rules, bonuses, penalties, payments, deductions] = useQueries({
     queries: [
@@ -77,10 +74,8 @@ export function useMyMonth(month:string) {
     payments: payments.data ?? [],
   }) : null, [employeeId, month, all, myRules, bonuses.data, penalties.data, deductions.data, parts.data, payments.data])
 
-  // Прогноз: всё, что стоит в графике и не отпуск, как будто будет отработано.
-  const forecast = useMemo(() => accrueShifts(
-    mine.filter(shift => !isAbsent(absences, shift.employeeId, dateOf(shift))),
-    myRules), [mine, myRules, absences])
+  // Прогноз: всё, что стоит в графике, как будто будет отработано.
+  const forecast = useMemo(() => accrueShifts(mine, myRules), [mine, myRules])
 
   const myDeductions = useMemo(() => employeeId
     ? (deductions.data ?? [])
@@ -94,7 +89,6 @@ export function useMyMonth(month:string) {
   return {
     employeeId,
     shifts: mine,
-    absences,
     sheet,
     forecast,
     deductions: myDeductions,

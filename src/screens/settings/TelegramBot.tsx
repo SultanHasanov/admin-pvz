@@ -239,7 +239,7 @@ function Form({ header, pointId, pointName, integrationId, initial, group, candi
 
     <Reminder
       title="Не хватает людей в графике"
-      sub="Дни, где на смене меньше человек, чем нужно точке. Отпуска учитываются."
+      sub="Дни, где на смене меньше человек, чем нужно точке."
       enabled={settings.gaps_enabled}
       onEnabled={value => set('gaps_enabled', value)}
       time={settings.gaps_time}

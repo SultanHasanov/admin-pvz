@@ -28,7 +28,9 @@ const toRequest = (row:RequestRow):ShiftRequest => ({
 /** Без фильтра — вся история заявок; владельцу в ленту нужны только `SENT`. */
 export async function listShiftRequests(statuses?:ShiftRequestStatus[]):Promise<ShiftRequest[]> {
   const organization_id = await organizationId()
+  // Только «не смогу выйти»: заявки на отпуск остались от прежних версий, отпусков больше нет.
   let query = client().from('shift_requests').select(columns).eq('organization_id', organization_id)
+    .eq('kind', 'SHIFT')
     .order('created_at', { ascending: false })
   if (statuses?.length) query = query.in('status', statuses)
   const { data, error } = await query
@@ -63,8 +65,7 @@ export async function createShiftRequest(input:ShiftRequestInput) {
 
 /**
  * Решение владельца. Только через RPC: замена переписывает чужие смены и пишет историю
- * в `shift_changes`, а подтверждённый отпуск заводит строку в `vacations` — три таблицы
- * в одной транзакции, из браузера это не собрать без гонок.
+ * в `shift_changes` — несколько таблиц в одной транзакции, из браузера это не собрать без гонок.
  */
 export async function resolveShiftRequest(
   id:string,

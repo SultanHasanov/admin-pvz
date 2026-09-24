@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import dayjs from 'dayjs'
 import type { PayMode, Shift } from '../../entities/types'
 import { defaultOffsets, type SchedulePattern } from '../../entities/schedule'
-import { generateCells, isAbsent, planCells, slotsForDay, type Absence, type SlotPlan } from '../../entities/slots'
+import { generateCells, planCells, slotsForDay, type SlotPlan } from '../../entities/slots'
 import { monthEnd, monthStart, weekStartOf } from '../../shared/dates'
 import { countByEmployee, previewEntries } from './board'
 
@@ -33,7 +33,7 @@ export type Period = 'week' | 'fourWeeks' | 'month' | 'custom'
  * «Двое по 2/2 на первом месте и двое подменных на втором» — это два независимых
  * правила, и только так получается прототипный график «будни один, выходные два».
  */
-export function useSlotDraft({ month, pointId, slotCount, shifts, times, absences = [] }:{
+export function useSlotDraft({ month, pointId, slotCount, shifts, times }:{
   month:string
   pointId:string
   /** Сколько мест на точке по умолчанию — начальное число правил. */
@@ -41,8 +41,6 @@ export function useSlotDraft({ month, pointId, slotCount, shifts, times, absence
   /** Существующие смены: по ним считаются конфликты и предпросмотр. */
   shifts:Shift[]
   times:{ startsAt:string; endsAt:string; payMode:PayMode }
-  /** Отпуска: в эти дни человека не ставим, место остаётся пустым и попадает в дырки. */
-  absences?:Absence[]
 }) {
   const today = dayjs().format('YYYY-MM-DD')
   const weekStart = weekStartOf(month === today.slice(0, 7) ? today : monthStart(month))
@@ -111,17 +109,10 @@ export function useSlotDraft({ month, pointId, slotCount, shifts, times, absence
   // Число мест берём из черновика, а не из настроек точки: мастер и задаёт это число.
   const config = { def: slots.length }
 
-  // Сначала без отпусков, потом вычитаем их сами: так видно, сколько выходов съел отпуск.
-  // Без этого числа мастер поставил бы меньше смен, чем обещает очередь, и это
-  // выглядело бы как ошибка генератора.
-  const allCells = useMemo(
+  const cells = useMemo(
     () => pointId ? generateCells({ plans, pointId, from, to, config: { def: slots.length } }) : [],
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [plans, pointId, from, to, slots.length])
-  const cells = useMemo(
-    () => allCells.filter(cell => !isAbsent(absences, cell.employeeId, cell.date)),
-    [allCells, absences])
-  const skippedForVacation = allCells.length - cells.length
 
   const plan = useMemo(() => planCells(cells, shifts), [cells, shifts])
   const counts = useMemo(() => countByEmployee(cells), [cells])
@@ -144,7 +135,7 @@ export function useSlotDraft({ month, pointId, slotCount, shifts, times, absence
     slots, active, setActive, setSlotCount, patch, toggleEmployee, toggleWeekday,
     period, setPeriod: setPeriodPreset, from, setFrom, to, setTo,
     strategy, setStrategy,
-    cells, plan, counts, preview, gaps, skippedForVacation,
+    cells, plan, counts, preview, gaps,
     times,
     ready: cells.length > 0 && Boolean(pointId),
     /** Правила в виде, пригодном для сохранения шаблоном. */

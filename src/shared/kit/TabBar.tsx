@@ -46,9 +46,14 @@ export function TabBar({ items, active, onSelect }:{
  * Кнопка главного действия экрана. Висит над панелью табов, поэтому её низ считается
  * от `--tabbar-space`: иначе на телефонах с жестовой панелью она прилипает к краю.
  *
- * На десктопе таб-бара нет, и та же кнопка становится кнопкой топбара с подписью.
+ * С подписью, а не голый «+»: на каждой вкладке плюс добавляет своё, и владелец
+ * должен видеть, что именно. `short` — подпись для телефона, если `label` длинный.
+ * Содержимое экрана под ней получает нижний отступ (`data-fab` в `Screen`),
+ * чтобы кнопка не закрывала суммы в последней строке списка.
+ *
+ * На десктопе таб-бара нет, и та же кнопка становится кнопкой топбара.
  */
-export function Fab({ onClick, label = 'Добавить' }:{ onClick:() => void; label?:string }) {
+export function Fab({ onClick, label = 'Добавить', short }:{ onClick:() => void; label?:string; short?:string }) {
   const { desktop } = useLayout()
   const slot = useContext(ActionSlot)
 
@@ -60,8 +65,9 @@ export function Fab({ onClick, label = 'Добавить' }:{ onClick:() => void
 
   return <button
     type="button"
+    data-fab
     aria-label={label}
-    className="tap absolute right-4 bottom-[calc(var(--tabbar-space)+16px)] z-20 flex size-[54px] items-center justify-center rounded-full bg-accent pb-1 text-[29px] leading-none font-light text-white shadow-[0_8px_22px_rgba(143,58,107,0.38)]"
+    className="tap absolute right-4 bottom-[calc(var(--tabbar-space)+16px)] z-20 flex h-[50px] items-center gap-1.5 rounded-full bg-accent pr-5 pl-4 text-act font-semibold whitespace-nowrap text-white shadow-[0_8px_22px_rgba(143,58,107,0.38)]"
     onClick={() => { haptics.tap(); onClick() }}
-  >+</button>
+  ><span aria-hidden className="pb-0.5 text-[24px] leading-none font-light">+</span>{short ?? label}</button>
 }

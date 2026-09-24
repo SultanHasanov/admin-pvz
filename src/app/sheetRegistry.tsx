@@ -100,19 +100,11 @@ export const sheetRegistry:Partial<Record<SheetType, SheetDef>> = {
     sub: () => 'Нужно решение',
     component: load(() => import('../sheets/RequestSheet')),
   },
-  vacation: {
-    title: () => 'Отпуск или больничный',
-    component: load(() => import('../sheets/VacationSheet')),
-  },
   // Шторки сотрудника: собраны, но кнопки к ним появятся вместе с кабинетом (фаза 6).
   cantWork: {
     title: () => 'Не смогу выйти',
     sub: props => dayTitle(props.date as string),
     component: load(() => import('../sheets/CantWorkSheet')),
-  },
-  reqVac: {
-    title: () => 'Запросить выходной или отпуск',
-    component: load(() => import('../sheets/RequestVacationSheet')),
   },
   disagree: {
     title: () => 'Не согласен с удержанием',

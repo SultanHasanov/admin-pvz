@@ -59,7 +59,7 @@ export default function CandidateSheet({ pointId, date, seats, shiftId, requestI
         ? replaceShift(shiftId, employeeId, 'Замена вручную')
         : createShift({ employeeId, pickupPointId: pointId, date, startsAt: times.startsAt, endsAt: times.endsAt }),
     invalidate: requestId
-      ? [scope.shifts, scope.requests, scope.vacations, scope.upcomingShifts]
+      ? [scope.shifts, scope.requests, scope.upcomingShifts]
       : [scope.shifts],
     done: (employeeId:string) => {
       const name = totals.staff.find(person => person.id === employeeId)?.fullName ?? 'Сотрудник'

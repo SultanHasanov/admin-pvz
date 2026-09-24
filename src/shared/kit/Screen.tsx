@@ -29,7 +29,8 @@ export function Screen({ header, filters, children, footer, wide }:{
   if (!desktop) return <div data-screen className="flex min-h-0 flex-1 flex-col">
     {header}
     {filters}
-    <div className="scroll-y flex-1 px-4 pt-2 pb-5">{children}</div>
+    {/* Под плавающей кнопкой — запас, чтобы она не закрывала последнюю строку. */}
+    <div className="scroll-y flex-1 px-4 pt-2 pb-5 has-[>[data-fab]]:pb-24">{children}</div>
     {footer && <div className="flex-none border-t border-line bg-surface px-4 py-3 pb-[calc(12px+var(--kb))]">{footer}</div>}
   </div>
 

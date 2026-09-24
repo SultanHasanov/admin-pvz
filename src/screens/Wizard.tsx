@@ -20,7 +20,6 @@ import { setSlotConfig } from '../services/points'
 import { useMonthTotals } from '../features/money/useMonthTotals'
 import { useSlotDraft, QUICK_CYCLES } from '../features/schedule/useSlotDraft'
 import { dayView } from '../features/schedule/dayTone'
-import { useVacations } from '../features/schedule/useVacations'
 import { useOrg } from '../app/OrgContext'
 import { defaultShiftTimes } from '../shared/shiftTimes'
 import { useNav } from '../app/nav'
@@ -42,7 +41,6 @@ export default function Wizard() {
   const { open } = useSheets()
   const client = useQueryClient()
   const totals = useMonthTotals()
-  const { absences } = useVacations(month)
 
   const active = points.filter(point => !point.archivedAt)
   const [target, setTarget] = useState(pointId || defaultPointId || active[0]?.id || '')
@@ -57,7 +55,6 @@ export default function Wizard() {
     slotCount: point?.slotConfig?.def ?? 1,
     shifts: totals.shifts.filter(shift => shift.pickupPointId === target),
     times,
-    absences,
   })
 
   const staff = totals.staff.filter(person => person.pickupPointIds.includes(target) && person.status === 'ACTIVE')
@@ -68,7 +65,7 @@ export default function Wizard() {
     for (const [date, entries] of draft.preview) {
       const shifts = entries.filter(entry => entry.shift).map(entry => entry.shift!)
       const planned = entries.filter(entry => entry.preview).length
-      const view = dayView(shifts, date, dayjs().format('YYYY-MM-DD'), () => '', absences)
+      const view = dayView(shifts, date, dayjs().format('YYYY-MM-DD'), () => '')
       result.set(date, {
         date,
         tone: planned ? 'accent' : view.tone,
@@ -76,7 +73,7 @@ export default function Wizard() {
       })
     }
     return result
-  }, [draft.preview, absences])
+  }, [draft.preview])
 
   const apply = useMutation({
     mutationFn: async () => {
@@ -229,7 +226,6 @@ export default function Wizard() {
     <div className="mt-2 text-sub leading-[1.4] text-muted">
       Всего выходов: {draft.cells.length}
       {draft.gaps > 0 && ` · дней с незакрытыми местами: ${draft.gaps}`}
-      {draft.skippedForVacation > 0 && <><br/>{draft.skippedForVacation} выходов не поставлено — отпуск</>}
     </div>
 
     {draft.plan.conflicts.length > 0 && <div className="mt-3">

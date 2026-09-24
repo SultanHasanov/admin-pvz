@@ -14,7 +14,6 @@ import { getPayoutSettings } from '../../services/payoutSettings'
 import { useMonthTotals } from '../money/useMonthTotals'
 import { useSalarySheets } from '../money/useSalarySheets'
 import { groupHoles, useHoles } from '../schedule/useHoles'
-import { useVacations } from '../schedule/useVacations'
 import { useOrg } from '../../app/OrgContext'
 
 /** Совместимость с прежним именем: экраны ждут `Alert`, а это строка ленты. */
@@ -43,8 +42,7 @@ export function useAlerts() {
   const client = useQueryClient()
   const totals = useMonthTotals()
   const salary = useSalarySheets(totals)
-  const { absences } = useVacations(month)
-  const holes = useHoles(totals, absences)
+  const holes = useHoles(totals)
 
   const [deductions, recurring, occurrences, requests, reads, payout] = useQueries({
     queries: [

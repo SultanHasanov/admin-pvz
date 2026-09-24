@@ -64,7 +64,7 @@ export function ListRow({
   >{inner}</button>
 }
 
-/** Цветная пилюля состояния: «активен», «в отпуске», «оспаривается». */
+/** Цветная пилюля состояния: «активен», «отключён», «оспаривается». */
 export const Pill = ({ children, tone: t = 'neutral', className }:{ children:ReactNode; tone?:Tone; className?:string }) =>
   <div
     className={cn('flex-none rounded-xs px-2 py-1 text-[11px] font-semibold', className)}

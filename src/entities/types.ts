@@ -6,11 +6,13 @@ export type PayMode = 'FULL'|'HALF'|'HOURS'
 export type PenaltyStatus = 'ASSIGNED'|'DISPUTED'|'CANCELLED'|'CONFIRMED'|'WITHHELD'
 export type DeductionStatus = 'NEW'|'INVESTIGATING'|'DISPUTED'|'PENDING'|'CANCELLED_BY_WB'|'CONFIRMED_BY_WB'|'EMPLOYEE_LIABILITY'|'OWNER_LOSS'
 export type EntryKind = 'INCOME'|'EXPENSE'
-/** Заявка сотрудника: «не смогу выйти» в конкретный день, отпуск или больничный. */
-export type ShiftRequestKind = 'SHIFT'|'VACATION'|'SICK'
+/**
+ * Заявка сотрудника: «не смогу выйти» в конкретный день. Отпусков в приложении нет —
+ * старые заявки других видов в базе остались, но `listShiftRequests` их не читает.
+ */
+export type ShiftRequestKind = 'SHIFT'
 /** Решение владельца. `SENT` — ещё открытая заявка, остальные четыре — исход. */
 export type ShiftRequestStatus = 'SENT'|'SUBSTITUTE_FOUND'|'ALONE'|'APPROVED'|'DECLINED'
-export type VacationKind = 'PAID'|'UNPAID'|'SICK'
 export type Money = number
 
 export interface PickupPoint { id:string; name:string; address:string; timezone:string; archivedAt:string|null; slotConfig?:SlotConfig; hours?:WorkingHours|null }
@@ -40,8 +42,6 @@ export interface RecurringExpense { id:string; pickupPointId:string; categoryId:
 export interface RecurringExpenseOccurrence { id:string; recurringExpenseId:string; dueOn:string; status:'PENDING'|'PAID'|'SKIPPED'; expenseEntryId:string|null }
 /** Заявка сотрудника (миграция 0013). Даты — календарные, без часовых поясов. */
 export interface ShiftRequest { id:string; employeeId:string; pickupPointId:string|null; kind:ShiftRequestKind; dateFrom:string; dateTo:string; reason:string|null; status:ShiftRequestStatus; substituteEmployeeId:string|null; resolutionComment:string|null; resolvedAt:string|null; createdAt:string }
-/** Отпуск хранится, а не выводится из заявки: владелец вводит его и задним числом. */
-export interface Vacation { id:string; employeeId:string; dateFrom:string; dateTo:string; kind:VacationKind; sourceRequestId:string|null; comment:string|null }
 /** Дни выплат организации (миграция 0016). Экран настройки появится в фазе 7. */
 export interface PayoutSettings { advanceDay:number|null; payday:number|null; advanceMode:'FIXED'|'CALC'|'MANUAL'; advanceSumKopecks:number }
 export interface TaxSettings { rate:number; enabled:boolean }

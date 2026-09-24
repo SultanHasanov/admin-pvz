@@ -152,11 +152,6 @@ export const shiftRequests = [
   },
 ]
 
-/** Отпуск Алины из прототипа: на точке p2 появятся синие дни и дырки «нужна замена». */
-export const vacations = [
-  { id: 'v1', employee_id: 'e3', date_from: `${MONTH}-20`, date_to: `${MONTH}-27`, kind: 'UNPAID', source_request_id: null, comment: null },
-]
-
 export const tables:Record<string, unknown[]> = {
   organization_members: [{ organization_id: 'org-1', user_id: 'user-1', role: 'OWNER', employee_id: null }],
   organizations: [{ id: 'org-1', name: 'ИП Ковалёв А. С.', currency: 'RUB' }],
@@ -179,7 +174,6 @@ export const tables:Record<string, unknown[]> = {
   entry_presets: [],
   shift_templates: [],
   shift_requests: withOrg(shiftRequests),
-  vacations: withOrg(vacations),
   notification_reads: [],
   // Фаза 7. Ставка по умолчанию и бот на Ленина; на остальных точках бота нет.
   salary_rates: withOrg([{ id: 'rate1', name: 'Основная', payment_type: 'SHIFT', rate_kopecks: 200000, monthly_norm_days: 22, is_default: true, archived_at: null }]),

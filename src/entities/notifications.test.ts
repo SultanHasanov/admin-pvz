@@ -19,7 +19,7 @@ const request = (patch:Partial<FeedRequest> = {}):FeedRequest => ({
 
 const hole = (patch:Partial<FeedHole> = {}):FeedHole => ({
   pointId: 'p1', pointName: 'Ленина 12', firstDate: '2026-09-19', count: 1,
-  label: '19 сент', onlyPartial: false, absence: false,
+  label: '19 сент', onlyPartial: false,
   ...patch,
 })
 
@@ -72,11 +72,6 @@ describe('заявки в ленте', () => {
     expect(requestTitle(request())).toBe('Ольга Смирнова не сможет выйти 25 сент')
   })
 
-  it('отпуск — с отрезком дат', () => {
-    expect(requestTitle(request({ kind: 'VACATION', dateFrom: '2026-10-20', dateTo: '2026-10-27' })))
-      .toBe('Ольга Смирнова просит отпуск 20 окт–27 окт')
-  })
-
   it('причина и призыв к решению в подписи, тон тревожный', () => {
     const [item] = buildFeed({ ...empty, requests: [request()] })
     expect(item.sub).toBe('Причина: Болезнь · нужно решение')
@@ -90,9 +85,9 @@ describe('заявки в ленте', () => {
 })
 
 describe('дырки в ленте', () => {
-  it('совпало с отпуском — нужна замена', () => {
-    const [item] = buildFeed({ ...empty, holes: [hole({ absence: true })] })
-    expect(item.sub).toBe('Совпало с отпуском — нужна замена')
+  it('пустые дни — «нет сотрудника», красный', () => {
+    const [item] = buildFeed({ ...empty, holes: [hole({ count: 2 })] })
+    expect(item.sub).toBe('Пустых дней: 2')
     expect(item.tone).toBe('bad')
   })
 
@@ -196,10 +191,10 @@ describe('лента сотрудника', () => {
     expect(sent).toMatchObject({ title: 'Запрос на 24 сент', sub: 'Отправлено · ждём решения владельца', tone: 'warn' })
 
     const [declined] = buildEmployeeFeed({ ...base, requests: [{
-      id: 'q1', kind: 'VACATION', dateFrom: '2026-10-20', dateTo: '2026-10-27',
+      id: 'q1', kind: 'SHIFT', dateFrom: '2026-10-20', dateTo: '2026-10-20',
       status: 'DECLINED', statusText: 'Владелец отказал', createdAt: '2026-09-16T10:00:00Z',
     }] })
-    expect(declined).toMatchObject({ title: 'Запрос отпуска 20 окт–27 окт', tone: 'bad' })
+    expect(declined).toMatchObject({ title: 'Запрос на 20 окт', tone: 'bad' })
   })
 
   it('решение по уже прочитанной заявке снова зажигает бейдж', () => {

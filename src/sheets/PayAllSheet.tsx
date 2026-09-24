@@ -1,11 +1,10 @@
 import { useState } from 'react'
-import { Button } from '../shared/kit/Button'
+import { Button, TextButton } from '../shared/kit/Button'
 import { Card } from '../shared/kit/Card'
-import { Avatar, List, ListRow } from '../shared/kit/ListRow'
-import { Banner } from '../shared/kit/Field'
+import { List, ListRow } from '../shared/kit/ListRow'
+import { Banner, MoneyField } from '../shared/kit/Field'
 import { EmptyState } from '../shared/kit/Misc'
-import { initials } from '../shared/shifts'
-import { rubles } from '../shared/money'
+import { isValidMoney, moneyInput, parseMoney, rubles } from '../shared/money'
 import { monthLabel, today } from '../shared/dates'
 import { createSalaryPayment } from '../services/salary'
 import { useWrite } from '../features/write'
@@ -24,15 +23,22 @@ export default function PayAllSheet({ kind = 'ADVANCE', close }:{ kind?:'ADVANCE
   const totals = useMonthTotals()
   const salary = useSalarySheets(totals)
   const [skipped, setSkipped] = useState<string[]>([])
+  // Суммы, которые владелец поправил руками: аванс «половиной» подходит не всем.
+  const [edits, setEdits] = useState<Record<string, string>>({})
+  const [editing, setEditing] = useState(false)
 
   const rows = salary.sheets
     .map(sheet => ({
       sheet,
-      amount: kind === 'ADVANCE' ? Math.round(sheet.accrued / 2) - sheet.paid : Math.max(0, sheet.balance),
+      suggested: kind === 'ADVANCE' ? Math.round(sheet.accrued / 2) - sheet.paid : Math.max(0, sheet.balance),
     }))
-    .filter(row => row.amount > 0)
+    .filter(row => row.suggested > 0)
+    .map(row => {
+      const edit = edits[row.sheet.employeeId]
+      return { ...row, amount: edit === undefined ? row.suggested : isValidMoney(edit) ? parseMoney(edit) : 0 }
+    })
 
-  const chosen = rows.filter(row => !skipped.includes(row.sheet.employeeId))
+  const chosen = rows.filter(row => !skipped.includes(row.sheet.employeeId) && row.amount > 0)
   const total = chosen.reduce((sum, row) => sum + row.amount, 0)
   const period = monthLabel(totals.month).split(' ')[0].toLowerCase()
 
@@ -67,22 +73,38 @@ export default function PayAllSheet({ kind = 'ADVANCE', close }:{ kind?:'ADVANCE
       Месяц ещё идёт: смены после сегодняшнего дня в остаток не попали.
     </Banner>}
 
+    <div className="mb-2 flex items-baseline justify-between gap-3 text-sub text-muted">
+      <span>{kind === 'ADVANCE' ? 'Половина начисленного за вычетом выплаченного.' : 'Остаток к выплате за месяц.'} Снимите галочку, чтобы не платить.</span>
+      <TextButton onClick={() => setEditing(value => !value)}>{editing ? 'Готово' : 'Изменить суммы'}</TextButton>
+    </div>
+
     <Card>
       <List>
         {rows.map(row => {
-          const off = skipped.includes(row.sheet.employeeId)
-          return <ListRow
-            key={row.sheet.employeeId}
-            leading={<Avatar initials={initials(row.sheet.fullName)} tone={off ? 'neutral' : 'accent'}/>}
-            title={<span className={off ? 'text-muted line-through' : undefined}>{row.sheet.fullName}</span>}
-            sub={`начислено ${rubles(row.sheet.accrued)}`}
-            right={rubles(row.amount)}
-            rightSub={off ? 'пропустить' : 'выплатить'}
-            rightSubTone={off ? 'neutral' : 'ok'}
-            onClick={() => setSkipped(current => off
-              ? current.filter(id => id !== row.sheet.employeeId)
-              : [...current, row.sheet.employeeId])}
-          />
+          const id = row.sheet.employeeId
+          const off = skipped.includes(id)
+          return <div key={id}>
+            <ListRow
+              leading={<span
+                aria-hidden
+                className={off
+                  ? 'flex size-[22px] flex-none items-center justify-center rounded-xs border border-line-strong bg-surface'
+                  : 'flex size-[22px] flex-none items-center justify-center rounded-xs border border-accent bg-accent text-[13px] font-semibold text-white'}
+              >{off ? '' : '✓'}</span>}
+              title={<span className={off ? 'text-muted line-through' : undefined}>{row.sheet.fullName}</span>}
+              sub={`начислено ${rubles(row.sheet.accrued)}${row.sheet.paid ? ` · выплачено ${rubles(row.sheet.paid)}` : ''}`}
+              right={off ? undefined : rubles(row.amount)}
+              rightSub={off ? 'не платим' : edits[id] !== undefined && row.amount !== row.suggested ? 'своя сумма' : undefined}
+              onClick={() => setSkipped(current => off ? current.filter(item => item !== id) : [...current, id])}
+            />
+            {editing && !off && <div className="px-4 pb-3">
+              <MoneyField
+                value={edits[id] ?? moneyInput(row.suggested)}
+                onValueChange={value => setEdits(current => ({ ...current, [id]: value }))}
+                hint={`Предложено ${rubles(row.suggested)}`}
+              />
+            </div>}
+          </div>
         })}
       </List>
     </Card>

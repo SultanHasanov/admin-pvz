@@ -13,14 +13,14 @@ import { MonthCalendar, type CalendarDay } from '../shared/kit/MonthCalendar'
 import { useLayout } from '../shared/kit/layout'
 import DaySheet from '../sheets/DaySheet'
 import { WeekMatrix, type MatrixCell } from '../shared/kit/WeekMatrix'
+import { tone as tones, type Tone } from '../shared/kit/tokens'
 import { initials, statusTitles } from '../shared/shifts'
 import { payModeTitles } from '../shared/salary'
 import { dayLabel, monthLabel, monthStart, timeLabel, today as todayDate, weekStartOf } from '../shared/dates'
 import { keys } from '../services/queries'
 import { listEmployees } from '../services/employees'
 import { dayView } from '../features/schedule/dayTone'
-import { isAbsent, slotsForDay } from '../entities/slots'
-import { useVacations } from '../features/schedule/useVacations'
+import { slotsForDay } from '../entities/slots'
 import { useMonthTotals } from '../features/money/useMonthTotals'
 import { useOrg } from '../app/OrgContext'
 import { useNav } from '../app/nav'
@@ -40,7 +40,6 @@ export default function Schedule() {
   const { push } = useNav()
   const { desktop } = useLayout()
   const totals = useMonthTotals()
-  const { absences } = useVacations(month)
   const employees = useQuery({ queryKey: keys.employees(), queryFn: () => listEmployees() })
 
   const today = todayDate()
@@ -82,51 +81,62 @@ export default function Schedule() {
     for (let index = 0; index < first.daysInMonth(); index += 1) {
       const date = first.add(index, 'day').format('YYYY-MM-DD')
       const shifts = (byDate.get(date) ?? []).filter(shift => !pointId || shift.pickupPointId === pointId)
-      const view = dayView(shifts, date, today, nameOf, absences)
-      // Человек в отпуске смену не отработает — его имя в клетке обманывало бы.
-      const working = shifts.filter(shift => shift.status !== 'REPLACED' && shift.status !== 'NO_SHOW' && !isAbsent(absences, shift.employeeId, date))
+      const view = dayView(shifts, date, today, nameOf)
+      const working = shifts.filter(shift => shift.status !== 'REPLACED' && shift.status !== 'NO_SHOW')
       const names = working.slice(0, desktop ? 3 : 2).map(shift => `${cellName(nameOf(shift.employeeId))}${shift.payMode === 'HALF' ? ' ½' : ''}`)
       const need = pointId ? slotsForDay(points.find(point => point.id === pointId)?.slotConfig, date) : 1
       const missing = date >= today && names.length < need
-      // День опустел из-за отпуска: остаётся синим «отп», как в dayView, но с рамкой незакрытого.
-      const vacationGap = missing && !names.length && view.lines[0] === 'отп'
       result.set(date, {
         date, ...view,
-        tone: vacationGap ? 'info' : missing ? 'bad' : names.length ? 'neutral' : view.tone,
+        tone: missing ? 'bad' : names.length ? 'neutral' : view.tone,
         strong: missing || view.strong,
         vacant: missing,
-        lines: vacationGap ? ['отп'] : missing ? names.length ? [names[0], 'ещё 1'] : ['НУЖЕН'] : names.length ? names : shifts.some(shift => shift.status === 'NO_SHOW') ? ['не выш.'] : view.lines,
+        lines: missing ? names.length ? [names[0], 'ещё 1'] : ['НУЖЕН'] : names.length ? names : shifts.some(shift => shift.status === 'NO_SHOW') ? ['не выш.'] : view.lines,
       })
     }
     return result
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [byDate, month, today, employees.data, absences, pointId, points, desktop])
+  }, [byDate, month, today, employees.data, pointId, points, desktop])
 
   const matrixRows = useMemo(() => activePoints.map(point => {
     const cells = new Map<string, MatrixCell>()
     for (let index = 0; index < 7; index += 1) {
       const date = dayjs(weekStart).add(index, 'day').format('YYYY-MM-DD')
       const shifts = (byDate.get(date) ?? []).filter(shift => shift.pickupPointId === point.id)
-      const view = dayView(shifts, date, today, nameOf, absences)
+      const view = dayView(shifts, date, today, nameOf)
       cells.set(date, { label: shifts.length ? view.lines[0] ?? '·' : 'нет', tone: view.tone, strong: view.strong })
     }
     return { id: point.id, label: point.name.replace(/^ПВЗ\s+/, ''), cells }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [activePoints, byDate, weekStart, today, employees.data, absences])
+  }), [activePoints, byDate, weekStart, today, employees.data])
+
+  // Кто стоит за инициалами недели: «ИС» без расшифровки владелец угадывает, а не читает.
+  const weekPeople = useMemo(() => {
+    const ids = new Set<string>()
+    for (let index = 0; index < 7; index += 1) {
+      const date = dayjs(weekStart).add(index, 'day').format('YYYY-MM-DD')
+      for (const shift of byDate.get(date) ?? []) if (shift.status !== 'REPLACED') ids.add(shift.employeeId)
+    }
+    return [...ids].map(id => nameOf(id)).sort((a, b) => a.localeCompare(b, 'ru'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [byDate, weekStart, employees.data])
 
   const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => {
     const date = dayjs(weekStart).add(index, 'day').format('YYYY-MM-DD')
     const shifts = byDate.get(date) ?? []
-    return { date, shifts, view: dayView(shifts, date, today, nameOf, absences) }
+    return { date, shifts, view: dayView(shifts, date, today, nameOf) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [weekStart, byDate, today, employees.data, absences])
+  }), [weekStart, byDate, today, employees.data])
 
   const gaps = [...monthDays.values()].filter(day => day.vacant).length
   const gapUnit = gaps % 10 === 1 && gaps % 100 !== 11 ? 'день' : gaps % 10 >= 2 && gaps % 10 <= 4 && (gaps % 100 < 12 || gaps % 100 > 14) ? 'дня' : 'дней'
   const dayShifts = picked ? (byDate.get(picked) ?? []) : []
   const openDay = (point:string, date:string) => open('day', { pointId: point, date, pointLabel: pointName(point) })
 
-  const links = <div className="mt-3 flex flex-wrap gap-x-4"><TextButton onClick={() => push('/sched/templates')}>Сохранённые шаблоны</TextButton><TextButton onClick={() => push('/sched/share')}>Поделиться</TextButton></div>
+  const links = <div className="mt-4 grid grid-cols-2 gap-2">
+    <Button variant="secondary" onClick={() => push('/sched/templates')}>Шаблоны</Button>
+    <Button variant="secondary" onClick={() => push('/sched/share')}>Поделиться</Button>
+  </div>
 
   const board = <>
     <Segmented
@@ -139,7 +149,9 @@ export default function Schedule() {
     />
 
     <Button block className="mb-2" onClick={() => push('/sched/build')}>Заполнить график</Button>
-    <div className="mb-3 text-sub text-muted">{pointId ? 'Нажмите на день, чтобы изменить смены. Дни с пустыми местами выделены красной рамкой.' : 'Сейчас показаны все ПВЗ. Выберите один ПВЗ вверху, чтобы увидеть его календарь месяца.'} Перед сохранением нового графика увидите результат на календаре.</div>
+    <div className="mb-3 text-sub text-muted">{pointId
+      ? 'Нажмите на день, чтобы поставить или заменить человека.'
+      : 'Нажмите на клетку, чтобы поставить человека. Месяц целиком — у одного ПВЗ, выберите его вверху.'}</div>
 
     {totals.error && <div className="mb-3"><ErrorNote error={totals.error}/></div>}
 
@@ -184,6 +196,8 @@ export default function Schedule() {
             // открываем сразу день этой точки, а не общий список.
             onPick={(point, date) => openDay(point, date)}
           />}
+
+    {!totals.loading && mode === 'month' && <Legend people={pointId ? [] : weekPeople}/>}
 
     {!totals.loading && mode === 'month' && pointId && !gaps && <div className="mt-2 text-sub text-muted">Каждый день месяца закрыт сменой</div>}
   </>
@@ -247,4 +261,26 @@ export default function Schedule() {
       </div>
     </div>
   </Screen>
+}
+
+const LEGEND:{ tone:Tone; label:string }[] = [
+  { tone: 'accent', label: 'по плану' },
+  { tone: 'ok', label: 'отработана' },
+  { tone: 'warn', label: 'неполная' },
+  { tone: 'bad', label: 'нет человека' },
+]
+
+/** Расшифровка сетки: цвета клеток и, в матрице всех ПВЗ, чьи это инициалы. */
+function Legend({ people }:{ people:string[] }) {
+  return <div className="mt-2.5 text-lbl text-muted">
+    <div className="flex flex-wrap gap-x-3 gap-y-1">
+      {LEGEND.map(item => <span key={item.tone} className="flex items-center gap-1.5">
+        <span aria-hidden className="size-2.5 rounded-[3px] border" style={{ background: tones[item.tone].bg, borderColor: tones[item.tone].fg }}/>
+        {item.label}
+      </span>)}
+    </div>
+    {!!people.length && <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
+      {people.map(name => <span key={name}><b className="font-semibold text-muted-strong">{initials(name)}</b> {name}</span>)}
+    </div>}
+  </div>
 }

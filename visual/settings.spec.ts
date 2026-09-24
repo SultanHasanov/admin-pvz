@@ -148,7 +148,7 @@ test.describe('настройки', () => {
     const recorded = await stubSupabase(page)
     await page.goto('/people')
     await page.waitForSelector('[data-screen]')
-    await page.getByRole('button', { name: 'Добавить' }).click()
+    await page.getByRole('button', { name: 'Сотрудник' }).click()
     await page.waitForSelector('text=ФИО и телефон')
 
     await page.getByLabel('ФИО').fill('Ольга Петрова')

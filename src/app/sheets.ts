@@ -15,9 +15,9 @@ export type SheetType =
   // таблицу частей нечем наполнить, поэтому она добавлена сверх 38 прототипных.
   | 'split'
   // график
-  | 'day' | 'dayAll' | 'cand' | 'selAssign' | 'partial' | 'copyWeek' | 'saveTpl' | 'vacation'
+  | 'day' | 'dayAll' | 'cand' | 'selAssign' | 'partial' | 'copyWeek' | 'saveTpl'
   // люди и заявки
-  | 'rate' | 'req' | 'reqVac' | 'cantWork'
+  | 'rate' | 'req' | 'cantWork'
   // настройки
   | 'setOrg' | 'setTax' | 'setRate' | 'setPayDays'
 

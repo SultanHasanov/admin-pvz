@@ -6,13 +6,14 @@ import { Avatar, List, ListRow } from '../shared/kit/ListRow'
 import { SectionTitle } from '../shared/kit/Text'
 import { Chip, EmptyState, ErrorNote, SkeletonRows } from '../shared/kit/Misc'
 import { Fab } from '../shared/kit/TabBar'
+import { Switch } from '../shared/kit/Switch'
 import { initials } from '../shared/shifts'
 import { rubles } from '../shared/money'
-import { monthLabel, today as todayDate } from '../shared/dates'
-import { vacationOn } from '../services/vacations'
-import { keys } from '../services/queries'
-import { listEmployees } from '../services/employees'
-import { useVacations } from '../features/schedule/useVacations'
+import { plural } from '../shared/format'
+import { monthLabel } from '../shared/dates'
+import { keys, scope } from '../services/queries'
+import { listEmployees, setEmployeeStatus } from '../services/employees'
+import { useWrite } from '../features/write'
 import { useMonthTotals } from '../features/money/useMonthTotals'
 import { useSalarySheets } from '../features/money/useSalarySheets'
 import { useOrg } from '../app/OrgContext'
@@ -20,11 +21,12 @@ import { useNav } from '../app/nav'
 import { useSheets } from '../app/sheets'
 
 /**
- * Сотрудники. Группы идут по состоянию: сначала те, кто работает, потом отпуска
- * и отключённые — так список отвечает на вопрос «кто у меня сейчас есть».
+ * Сотрудники: сначала те, кто работает, потом отключённые — так список отвечает
+ * на вопрос «кто у меня сейчас есть».
  *
- * «В отпуске» — это сегодняшняя дата внутри отрезка отпуска, а не поле в карточке:
- * отпуск кончается сам, и отдельный статус пришлось бы не забывать снимать.
+ * Переключатель в строке отключает уволившегося сразу, без захода в карточку:
+ * он остаётся в прошлых расчётах, но пропадает из выбора в графике. Тот же
+ * переключатель в группе «Отключённые» возвращает человека.
  */
 export default function People() {
   const { month, pointId, pointName } = useOrg()
@@ -34,19 +36,21 @@ export default function People() {
   const { id: selected } = useParams()
   const totals = useMonthTotals()
   const salary = useSalarySheets(totals)
-  const { vacations } = useVacations(month)
   // Общая выборка — только активные (их ставят в смены). Отключённых дочитываем для своей группы.
   const everyone = useQuery({ queryKey: keys.employees(true), queryFn: () => listEmployees(true) })
   const archived = (everyone.data ?? []).filter(employee => employee.status !== 'ACTIVE' && (!pointId || employee.pickupPointIds.includes(pointId)))
 
-  const today = todayDate()
   const period = monthLabel(month).split(' ')[0]
-  const onVacation = (id:string) => !!vacationOn(vacations, id, today)
+
+  const toggle = useWrite<{ id:string; name:string; on:boolean }>({
+    run: ({ id, on }) => setEmployeeStatus(id, on ? 'ACTIVE' : 'ARCHIVED'),
+    invalidate: [scope.employees],
+    done: ({ name, on }) => on ? `Снова в работе: ${name}` : `Отключили: ${name}. В графике больше не предлагаем`,
+  })
 
   const active = totals.staff.filter(employee => employee.status === 'ACTIVE')
   const groups = [
-    { label: 'Активные', rows: active.filter(employee => !onVacation(employee.id)) },
-    { label: 'В отпуске', rows: active.filter(employee => onVacation(employee.id)) },
+    { label: 'Активные', rows: active },
     { label: 'Отключённые', rows: archived },
   ].filter(group => group.rows.length)
 
@@ -73,27 +77,42 @@ export default function People() {
         <List>
           {group.rows.map(employee => {
             const sheet = salary.byEmployee(employee.id)
-            return <ListRow
-              key={employee.id}
-              leading={<Avatar
-                initials={initials(employee.fullName)}
-                tone={employee.status !== 'ACTIVE' ? 'neutral' : onVacation(employee.id) ? 'info' : 'accent'}
-              />}
-              title={employee.fullName}
-              sub={[
-                employee.pickupPointIds.map(id => pointName(id)).join(', ') || 'Без ПВЗ',
-                employee.rateKopecks ? rubles(employee.rateKopecks) : null,
-              ].filter(Boolean).join(' · ')}
-              right={sheet ? rubles(sheet.accrued) : undefined}
-              rightSub={sheet ? `${sheet.shifts} смен` : undefined}
-              selected={employee.id === selected}
-              onClick={() => push(`/people/${employee.id}`)}
-            />
+            const on = employee.status === 'ACTIVE'
+            const busy = toggle.isPending && toggle.variables?.id === employee.id
+            // Переключатель — рядом со строкой, а не внутри: строка сама кнопка,
+            // и вложенная кнопка открывала бы карточку вместе с переключением.
+            return <div key={employee.id} className={employee.id === selected ? 'flex items-center bg-accent-tint' : 'flex items-center'}>
+              <ListRow
+                className="min-w-0 flex-1 pr-2"
+                leading={<Avatar
+                  initials={initials(employee.fullName)}
+                  tone={on ? 'accent' : 'neutral'}
+                />}
+                title={employee.fullName}
+                // Ставка — в карточке: рядом с переключателем строке не хватает ширины.
+                sub={[
+                  employee.pickupPointIds.map(id => pointName(id).replace(/^ПВЗ\s+/, '')).join(', ') || 'Без ПВЗ',
+                  !on ? null : sheet?.shifts ? `${sheet.shifts} ${plural(sheet.shifts, 'смена', 'смены', 'смен')}` : 'нет смен в графике',
+                ].filter(Boolean).join(' · ')}
+                // Число справа без подписи читалось то как «к выплате», то как ставка.
+                right={sheet?.shifts ? rubles(sheet.accrued) : undefined}
+                rightSub={sheet?.shifts ? 'начислено' : undefined}
+                selected={employee.id === selected}
+                onClick={() => push(`/people/${employee.id}`)}
+              />
+              <Switch
+                className="mr-[15px]"
+                checked={on}
+                disabled={busy}
+                label={on ? `Отключить ${employee.fullName}` : `Включить ${employee.fullName}`}
+                onChange={next => toggle.mutate({ id: employee.id, name: employee.fullName.split(' ')[0], on: next })}
+              />
+            </div>
           })}
         </List>
       </Card>
     </div>)}
 
-    <Fab onClick={() => push('/people/new')}/>
+    <Fab label="Сотрудник" onClick={() => push('/people/new')}/>
   </Screen>
 }

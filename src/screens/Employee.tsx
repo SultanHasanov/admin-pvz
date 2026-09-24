@@ -10,12 +10,10 @@ import { accrueShifts } from '../entities/calculations'
 import { initials, statusTitles } from '../shared/shifts'
 import { payModeTitles } from '../shared/salary'
 import { rubles } from '../shared/money'
-import { dayLabel, monthLabel, timeLabel, today } from '../shared/dates'
-import { vacationOn } from '../services/vacations'
+import { dayLabel, monthLabel, timeLabel } from '../shared/dates'
 import { keys, scope } from '../services/queries'
 import { listEmployees, setEmployeeStatus } from '../services/employees'
 import { useWrite } from '../features/write'
-import { useVacations } from '../features/schedule/useVacations'
 import { useMonthTotals } from '../features/money/useMonthTotals'
 import { useSalarySheets } from '../features/money/useSalarySheets'
 import { useOrg } from '../app/OrgContext'
@@ -30,7 +28,6 @@ export default function Employee() {
   const { open } = useSheets()
   const totals = useMonthTotals()
   const salary = useSalarySheets(totals)
-  const { vacations } = useVacations(month)
 
   // Отключённого нет в общей выборке (она только из активных) — берём из полной.
   const everyone = useQuery({ queryKey: keys.employees(true), queryFn: () => listEmployees(true) })
@@ -41,11 +38,6 @@ export default function Employee() {
     invalidate: [scope.employees],
     done: active ? 'Сотрудник отключён' : 'Сотрудник включён',
   })
-  const vacationNow = vacationOn(vacations, id, today())
-  // Ближайший отпуск: идущий или ещё не начавшийся — прошедший владельцу уже не нужен.
-  const vacationNext = vacations
-    .filter(vacation => vacation.employeeId === id && vacation.dateTo >= today())
-    .sort((a, b) => a.dateFrom.localeCompare(b.dateFrom))[0]
   const sheet = salary.byEmployee(id)
   const rules = totals.rules.filter(rule => rule.employeeId === id)
   const shifts = totals.shifts
@@ -76,8 +68,8 @@ export default function Employee() {
           <div className="truncate text-lead font-semibold tracking-[-0.02em]">{employee.fullName}</div>
           <div className="mt-0.5 text-sub text-muted">{employee.phone || 'Телефон не указан'}</div>
         </div>
-        <Pill tone={employee.status !== 'ACTIVE' ? 'neutral' : vacationNow ? 'info' : 'ok'}>
-          {employee.status !== 'ACTIVE' ? 'отключён' : vacationNow ? 'в отпуске' : 'активен'}
+        <Pill tone={employee.status !== 'ACTIVE' ? 'neutral' : 'ok'}>
+          {employee.status !== 'ACTIVE' ? 'отключён' : 'активен'}
         </Pill>
       </div>
 
@@ -95,16 +87,6 @@ export default function Employee() {
 
     <Card className="mt-3">
       <List>
-        <ListRow
-          title="Отпуск или больничный"
-          sub={vacationNext
-            ? `${vacationNext.kind === 'SICK' ? 'Больничный' : 'Отпуск'} ${dayLabel(vacationNext.dateFrom)} – ${dayLabel(vacationNext.dateTo)}`
-            : 'Дни в графике станут «нужна замена»'}
-          right={vacationNow ? 'есть' : undefined}
-          align="start"
-          chevron
-          onClick={() => open('vacation', { employeeId: id })}
-        />
         <ListRow
           title="Пригласить в приложение"
           sub="Код и ссылка: сотрудник увидит свой график и деньги"

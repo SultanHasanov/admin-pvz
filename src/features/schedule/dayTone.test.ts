@@ -11,31 +11,20 @@ const shift = (employeeId:string, date:string, status:Shift['status'] = 'PLANNED
 const nameOf = (id:string) => ({ e1: 'Ольга Смирнова', e2: 'Иван Петров' })[id] ?? 'Сотрудник'
 const today = '2026-09-18'
 
-describe('день в сетке и отпуска', () => {
-  it('единственный сотрудник в отпуске — синий «отп», день считается незакрытым', () => {
-    const view = dayView([shift('e1', '2026-09-22')], '2026-09-22', today, nameOf,
-      [{ employeeId: 'e1', from: '2026-09-20', to: '2026-09-27' }])
-    expect(view).toEqual({ tone: 'info', lines: ['отп'], strong: true })
-  })
-
-  it('отпуск в прошлом дне тревогой не подсвечивается', () => {
-    const view = dayView([shift('e1', '2026-09-10')], '2026-09-10', today, nameOf,
-      [{ employeeId: 'e1', from: '2026-09-10', to: '2026-09-12' }])
-    expect(view.strong).toBe(false)
-  })
-
-  it('напарник вышел — день обычный, отпускника в инициалах нет', () => {
-    const view = dayView([shift('e1', '2026-09-22'), shift('e2', '2026-09-22')], '2026-09-22', today, nameOf,
-      [{ employeeId: 'e1', from: '2026-09-20', to: '2026-09-27' }])
-    expect(view.lines).toEqual(['ИП'])
-    expect(view.strong).toBeUndefined()
-  })
-
-  it('запланированный день акцентный — синий остаётся только за отпуском', () => {
+describe('день в сетке', () => {
+  it('запланированный день акцентный', () => {
     expect(dayView([shift('e1', '2026-09-22')], '2026-09-22', today, nameOf).tone).toBe('accent')
   })
 
-  it('без отпусков поведение прежнее: пустой будущий день — красный', () => {
+  it('пустой будущий день — красный', () => {
     expect(dayView([], '2026-09-22', today, nameOf)).toEqual({ tone: 'bad', lines: ['нет'], strong: true })
+  })
+
+  it('пустой прошлый день — нейтральный, без тревоги', () => {
+    expect(dayView([], '2026-09-10', today, nameOf)).toEqual({ tone: 'neutral', lines: [] })
+  })
+
+  it('двое на смене — инициалы обоих', () => {
+    expect(dayView([shift('e1', '2026-09-22'), shift('e2', '2026-09-22')], '2026-09-22', today, nameOf).lines).toEqual(['ОС', 'ИП'])
   })
 })

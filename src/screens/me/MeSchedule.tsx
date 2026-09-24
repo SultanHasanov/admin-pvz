@@ -7,10 +7,8 @@ import { SectionTitle } from '../../shared/kit/Text'
 import { Segmented } from '../../shared/kit/Segmented'
 import { EmptyState, ErrorNote, SkeletonRows } from '../../shared/kit/Misc'
 import { MonthCalendar, type CalendarDay } from '../../shared/kit/MonthCalendar'
-import { Fab } from '../../shared/kit/TabBar'
 import { toastDone } from '../../shared/kit/Toaster'
 import type { Tone } from '../../shared/kit/tokens'
-import { isAbsent } from '../../entities/slots'
 import { rubles } from '../../shared/money'
 import { dayLabel, monthLabel, timeLabel, today as todayDate } from '../../shared/dates'
 import { useMyMonth } from '../../features/me/useMyMonth'
@@ -21,7 +19,6 @@ import { NotLinked } from './NotLinked'
 const LEGEND:{ tone:Tone; label:string }[] = [
   { tone: 'neutral', label: 'Отработано' },
   { tone: 'accent', label: 'Смена' },
-  { tone: 'info', label: 'Отпуск' },
 ]
 
 /** «ПВЗ Ленина 12» → «Лени»: в клетке календаря помещается четыре буквы. */
@@ -46,16 +43,15 @@ export default function MeSchedule() {
     const result = new Map<string, CalendarDay>()
     for (const shift of my.shifts) {
       const date = dateOf(shift.startsAt, shift.workDate)
-      const vacation = isAbsent(my.absences, shift.employeeId, date)
       const done = shift.status === 'COMPLETED' || date < today
       result.set(date, {
         date,
-        tone: vacation ? 'info' : done ? 'neutral' : 'accent',
-        lines: [vacation ? 'отп' : shift.payMode === 'HALF' ? '½' : cellLabel(pointName(shift.pickupPointId))],
+        tone: done ? 'neutral' : 'accent',
+        lines: [shift.payMode === 'HALF' ? '½' : cellLabel(pointName(shift.pickupPointId))],
       })
     }
     return result
-  }, [my.shifts, my.absences, today, pointName])
+  }, [my.shifts, today, pointName])
 
   const header = <Header title="Мой график"/>
   if (!my.loading && !my.employeeId) return <Screen header={header}><NotLinked/></Screen>
@@ -108,7 +104,5 @@ export default function MeSchedule() {
           })}
         </List>}
     </Card>
-
-    <Fab label="Запросить выходной или отпуск" onClick={() => open('reqVac')}/>
   </Screen>
 }

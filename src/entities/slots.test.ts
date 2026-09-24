@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Shift } from './types'
 import { defaultOffsets, type CyclePattern, type SchedulePattern } from './schedule'
 import {
-  findHoles, generateCells, isAbsent, mondayIndex, planCells, slotsForDay,
+  findHoles, generateCells, mondayIndex, planCells, slotsForDay,
   type SlotPlan,
 } from './slots'
 
@@ -78,15 +78,6 @@ describe('раскрытие правил по местам', () => {
     expect(secondDates).toEqual(['2026-09-25', '2026-09-26', '2026-09-27'])
   })
 
-  it('в отпуске человека не ставим — место остаётся пустым', () => {
-    const cells = generateCells({
-      plans: plans([cycle(['e1', 'e2'])]),
-      pointId: 'p1', from: '2026-09-01', to: '2026-09-04', config: { def: 1 },
-      absences: [{ employeeId: 'e1', from: '2026-09-01', to: '2026-09-02' }],
-    })
-    expect(cells.map(cell => cell.date)).toEqual(['2026-09-03', '2026-09-04'])
-  })
-
   it('один человек не встанет дважды в день, даже попав в две очереди', () => {
     const cells = generateCells({
       plans: plans([weekdays({ e1: [2] }), weekdays({ e1: [2] })]),
@@ -158,7 +149,7 @@ describe('дырки в графике', () => {
   it('пустой день — дырка', () => {
     const holes = findHoles({ pointId: 'p1', shifts: [], from: '2026-09-01', to: '2026-09-02' })
     expect(holes).toHaveLength(2)
-    expect(holes[0]).toMatchObject({ date: '2026-09-01', slotIndex: 0, reason: 'empty', need: 1, occupied: 0 })
+    expect(holes[0]).toMatchObject({ date: '2026-09-01', slotIndex: 0, need: 1, occupied: 0 })
   })
 
   it('занятый день дыркой не считается', () => {
@@ -176,17 +167,6 @@ describe('дырки в графике', () => {
     expect(holes[0]).toMatchObject({ slotIndex: 1, occupied: 1, need: 2 })
   })
 
-  it('отпуск поставленного сотрудника — дырка с причиной «отпуск»', () => {
-    const holes = findHoles({
-      pointId: 'p1',
-      shifts: [shift('s1', 'e1', '2026-09-01')],
-      from: '2026-09-01', to: '2026-09-01',
-      absences: [{ employeeId: 'e1', from: '2026-09-01', to: '2026-09-05' }],
-    })
-    expect(holes).toHaveLength(1)
-    expect(holes[0].reason).toBe('absence')
-  })
-
   it('не вышел и замена место не занимают', () => {
     const holes = findHoles({
       pointId: 'p1',
@@ -200,61 +180,5 @@ describe('дырки в графике', () => {
     const other = { ...shift('s1', 'e1', '2026-09-01'), pickupPointId: 'p2' }
     const holes = findHoles({ pointId: 'p1', shifts: [other], from: '2026-09-01', to: '2026-09-01' })
     expect(holes).toHaveLength(1)
-  })
-})
-
-describe('отсутствия', () => {
-  const absences = [{ employeeId: 'e1', from: '2026-09-20', to: '2026-09-27' }]
-
-  it('границы отрезка включаются', () => {
-    expect(isAbsent(absences, 'e1', '2026-09-20')).toBe(true)
-    expect(isAbsent(absences, 'e1', '2026-09-27')).toBe(true)
-    expect(isAbsent(absences, 'e1', '2026-09-19')).toBe(false)
-    expect(isAbsent(absences, 'e1', '2026-09-28')).toBe(false)
-  })
-
-  it('чужой отпуск не мешает', () => {
-    expect(isAbsent(absences, 'e2', '2026-09-21')).toBe(false)
-  })
-})
-
-describe('отпуска в дырках графика', () => {
-  it('пересекающиеся отпуска одного человека дают одну дырку в день, а не две', () => {
-    const holes = findHoles({
-      pointId: 'p1', config: { def: 1 },
-      shifts: [shift('s1', 'e1', '2026-09-22')],
-      from: '2026-09-22', to: '2026-09-22',
-      absences: [
-        { employeeId: 'e1', from: '2026-09-20', to: '2026-09-23' },
-        { employeeId: 'e1', from: '2026-09-22', to: '2026-09-25' },
-      ],
-    })
-    expect(holes).toHaveLength(1)
-    expect(holes[0]).toMatchObject({ reason: 'absence', occupied: 0 })
-  })
-
-  it('отпуск, начавшийся в прошлом месяце, освобождает место в этом', () => {
-    const holes = findHoles({
-      pointId: 'p1', config: { def: 1 },
-      shifts: [shift('s1', 'e1', '2026-09-01'), shift('s2', 'e1', '2026-09-03')],
-      from: '2026-09-01', to: '2026-09-03',
-      absences: [{ employeeId: 'e1', from: '2026-08-28', to: '2026-09-02' }],
-    })
-    // 1-е — отпуск, 2-е — пусто, 3-е — человек уже вернулся.
-    expect(holes.map(hole => [hole.date, hole.reason])).toEqual([
-      ['2026-09-01', 'absence'],
-      ['2026-09-02', 'empty'],
-    ])
-  })
-
-  it('на двух местах один ушёл в отпуск — день не пустой, не хватает одного', () => {
-    const holes = findHoles({
-      pointId: 'p1', config: { def: 2 },
-      shifts: [shift('s1', 'e1', '2026-09-22', 0), shift('s2', 'e2', '2026-09-22', 1)],
-      from: '2026-09-22', to: '2026-09-22',
-      absences: [{ employeeId: 'e2', from: '2026-09-22', to: '2026-09-22' }],
-    })
-    expect(holes).toHaveLength(1)
-    expect(holes[0]).toMatchObject({ slotIndex: 1, reason: 'absence', occupied: 1, need: 2 })
   })
 })
