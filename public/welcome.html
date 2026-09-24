@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Пункт — график смен, зарплаты и учёт денег для ПВЗ</title>
+<meta name="description" content="Пункт — приложение для владельцев пунктов выдачи Wildberries и Ozon: график смен, расчёт зарплат и авансов, доходы и расходы, удержания WB и напоминания в Telegram. Работает с телефона и компьютера."/>
+<link rel="canonical" href="https://taktab.ru/"/>
+<meta name="robots" content="index, follow"/>
+<meta name="theme-color" content="#f4f1ee"/>
+
+<meta property="og:type" content="website"/>
+<meta property="og:site_name" content="Пункт"/>
+<meta property="og:locale" content="ru_RU"/>
+<meta property="og:url" content="https://taktab.ru/"/>
+<meta property="og:title" content="Пункт — график смен, зарплаты и учёт денег для ПВЗ"/>
+<meta property="og:description" content="График смен, зарплаты, доходы и расходы ваших пунктов выдачи — в одном приложении на телефоне."/>
+<meta property="og:image" content="https://taktab.ru/icons/icon-512.png"/>
+<meta name="twitter:card" content="summary"/>
+
+<link rel="manifest" href="/manifest.webmanifest"/>
+<link rel="icon" type="image/png" href="/favicon.png"/>
+<link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon-180.png"/>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Пункт",
+  "url": "https://taktab.ru/",
+  "applicationCategory": "BusinessApplication",
+  "operatingSystem": "Web, Android, iOS",
+  "inLanguage": "ru",
+  "description": "Приложение для владельцев пунктов выдачи заказов: график смен, расчёт зарплат, учёт доходов и расходов, удержания WB, напоминания в Telegram."
+}
+</script>
+
+<script>
+  // Уже вошедший пользователь сразу попадает в приложение: лендинг — для гостей и поисковиков.
+  // Ключ сессии supabase-js: sb-<проект>-auth-token.
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      if (/^sb-.+-auth-token$/.test(localStorage.key(i) || '')) { location.replace('/home'); break }
+    }
+  } catch (e) { /* приватный режим браузера */ }
+</script>
+
+<style>
+  :root {
+    --bg:#f4f1ee; --surface:#fff; --ink:#1b1614; --muted:#6f665f;
+    --line:#e7e2dc; --accent:#8f3a6b; --accent-tint:#f7ecf2;
+  }
+  * { box-sizing:border-box }
+  html { -webkit-text-size-adjust:100% }
+  body {
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-size:16px; line-height:1.55;
+  }
+  a { color:inherit }
+  .wrap { max-width:1040px; margin:0 auto; padding:0 16px }
+
+  header.top { display:flex; align-items:center; justify-content:space-between; padding:18px 0 }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:19px; text-decoration:none }
+  .brand img { width:34px; height:34px; border-radius:9px }
+  .top a.login { text-decoration:none; font-weight:600; color:var(--accent) }
+
+  .hero { padding:48px 0 40px }
+  .hero h1 { font-size:clamp(30px, 6vw, 48px); line-height:1.12; margin:0 0 16px; letter-spacing:-0.01em; max-width:760px }
+  .hero p { font-size:clamp(16px, 2.4vw, 19px); color:var(--muted); margin:0 0 28px; max-width:640px }
+  .actions { display:flex; flex-wrap:wrap; gap:12px }
+  .btn {
+    display:inline-flex; align-items:center; justify-content:center; min-height:50px;
+    padding:0 24px; border-radius:14px; font-weight:600; text-decoration:none; font-size:16px;
+  }
+  .btn.primary { background:var(--accent); color:#fff }
+  .btn.ghost { background:var(--surface); border:1px solid var(--line) }
+
+  section { padding:36px 0 }
+  h2 { font-size:clamp(23px, 4vw, 30px); line-height:1.2; margin:0 0 20px }
+  .grid { display:grid; gap:14px; grid-template-columns:1fr }
+  @media (min-width:680px) { .grid { grid-template-columns:1fr 1fr } }
+  @media (min-width:960px) { .grid.three { grid-template-columns:1fr 1fr 1fr } }
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:20px }
+  .card h3 { margin:0 0 6px; font-size:18px }
+  .card p { margin:0; color:var(--muted) }
+  .tag { display:inline-block; background:var(--accent-tint); color:var(--accent); font-weight:600; font-size:13px; border-radius:8px; padding:3px 9px; margin-bottom:10px }
+
+  ol.steps { margin:0; padding-left:22px }
+  ol.steps li { margin:0 0 10px }
+
+  details { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 18px; margin-bottom:10px }
+  summary { font-weight:600; cursor:pointer }
+  details p { margin:10px 0 0; color:var(--muted) }
+
+  .cta { background:var(--ink); color:#fff; border-radius:22px; padding:32px 24px; margin:20px 0 40px }
+  .cta h2 { margin-bottom:10px }
+  .cta p { color:#d8d0c8; margin:0 0 20px }
+
+  footer { border-top:1px solid var(--line); padding:22px 0 36px; color:var(--muted); font-size:14px }
+  footer .wrap { display:flex; flex-wrap:wrap; gap:8px 20px; justify-content:space-between }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="/"><img src="/icons/icon-192.png" alt="" width="34" height="34"/>Пункт</a>
+    <a class="login" href="/login">Войти</a>
+  </header>
+
+  <main>
+    <div class="hero">
+      <h1>График смен, зарплаты и деньги ваших ПВЗ — в одном приложении</h1>
+      <p>Пункт помогает владельцам пунктов выдачи Wildberries и Ozon вести график сотрудников, считать зарплаты и авансы, видеть доходы, расходы и прибыль по каждой точке. С телефона и с компьютера.</p>
+      <div class="actions">
+        <a class="btn primary" href="/register">Начать работу</a>
+        <a class="btn ghost" href="/login">У меня есть аккаунт</a>
+      </div>
+    </div>
+
+    <section aria-labelledby="features">
+      <h2 id="features">Что умеет Пункт</h2>
+      <div class="grid three">
+        <article class="card">
+          <span class="tag">График</span>
+          <h3>График смен</h3>
+          <p>Конструктор графика на месяц, несколько мест на смене, замены, заявки сотрудников на смены и отпуска.</p>
+        </article>
+        <article class="card">
+          <span class="tag">Зарплаты</span>
+          <h3>Расчёт зарплат</h3>
+          <p>Начисления по сменам и ставкам, премии и штрафы, аванс и остаток по вашим дням выплат. История ставок сохраняется.</p>
+        </article>
+        <article class="card">
+          <span class="tag">Деньги</span>
+          <h3>Доходы и расходы</h3>
+          <p>Доход, расходы по категориям, постоянные платежи, налог и прибыль за месяц — по одной точке или по всем сразу.</p>
+        </article>
+        <article class="card">
+          <span class="tag">Удержания</span>
+          <h3>Удержания WB</h3>
+          <p>Учёт удержаний с привязкой к смене и сотруднику, деление суммы между сотрудниками и статусы разбора.</p>
+        </article>
+        <article class="card">
+          <span class="tag">Команда</span>
+          <h3>Кабинет сотрудника</h3>
+          <p>Сотрудник по приглашению видит свой график и свои начисления, а суммы по точке остаются только у владельца.</p>
+        </article>
+        <article class="card">
+          <span class="tag">Telegram</span>
+          <h3>Напоминания в группу</h3>
+          <p>Бот пункта присылает напоминания о сменах в рабочий чат, чтобы никто не забыл выйти.</p>
+        </article>
+      </div>
+    </section>
+
+    <section aria-labelledby="how">
+      <h2 id="how">Как начать</h2>
+      <div class="card">
+        <ol class="steps">
+          <li>Зарегистрируйтесь по почте и создайте организацию.</li>
+          <li>Добавьте пункты выдачи и сотрудников со ставками.</li>
+          <li>Составьте график — зарплаты и итоги месяца посчитаются сами.</li>
+          <li>Установите приложение на телефон: оно работает как обычное, прямо из браузера.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section aria-labelledby="faq">
+      <h2 id="faq">Вопросы</h2>
+      <details>
+        <summary>Нужно ли что-то устанавливать?</summary>
+        <p>Нет. Пункт открывается в браузере на телефоне или компьютере. На телефон его можно добавить на главный экран — тогда он запускается как приложение.</p>
+      </details>
+      <details>
+        <summary>Подойдёт, если у меня несколько пунктов?</summary>
+        <p>Да. Точки ведутся отдельно, а на главном экране можно смотреть итоги по одной точке или по всем вместе.</p>
+      </details>
+      <details>
+        <summary>Что видят сотрудники?</summary>
+        <p>Только свой график и свои начисления. Доходы, расходы и зарплаты других сотрудников видит владелец.</p>
+      </details>
+      <details>
+        <summary>Нужно ли закрывать месяц вручную?</summary>
+        <p>Нет. Зарплаты и итоги считаются автоматически по сменам, ставкам и внесённым операциям.</p>
+      </details>
+    </section>
+
+    <div class="cta">
+      <h2>Попробуйте на своём пункте</h2>
+      <p>Регистрация займёт пару минут: почта, пароль и название организации.</p>
+      <a class="btn primary" href="/register">Зарегистрироваться</a>
+    </div>
+  </main>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>© Пункт, taktab.ru</span>
+    <span><a href="/login">Вход</a> · <a href="/register">Регистрация</a></span>
+  </div>
+</footer>
+</body>
+</html>
