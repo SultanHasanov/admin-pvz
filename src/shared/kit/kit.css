@@ -110,6 +110,17 @@
   --kb:0px;
 }
 
+/* Цвет акцента выбирается в настройках (shared/accent.ts): атрибут на <html>
+   перекрывает акцентные токены из @theme — все bg-accent/text-accent меняются разом. */
+:root[data-accent="ozon"] {
+  --color-accent:#005bff;
+  --color-accent-tint:#e8f0ff;
+  --color-accent-soft:#c2d6ff;
+  --color-accent-faint:#f5f8ff;
+  --color-chart-bar:#9dbcff;
+  --color-tile-salary:#a9c4ff;
+}
+
 /* Оболочка приложения забирает скролл себе: страница не тянется «резинкой»,
    а прокручивается только контейнер экрана — это главное отличие от веб-страницы.
    Включается атрибутом, который ставит Shell: экраны входа и регистрации длиннее

@@ -33,7 +33,8 @@ export function TabBar({ items, active, onSelect }:{
           'tap flex flex-1 flex-col items-center gap-1 py-[3px]',
           item.disabled ? 'text-line-strong' : isActive ? 'text-accent' : 'text-muted-soft',
         )}
-        onClick={() => { if (!isActive) { haptics.tap(); onSelect(item.id) } }}
+        // Активный таб тоже нажимается: так с вложенного экрана возвращаются в начало раздела.
+        onClick={() => { haptics.tap(); onSelect(item.id) }}
       >
         {item.icon}
         <span className="text-axis font-medium">{item.label}</span>
@@ -67,7 +68,7 @@ export function Fab({ onClick, label = 'Добавить', short }:{ onClick:() 
     type="button"
     data-fab
     aria-label={label}
-    className="tap absolute right-4 bottom-[calc(var(--tabbar-space)+16px)] z-20 flex h-[50px] items-center gap-1.5 rounded-full bg-accent pr-5 pl-4 text-act font-semibold whitespace-nowrap text-white shadow-[0_8px_22px_rgba(143,58,107,0.38)]"
+    className="tap absolute right-4 bottom-[calc(var(--tabbar-space)+16px)] z-20 flex h-[50px] items-center gap-1.5 rounded-full bg-accent pr-5 pl-4 text-act font-semibold whitespace-nowrap text-white shadow-[0_8px_22px_color-mix(in_srgb,var(--color-accent)_38%,transparent)]"
     onClick={() => { haptics.tap(); onClick() }}
   ><span aria-hidden className="pb-0.5 text-[24px] leading-none font-light">+</span>{short ?? label}</button>
 }

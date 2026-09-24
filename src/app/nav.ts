@@ -1,6 +1,5 @@
 import { useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { create } from 'zustand'
 import { haptics } from '../shared/kit/haptics'
 import { tabRoot, tabOf, roleOf, type TabId } from './tabs'
 
@@ -9,19 +8,8 @@ import { tabRoot, tabOf, roleOf, type TabId } from './tabs'
  *
  * Сам стек живёт в history браузера, а не в сторе: только так работают аппаратная «Назад»
  * на Android, deep links из бота и приглашений и восстановление после обновления страницы.
- * В сторе остаётся то, чего history не знает: последний экран каждого таба (чтобы возврат
- * в «Деньги» открывал ту же операцию) и глубина — из неё Stack выводит направление анимации.
+ * Глубина лежит в history.state — из неё Stack выводит направление анимации.
  */
-interface NavState {
-  /** Таб → последний открытый в нём путь. */
-  last:Partial<Record<TabId, string>>
-  remember(tab:TabId, path:string):void
-}
-
-export const useNavStore = create<NavState>(set => ({
-  last: {},
-  remember: (tab, path) => set(state => ({ last: { ...state.last, [tab]: path } })),
-}))
 
 /** Глубина экрана в стеке. Лежит в history.state, поэтому переживает перезагрузку. */
 export const depthOf = (state:unknown) =>
@@ -32,8 +20,6 @@ export const depthOf = (state:unknown) =>
 export function useNav() {
   const navigate = useNavigate()
   const location = useLocation()
-  const remember = useNavStore(state => state.remember)
-  const last = useNavStore(state => state.last)
   const depth = depthOf(location.state)
 
   /** Открыть экран поверх текущего. */
@@ -53,22 +39,12 @@ export function useNav() {
   }, [navigate, depth, location.pathname])
 
   /**
-   * Переключение таба. Повторный тап по активному табу сбрасывает его стек в корень —
-   * привычное поведение нативных приложений и то же, что делает `setTab` в прототипе.
+   * Переключение таба — всегда в его начало: «Главная» открывает главную, а не экран,
+   * на котором из неё ушли. Нажатие на активный таб тоже возвращает в начало.
    */
   const setTab = useCallback((tab:TabId) => {
-    const role = roleOf(location.pathname)
-    const current = tabOf(location.pathname)
-    const root = tabRoot(tab, role)
-    if (tab === current) {
-      navigate(root, { state: { depth: 0 } })
-      return
-    }
-    remember(current, location.pathname + location.search)
-    // Запомненный экран берём только если он из этой же роли: после смены роли пути чужие.
-    const saved = last[tab]
-    navigate(saved?.startsWith(root) ? saved : root, { state: { depth: 0 } })
-  }, [navigate, location.pathname, location.search, remember, last])
+    navigate(tabRoot(tab, roleOf(location.pathname)), { state: { depth: 0 } })
+  }, [navigate, location.pathname])
 
   return { push, back, setTab, depth, canBack: depth > 0 }
 }

@@ -16,6 +16,9 @@ import { currentMonth } from '../../shared/dates'
 import { useOrg } from '../../app/OrgContext'
 import { useNav } from '../../app/nav'
 import { useSheets } from '../../app/sheets'
+import { ACCENTS, useAccent } from '../../shared/accent'
+import { haptics } from '../../shared/kit/haptics'
+import { cn } from '../../shared/kit/cn'
 
 /**
  * Настройки: то, что владелец задаёт один раз и дальше редко трогает. Справа у каждой
@@ -25,6 +28,7 @@ export default function Settings() {
   const { points } = useOrg()
   const { push, back, canBack } = useNav()
   const { open } = useSheets()
+  const [accent, setAccent] = useAccent()
 
   const [organization, tax, rates, payout, categories, recurring, telegram] = useQueries({
     queries: [
@@ -87,5 +91,35 @@ export default function Settings() {
         </List>
       </Card>
     </div>)}
+
+    <SectionTitle>Оформление</SectionTitle>
+    <Card>
+      <List>
+        <ListRow
+          title="Цвет акцента"
+          sub="Кнопки и выделения на этом устройстве"
+          right={<div className="flex gap-2 font-sans">
+            {ACCENTS.map(option => {
+              const active = option.value === accent
+              return <button
+                key={option.value}
+                type="button"
+                aria-pressed={active}
+                aria-label={option.label}
+                title={option.label}
+                className={cn(
+                  'tap flex items-center gap-1.5 rounded-full border py-1 pr-3 pl-1 text-act font-medium',
+                  active ? 'border-ink text-ink' : 'border-line text-muted-strong',
+                )}
+                onClick={() => { if (!active) { haptics.tap(); setAccent(option.value) } }}
+              >
+                <span className="size-5 rounded-full" style={{ background: option.swatch }}/>
+                {option.label}
+              </button>
+            })}
+          </div>}
+        />
+      </List>
+    </Card>
   </Screen>
 }

@@ -10,6 +10,7 @@ import { App } from './app/App'
 import { AppErrorBoundary } from './app/StartupRecovery'
 import { UpdatePrompt } from './app/UpdatePrompt'
 import { Toaster } from './shared/kit/Toaster'
+import { applyAccent, readAccent } from './shared/accent'
 import './shared/styles.css'
 
 const DAY = 24 * 60 * 60 * 1000
@@ -42,6 +43,9 @@ const persister = createSyncStoragePersister({
 // Русская локаль dayjs: без неё format('MMM') и format('dd') отдают английские
 // сокращения, и в сетке графика появлялись «Sep» и «Su».
 dayjs.locale('ru')
+
+// Цвет акцента ставим до первого рендера, иначе при запуске мелькнёт стандартный.
+applyAccent(readAccent())
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
