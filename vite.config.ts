@@ -17,8 +17,9 @@ export default defineConfig({
       manifest: false,
       workbox: {
         navigateFallback: '/index.html',
-        // Функции Vercel — не страницы приложения.
-        navigateFallbackDenylist: [/^\/api\//],
+        // Функции Vercel и файлы (robots.txt, sitemap.xml, welcome.html) — не страницы приложения:
+        // иначе открытый в браузере robots.txt показывал бы приложение.
+        navigateFallbackDenylist: [/^\/api\//, /\/[^/?]+\.[a-z0-9]+$/i],
         // Только woff2 и только нужные алфавиты: остальные начертания браузер докачает сам по unicode-range.
         globPatterns: ['**/*.{js,css,html,png,svg,webmanifest}', '**/*-{latin,latin-ext,cyrillic,cyrillic-ext}-*.woff2'],
         runtimeCaching: [{
