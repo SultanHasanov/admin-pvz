@@ -5,7 +5,7 @@ import { Card } from '../../shared/kit/Card'
 import { List, ListRow } from '../../shared/kit/ListRow'
 import { SectionTitle } from '../../shared/kit/Text'
 import { Button } from '../../shared/kit/Button'
-import { EmptyState, ErrorNote, SkeletonRows } from '../../shared/kit/Misc'
+import { EmptyState, ErrorNote, Illustration, SkeletonRows } from '../../shared/kit/Misc'
 import { plural } from '../../shared/format'
 import { hoursLabel } from '../../shared/shiftTimes'
 import { keys } from '../../services/queries'
@@ -31,7 +31,7 @@ export default function Points() {
     {points.error && <div className="mb-3"><ErrorNote error={points.error}/></div>}
     {points.isLoading && <Card><SkeletonRows rows={3}/></Card>}
     {!points.isLoading && !groups.length && <Card>
-      <EmptyState title="Пунктов пока нет" sub="Добавьте первый ПВЗ — по нему строятся график и деньги"/>
+      <EmptyState visual={<Illustration name="pickup-point"/>} title="Пунктов пока нет" sub="Добавьте первый ПВЗ — по нему строятся график и деньги"/>
     </Card>}
 
     {groups.map(group => <div key={group.label}>

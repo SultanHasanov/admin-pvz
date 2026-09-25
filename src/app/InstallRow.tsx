@@ -1,6 +1,7 @@
 import { ListRow } from '../shared/kit/ListRow'
 import { toastDone, toastWarn } from '../shared/kit/Toaster'
 import { useInstall } from '../shared/install'
+import { IconBox, IconInstall } from '../shared/kit/icons'
 
 /**
  * Строка «Установить на телефон» для «Ещё» и профиля сотрудника. Уже установленному
@@ -11,6 +12,7 @@ export function InstallRow() {
   if (install.installed || (!install.canPrompt && !install.iosHint)) return null
 
   return <ListRow
+    leading={<IconBox tone="info"><IconInstall/></IconBox>}
     title="Установить на телефон"
     sub={install.iosHint ? 'Safari: «Поделиться» → «На экран Домой»' : 'Иконка на экране, открывается без браузера'}
     chevron={install.canPrompt}

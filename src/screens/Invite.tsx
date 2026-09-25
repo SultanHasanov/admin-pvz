@@ -15,6 +15,7 @@ import { useWrite } from '../features/write'
 import { useMonthTotals } from '../features/money/useMonthTotals'
 import { useNav } from '../app/nav'
 import { useSheets } from '../app/sheets'
+import { IconSend, StatusIcon } from '../shared/kit/icons'
 
 const STATUS:Record<InvitationStatus | 'NONE' | 'EXPIRED', { label:string; tone:Tone }> = {
   ACCEPTED: { label: 'принято', tone: 'ok' },
@@ -86,7 +87,7 @@ export default function Invite() {
           <div className="mt-1 text-sub text-muted">Действует до {dayjs(row!.expiresAt).format('D MMMM')}</div>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <Button variant="secondary" onClick={() => void copy(row!.code, 'Код')}>Скопировать</Button>
-            <Button onClick={() => void share()}>В мессенджер</Button>
+            <Button onClick={() => void share()}><span className="inline-flex items-center gap-2"><IconSend/>В мессенджер</span></Button>
           </div>
         </>
         : <div className="mt-3">
@@ -101,8 +102,9 @@ export default function Invite() {
         </div>}
     </Card>
 
-    <Card className="mt-3 flex items-center justify-between px-4 py-[14px]">
-      <div className="text-row">Статус приглашения</div>
+    <Card className="mt-3 flex items-center gap-3 px-4 py-[14px]">
+      <StatusIcon status={state === 'ACCEPTED' ? 'done' : state === 'SENT' ? 'waiting' : state === 'NONE' ? 'locked' : 'warning'} size={32}/>
+      <div className="flex-1 text-row">Статус приглашения</div>
       <Pill tone={STATUS[state].tone}>{STATUS[state].label}</Pill>
     </Card>
 

@@ -60,9 +60,11 @@ export function TextButton({ children, onClick, tone = 'accent', className }:{
   >{children}</button>
 }
 
-/** Плитка быстрого действия: знак в цветном квадрате и подпись под ним. */
-export function ActionTile({ sign, label, tone, onClick }:{
-  sign:ReactNode
+/** Плитка быстрого действия: смысловая иконка в цветном квадрате и подпись. */
+export function ActionTile({ icon, sign, label, tone, onClick }:{
+  icon?:ReactNode
+  /** @deprecated Оставлен для совместимости старых экранов; новые плитки используют icon. */
+  sign?:ReactNode
   label:ReactNode
   tone:{ bg:string; fg:string }
   onClick:() => void
@@ -75,7 +77,7 @@ export function ActionTile({ sign, label, tone, onClick }:{
     <div
       className="mb-[9px] flex size-[26px] items-center justify-center rounded-[9px] text-[15px] font-semibold"
       style={{ background: tone.bg, color: tone.fg }}
-    >{sign}</div>
+    >{icon ?? sign}</div>
     <div className="text-act leading-[1.25] font-medium">{label}</div>
   </button>
 }

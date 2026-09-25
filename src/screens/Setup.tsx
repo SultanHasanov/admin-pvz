@@ -3,7 +3,7 @@ import { Card } from '../shared/kit/Card'
 import { List, ListRow } from '../shared/kit/ListRow'
 import { SectionTitle } from '../shared/kit/Text'
 import { Button, TextButton } from '../shared/kit/Button'
-import { ErrorNote, SkeletonRows } from '../shared/kit/Misc'
+import { ErrorNote, Illustration, SkeletonRows } from '../shared/kit/Misc'
 import type { SetupStep, SetupStepId } from '../entities/setup'
 import { SetupBar, StepMark } from '../features/setup/SetupStrip'
 import { useSetup } from '../features/setup/useSetup'
@@ -41,6 +41,7 @@ export default function Setup() {
     {next && <SetupNext step={next}/>}
 
     {finished && <Card className="mb-1 px-[15px] pt-3.5 pb-[15px]">
+      <div className="mx-auto h-32 w-40"><Illustration name="setup-complete"/></div>
       <div className="text-title font-semibold">Пункт настроен</div>
       <div className="mt-0.5 mb-3.5 text-sub leading-[1.4] text-muted">
         Доходы, расходы, график и зарплаты теперь считаются на главной
@@ -71,7 +72,7 @@ function StepList({ steps, onRun }:{ steps:readonly SetupStep[]; onRun:(id:Setup
     <List>
       {steps.map(step => <ListRow
         key={step.id}
-        leading={<StepMark status={step.status}/>}
+        leading={<StepMark status={step.status} id={step.id}/>}
         title={<span className={step.status === 'done' || step.status === 'locked' ? 'text-muted' : undefined}>{step.title}</span>}
         sub={step.status === 'locked' ? step.lockedSub : step.status === 'done' ? 'Готово' : step.sub}
         chevron={step.status === 'next' || step.status === 'todo'}

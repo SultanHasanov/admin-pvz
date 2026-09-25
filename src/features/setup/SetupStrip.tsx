@@ -1,8 +1,10 @@
 import { cn } from '../../shared/kit/cn'
 import { haptics } from '../../shared/kit/haptics'
-import { Chevron } from '../../shared/kit/icons'
-import { tone } from '../../shared/kit/tokens'
-import type { SetupStatus } from '../../entities/setup'
+import {
+  Chevron, IconBox, IconCheck, IconDeduction, IconExpense, IconIncome, IconInvite,
+  IconLock, IconPeople, IconPoint, IconRate, IconSchedule, IconTax, IconTelegram, IconPayout,
+} from '../../shared/kit/icons'
+import type { SetupStatus, SetupStepId } from '../../entities/setup'
 import { useNav } from '../../app/nav'
 import { useSetup } from './useSetup'
 
@@ -14,20 +16,24 @@ export const SetupBar = ({ done, total }:{ done:number; total:number }) =>
   </div>
 
 /** Кружок задания: пустой, с галочкой или приглушённый, если задание пока закрыто. */
-export function StepMark({ status }:{ status:SetupStatus }) {
-  if (status === 'done') return <div
-    className="flex size-[26px] flex-none items-center justify-center rounded-full"
-    style={{ background: tone.ok.bg, color: tone.ok.fg }}
-  >
-    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
-      <path d="M3 7.4 5.8 10 11 4.2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  </div>
-  return <div className={cn(
-    'size-[26px] flex-none rounded-full border-2',
-    status === 'next' ? 'border-accent' : 'border-line-strong',
-    status === 'locked' && 'opacity-50',
-  )}/>
+export function SetupGlyph({ id, size = 18 }:{ id:SetupStepId; size?:number }) {
+  if (id === 'points') return <IconPoint size={size}/>
+  if (id === 'employees') return <IconPeople size={size}/>
+  if (id === 'defaultRate') return <IconRate size={size}/>
+  if (id === 'shifts') return <IconSchedule size={size}/>
+  if (id === 'income') return <IconIncome size={size}/>
+  if (id === 'expense') return <IconExpense size={size}/>
+  if (id === 'invite') return <IconInvite size={size}/>
+  if (id === 'tax') return <IconTax size={size}/>
+  if (id === 'payDays') return <IconPayout size={size}/>
+  if (id === 'telegram') return <IconTelegram size={size}/>
+  return <IconDeduction size={size}/>
+}
+
+export function StepMark({ status, id }:{ status:SetupStatus; id:SetupStepId }) {
+  if (status === 'done') return <IconBox tone="ok" size={32}><IconCheck size={18}/></IconBox>
+  if (status === 'locked') return <IconBox tone="neutral" size={32} className="opacity-60"><IconLock size={16}/></IconBox>
+  return <IconBox tone={status === 'next' ? 'accent' : 'neutral'} size={32}><SetupGlyph id={id}/></IconBox>
 }
 
 /**

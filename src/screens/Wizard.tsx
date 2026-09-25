@@ -24,6 +24,7 @@ import { useOrg } from '../app/OrgContext'
 import { defaultShiftTimes } from '../shared/shiftTimes'
 import { useNav } from '../app/nav'
 import { scope } from '../services/queries'
+import { IconCheck, IconClock, IconPeople, IconRecurring } from '../shared/kit/icons'
 
 /** Дни недели в нумерации dayjs: 0 — воскресенье, поэтому порядок начинается с 1. */
 const WEEKDAYS = [[1, 'пн'], [2, 'вт'], [3, 'ср'], [4, 'чт'], [5, 'пт'], [6, 'сб'], [0, 'вс']] as const
@@ -125,7 +126,7 @@ export default function Wizard() {
       </div>
     </>}
 
-    <SectionTitle>Сотрудников на смене</SectionTitle>
+    <SectionTitle><span className="inline-flex items-center gap-2"><IconPeople size={18}/>Сотрудников на смене</span></SectionTitle>
     <Card className="p-[13px]">
       <div className="flex items-center justify-between gap-3">
         <div className="text-sub leading-[1.4] text-muted">
@@ -143,7 +144,7 @@ export default function Wizard() {
       />
     </div>}
 
-    <SectionTitle>Как чередуются смены</SectionTitle>
+    <SectionTitle><span className="inline-flex items-center gap-2"><IconRecurring size={18}/>Как чередуются смены</span></SectionTitle>
     <Card className="p-[13px]">
       <Segmented
         value={slot.mode}
@@ -185,7 +186,7 @@ export default function Wizard() {
       </div>}
     </Card>
 
-    <SectionTitle count={slot.employeeIds.length}>Очередь на место {draft.active + 1}</SectionTitle>
+    <SectionTitle count={slot.employeeIds.length}><span className="inline-flex items-center gap-2"><IconPeople size={18}/>Очередь на место {draft.active + 1}</span></SectionTitle>
     <Card>
       {staff.length === 0
         ? <EmptyState title="Нет сотрудников" sub={`К ПВЗ «${pointName(target)}» никто не привязан`}/>
@@ -205,7 +206,7 @@ export default function Wizard() {
         </List>}
     </Card>
 
-    <SectionTitle>Период</SectionTitle>
+    <SectionTitle><span className="inline-flex items-center gap-2"><IconClock size={18}/>Период</span></SectionTitle>
     <ChoiceChips
       value={draft.period}
       onPick={draft.setPeriod}
@@ -217,7 +218,7 @@ export default function Wizard() {
     />
     <div className="mt-2 text-sub text-muted">С {dayLabel(draft.from)} по {dayLabel(draft.to)}</div>
 
-    <SectionTitle>Предпросмотр</SectionTitle>
+    <SectionTitle><span className="inline-flex items-center gap-2"><IconCheck size={18}/>Предпросмотр</span></SectionTitle>
     <MonthCalendar month={month} days={previewDays}/>
 
     <div className="mt-2 text-sub leading-[1.4] text-muted">

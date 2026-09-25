@@ -5,7 +5,7 @@ import { Card } from '../shared/kit/Card'
 import { Avatar, List, ListRow, Pill } from '../shared/kit/ListRow'
 import { SectionTitle, Label } from '../shared/kit/Text'
 import { Button, TextButton } from '../shared/kit/Button'
-import { EmptyState, SkeletonRows } from '../shared/kit/Misc'
+import { EmptyState, Illustration, SkeletonRows } from '../shared/kit/Misc'
 import { accrueShifts, countsForPay } from '../entities/calculations'
 import { initials, shiftState } from '../shared/shifts'
 import { payModeTitles } from '../shared/salary'
@@ -19,6 +19,10 @@ import { useSalarySheets } from '../features/money/useSalarySheets'
 import { useOrg } from '../app/OrgContext'
 import { useNav } from '../app/nav'
 import { useSheets } from '../app/sheets'
+import {
+  IconBox, IconDeduction, IconExpense, IconIncome, IconInvite, IconPayout,
+  IconPerson, IconRate, IconSchedule, IconSettings,
+} from '../shared/kit/icons'
 
 /** Карточка сотрудника: кто это, по какой ставке считается и что выходит за месяц. */
 export default function Employee() {
@@ -74,9 +78,12 @@ export default function Employee() {
       </div>
 
       <div className="mt-4 flex items-end justify-between gap-3 border-t border-line-soft pt-3">
-        <div>
+        <div className="flex items-center gap-2.5">
+          <IconBox tone="accent" size={36}><IconRate size={19}/></IconBox>
+          <div>
           <Label>Ставка за смену</Label>
           <div className="mt-1 text-lead font-semibold tabular-nums">{rubles(employee.rateKopecks)}</div>
+          </div>
         </div>
         <TextButton onClick={() => push(`/people/${id}/rates`)}>История ставки ›</TextButton>
       </div>
@@ -88,6 +95,7 @@ export default function Employee() {
     <Card className="mt-3">
       <List>
         <ListRow
+          leading={<IconBox tone="accent"><IconInvite/></IconBox>}
           title="Пригласить в приложение"
           sub="Код и ссылка: сотрудник увидит свой график и деньги"
           align="start"
@@ -95,6 +103,7 @@ export default function Employee() {
           onClick={() => push(`/people/${id}/invite`)}
         />
         <ListRow
+          leading={<IconBox><IconSettings/></IconBox>}
           title="Изменить данные"
           sub="Имя, телефон, пункты выдачи"
           align="start"
@@ -102,6 +111,7 @@ export default function Employee() {
           onClick={() => push(`/people/${id}/edit`)}
         />
         <ListRow
+          leading={<IconBox tone={active ? 'bad' : 'ok'}><IconPerson/></IconBox>}
           title={<span className={active ? 'text-bad-strong' : 'text-ok'}>{active ? 'Отключить сотрудника' : 'Включить сотрудника'}</span>}
           chevron
           onClick={() => active
@@ -121,12 +131,14 @@ export default function Employee() {
       <List>
         {calc.map(row => <ListRow
           key={row.title}
+          leading={<CalcIcon title={row.title}/>}
           title={row.title}
           right={<span className={row.value < 0 ? 'text-bad' : undefined}>{rubles(row.value)}</span>}
           chevron
           onClick={() => push(`/people/${id}/payroll`)}
         />)}
         <ListRow
+          leading={<IconBox tone="warn"><IconPayout/></IconBox>}
           title={<span className="font-semibold">Остаток к выплате</span>}
           right={<span className="font-semibold">{rubles(sheet?.balance ?? 0)}</span>}
           chevron
@@ -138,7 +150,7 @@ export default function Employee() {
     <SectionTitle count={shifts.length}>Смены в {period}</SectionTitle>
     <Card>
       {shifts.length === 0
-        ? <EmptyState title="Смен в этом месяце нет"/>
+        ? <EmptyState visual={<Illustration name="schedule"/>} title="Смен в этом месяце нет"/>
         : <List>
           {shifts.map(shift => <ListRow
             key={shift.id}
@@ -156,4 +168,11 @@ export default function Employee() {
       <Button className="flex-1" variant="secondary" onClick={() => open('adj', { employeeId: id })}>Премия или штраф</Button>
     </div>
   </Screen>
+}
+
+function CalcIcon({ title }:{ title:string }) {
+  const icon = title.includes('смен') ? <IconSchedule/> : title.includes('Прем') ? <IconIncome/>
+    : title.includes('Выплач') ? <IconPayout/> : title.includes('Удерж') ? <IconDeduction/> : <IconExpense/>
+  const tone = title.includes('Прем') || title.includes('смен') ? 'ok' : title.includes('Выплач') ? 'info' : 'bad'
+  return <IconBox tone={tone}>{icon}</IconBox>
 }

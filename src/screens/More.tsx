@@ -11,6 +11,10 @@ import { useNav } from '../app/nav'
 import { useSheets } from '../app/sheets'
 import { InstallRow } from '../app/InstallRow'
 import { useSetup } from '../features/setup/useSetup'
+import {
+  IconBox, IconBuilding, IconCategory, IconHistory, IconPerson, IconPoint,
+  IconRecurring, IconSettings, IconTelegram, IconSchedule,
+} from '../shared/kit/icons'
 
 /**
  * «Ещё»: разделы второго плана. Каждая строка — отдельный экран, поэтому список
@@ -28,22 +32,22 @@ export default function More() {
     {
       label: 'Организация',
       rows: [
-        { title: 'Пункты выдачи', sub: 'Адреса, часы работы и число сотрудников на смене', to: '/more/points' },
-        { title: 'Настройки', sub: 'Налог, ставки, дни выплат', to: '/more/settings' },
+        { title: 'Пункты выдачи', sub: 'Адреса, часы работы и число сотрудников на смене', to: '/more/points', icon: <IconPoint/>, tone: 'accent' as const },
+        { title: 'Настройки', sub: 'Налог, ставки, дни выплат', to: '/more/settings', icon: <IconSettings/>, tone: 'neutral' as const },
       ],
     },
     {
       label: 'Деньги',
       rows: [
-        { title: 'Постоянные расходы', sub: 'Аренда, камеры, уборка — считаются каждый месяц', to: '/money/recurring' },
-        { title: 'Категории расходов', sub: 'Справочник для операций', to: '/money/categories' },
-        { title: 'Все операции', sub: 'Журнал доходов и расходов', to: '/money/ops' },
+        { title: 'Постоянные расходы', sub: 'Аренда, камеры, уборка — считаются каждый месяц', to: '/money/recurring', icon: <IconRecurring/>, tone: 'warn' as const },
+        { title: 'Категории расходов', sub: 'Справочник для операций', to: '/money/categories', icon: <IconCategory/>, tone: 'info' as const },
+        { title: 'Все операции', sub: 'Журнал доходов и расходов', to: '/money/ops', icon: <IconHistory/>, tone: 'ok' as const },
       ],
     },
     {
       label: 'Интеграции',
       rows: [
-        { title: 'Telegram-боты', sub: 'Расходы сообщением в чат', to: '/more/telegram' },
+        { title: 'Telegram-боты', sub: 'Напоминания о сменах в рабочую группу', to: '/more/telegram', icon: <IconTelegram/>, tone: 'info' as const },
       ],
     },
   ]
@@ -51,6 +55,7 @@ export default function More() {
   return <Screen header={<Header title="Ещё"/>}>
     {setupLeft && <Card className="mb-1">
       <ListRow
+        leading={<IconBox tone="accent"><IconSchedule/></IconBox>}
         title="Настройка пункта"
         sub="Задания для быстрого старта"
         right={`${setup.done} из ${setup.total}`}
@@ -66,6 +71,7 @@ export default function More() {
         <List>
           {group.rows.map(row => <ListRow
             key={row.to}
+            leading={<IconBox tone={row.tone}>{row.icon}</IconBox>}
             title={row.title}
             sub={row.sub}
             chevron
@@ -79,8 +85,9 @@ export default function More() {
     <SectionTitle>Профиль</SectionTitle>
     <Card>
       <List>
-        <ListRow title="Организация" right={organization.data?.name ?? '—'}/>
+        <ListRow leading={<IconBox><IconBuilding/></IconBox>} title="Организация" right={organization.data?.name ?? '—'}/>
         <ListRow
+          leading={<IconBox tone="accent"><IconPerson/></IconBox>}
           title="Открыть кабинет сотрудника"
           sub="Тот же аккаунт, экраны сотрудника"
           chevron

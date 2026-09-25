@@ -1,9 +1,9 @@
 import { Bell, Screen, FilterRow } from '../shared/kit/Screen'
 import { Card, Hero, HeroTile, HeroTiles } from '../shared/kit/Card'
-import { List, ListRow, Avatar, Dot } from '../shared/kit/ListRow'
+import { List, ListRow, Avatar } from '../shared/kit/ListRow'
 import { SectionTitle } from '../shared/kit/Text'
 import { ActionTile, Button, TextButton } from '../shared/kit/Button'
-import { Chip, EmptyState, ErrorNote, SkeletonRows } from '../shared/kit/Misc'
+import { Chip, EmptyState, ErrorNote, Illustration, SkeletonRows } from '../shared/kit/Misc'
 import { IncomeChart } from '../shared/kit/Chart'
 import { Fab } from '../shared/kit/TabBar'
 import { c } from '../shared/kit/tokens'
@@ -19,6 +19,10 @@ import { useSetup } from '../features/setup/useSetup'
 import { useOrg } from '../app/OrgContext'
 import { useNav } from '../app/nav'
 import { useSheets } from '../app/sheets'
+import {
+  IconAdvance, IconBox, IconDeduction, IconExpense, IconIncome, IconPayout,
+  IconRecurring, IconSchedule, IconWarning,
+} from '../shared/kit/icons'
 
 /**
  * Главная владельца: прибыль за месяц, из чего она сложилась, что требует внимания
@@ -50,10 +54,10 @@ export default function Home() {
   ]
 
   const quick = [
-    { sign: '+', label: 'Добавить доход', tone: { bg: c.okTint2, fg: c.ok }, onClick: () => open('op', { kind: 'INCOME' }) },
-    { sign: '−', label: 'Добавить расход', tone: { bg: c.badTint2, fg: c.badStrong }, onClick: () => open('op', { kind: 'EXPENSE' }) },
-    { sign: 'WB', label: 'Добавить удержание', tone: { bg: c.accentTint, fg: c.accent }, onClick: () => open('newDed') },
-    { sign: '₽', label: 'Выдать аванс', tone: { bg: c.infoTint2, fg: c.info }, onClick: () => open('payout', { kind: 'ADVANCE' }) },
+    { icon: <IconIncome size={18}/>, label: 'Добавить доход', tone: { bg: c.okTint2, fg: c.ok }, onClick: () => open('op', { kind: 'INCOME' }) },
+    { icon: <IconExpense size={18}/>, label: 'Добавить расход', tone: { bg: c.badTint2, fg: c.badStrong }, onClick: () => open('op', { kind: 'EXPENSE' }) },
+    { icon: <IconDeduction size={18}/>, label: 'Добавить удержание', tone: { bg: c.accentTint, fg: c.accent }, onClick: () => open('newDed') },
+    { icon: <IconAdvance size={18}/>, label: 'Выдать аванс', tone: { bg: c.infoTint2, fg: c.info }, onClick: () => open('payout', { kind: 'ADVANCE' }) },
   ]
 
   return <Screen
@@ -107,7 +111,7 @@ export default function Home() {
         : <List>
           {alerts.map(alert => <ListRow
             key={alert.id}
-            leading={<Dot tone={alert.tone}/>}
+            leading={<AlertIcon kind={alert.target.kind} tone={alert.tone}/>}
             align="start"
             title={alert.title}
             sub={alert.sub}
@@ -130,6 +134,7 @@ export default function Home() {
         ? <SkeletonRows rows={2}/>
         : today.rows.length === 0
           ? <EmptyState
+            visual={<Illustration name="pickup-point"/>}
             title="Пунктов выдачи пока нет"
             sub="Добавьте первый ПВЗ, чтобы вести график и деньги"
             action={<Button variant="secondary" onClick={() => push('/more/points/new')}>Добавить пункт</Button>}
@@ -153,4 +158,10 @@ export default function Home() {
 
     <Fab onClick={() => open('quick')}/>
   </Screen>
+}
+
+function AlertIcon({ kind, tone }:{ kind:string; tone:'neutral' | 'accent' | 'ok' | 'warn' | 'bad' | 'info' }) {
+  const icon = kind === 'deduction' ? <IconDeduction/> : kind === 'recurring' ? <IconRecurring/>
+    : kind === 'payout' || kind === 'income' ? <IconPayout/> : kind === 'day' ? <IconSchedule/> : <IconWarning/>
+  return <IconBox tone={tone}>{icon}</IconBox>
 }

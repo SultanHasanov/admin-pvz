@@ -4,7 +4,7 @@ import { Screen, FilterRow } from '../shared/kit/Screen'
 import { Card } from '../shared/kit/Card'
 import { Avatar, List, ListRow } from '../shared/kit/ListRow'
 import { SectionTitle } from '../shared/kit/Text'
-import { Chip, EmptyState, ErrorNote, SkeletonRows } from '../shared/kit/Misc'
+import { Chip, EmptyState, ErrorNote, Illustration, SkeletonRows } from '../shared/kit/Misc'
 import { Button } from '../shared/kit/Button'
 import { Fab } from '../shared/kit/TabBar'
 import { Switch } from '../shared/kit/Switch'
@@ -67,6 +67,7 @@ export default function People() {
 
     {!totals.loading && !totals.staff.length && <Card>
       <EmptyState
+        visual={<Illustration name="team"/>}
         title="Сотрудников пока нет"
         sub={pointId ? `На ПВЗ «${pointName(pointId)}» никто не привязан` : 'Добавьте первого сотрудника, чтобы вести график и зарплату'}
         action={<Button variant="secondary" onClick={() => push('/people/new')}>Добавить сотрудника</Button>}

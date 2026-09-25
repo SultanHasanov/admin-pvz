@@ -7,7 +7,7 @@ import { SectionTitle } from '../shared/kit/Text'
 import { Button } from '../shared/kit/Button'
 import { Segmented } from '../shared/kit/Segmented'
 import { DataList } from '../shared/kit/DataList'
-import { Chip, EmptyState, ErrorNote, SkeletonRows } from '../shared/kit/Misc'
+import { Chip, EmptyState, ErrorNote, Illustration, SkeletonRows } from '../shared/kit/Misc'
 import { Fab } from '../shared/kit/TabBar'
 import type { Tone } from '../shared/kit/tokens'
 import type { DeductionStatus } from '../entities/types'
@@ -20,6 +20,7 @@ import { useSalarySheets } from '../features/money/useSalarySheets'
 import { useOrg } from '../app/OrgContext'
 import { useNav } from '../app/nav'
 import { useSheets } from '../app/sheets'
+import { IconBox, IconDeduction, IconExpense, IconIncome, IconReceipt, IconRecurring, IconRepair } from '../shared/kit/icons'
 
 type Tab = 'fin' | 'pay' | 'ded'
 
@@ -115,6 +116,7 @@ function FinanceTab({ totals, period, pointName }:{
     <Card>
       {operations.length === 0
         ? <EmptyState
+          visual={<Illustration name="finance"/>}
           title="Операций за месяц нет"
           sub="Доходы и расходы появятся здесь после первой записи"
           action={<Button variant="secondary" onClick={() => open('op', { kind: 'INCOME' })}>Добавить доход</Button>}
@@ -123,6 +125,7 @@ function FinanceTab({ totals, period, pointName }:{
           rows={operations}
           rowKey={operation => `${operation.kind}-${operation.id}`}
           row={operation => ({
+            leading: <OperationIcon category={operation.category} kind={operation.kind}/>,
             title: operation.category,
             sub: `${dayLabel(operation.date)} · ${pointName(operation.pickupPointId)}${operation.description ? ` · ${operation.description}` : ''}`,
             right: <SignedAmount operation={operation}/>,
@@ -170,6 +173,7 @@ function PayrollTab({ salary, period, onOpen, onPayAll }:{
     <Card>
       {salary.sheets.length === 0
         ? <EmptyState
+          visual={<Illustration name="schedule"/>}
           title="Начислений за месяц нет"
           sub="Ведомость появится, когда сотрудники отработают смены по графику"
           action={<Button variant="secondary" onClick={() => push('/sched/wizard')}>Составить график</Button>}
@@ -244,6 +248,7 @@ function DeductionsTab({ totals, selected, onOpen, pointName }:{
         ? <EmptyState title={stage === 'decide' ? 'Решать нечего' : stage === 'wb' ? 'Ответа WB никто не ждёт' : 'Закрытых пока нет'}/>
         : rows.length === 0
         ? <EmptyState
+          visual={<Illustration name="finance"/>}
           title="Удержаний за месяц нет"
           sub="Загрузятся из кабинета WB или их можно добавить вручную"
           action={<Button variant="secondary" onClick={() => open('newDed')}>Добавить удержание</Button>}
@@ -261,4 +266,12 @@ function DeductionsTab({ totals, selected, onOpen, pointName }:{
         </List>}
     </Card>
   </>
+}
+
+function OperationIcon({ category, kind }:{ category:string; kind:'INCOME' | 'EXPENSE' }) {
+  const value = category.toLowerCase()
+  const icon = kind === 'INCOME' ? <IconIncome/> : value.includes('ремонт') ? <IconRepair/>
+    : value.includes('аренд') ? <IconRecurring/> : value.includes('wb') ? <IconDeduction/>
+      : value.includes('интернет') || value.includes('связ') ? <IconReceipt/> : <IconExpense/>
+  return <IconBox tone={kind === 'INCOME' ? 'ok' : 'bad'}>{icon}</IconBox>
 }

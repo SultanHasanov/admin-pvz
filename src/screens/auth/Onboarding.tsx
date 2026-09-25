@@ -15,6 +15,7 @@ import { appUrl, supabase } from '../../lib/supabase'
 import { createEmployee } from '../../services/employees'
 import { createOrganization } from '../../services/onboarding'
 import { AuthLayout } from './AuthLayout'
+import { Illustration, type IllustrationName } from '../../shared/kit/Misc'
 
 /** Название организации до подтверждения почты: письмо уводит из вкладки, черновик должен дожить. */
 const DRAFT = 'pvz.onboarding.org'
@@ -144,8 +145,10 @@ export default function Onboarding({ session, onDone }:{ session:Session | null;
     2: pointName.trim().length > 0 && /^\d\d:\d\d$/.test(from) && /^\d\d:\d\d$/.test(to),
     3: fullName.trim().length > 1 && parseMoney(rate) > 0,
   }[step]
+  const visual:Record<1 | 2 | 3, IllustrationName> = { 1: 'pickup-point', 2: 'schedule', 3: 'team' }
 
   return <AuthLayout>
+    <div className="mx-auto mb-3 h-36 w-48"><Illustration name={visual[step]}/></div>
     <div className="mb-5 flex gap-1.5">
       {[1, 2, 3].map(index => <div key={index} className={cn('h-[3px] flex-1 rounded-sm', index <= step ? 'bg-accent' : 'bg-line-strong')}/>)}
     </div>

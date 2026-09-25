@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { cn } from './cn'
 import { haptics } from './haptics'
-import { Chevron } from './icons'
+import { Chevron, IconConnection } from './icons'
 
 /** Чип-фильтр в шапке экрана: выбранный ПВЗ и месяц. */
 export function Chip({ children, onClick, active }:{ children:ReactNode; onClick:() => void; active?:boolean }) {
@@ -19,8 +19,9 @@ export function Chip({ children, onClick, active }:{ children:ReactNode; onClick
 }
 
 /** Пустое состояние раздела: одна строка «что здесь появится» и, если есть, действие. */
-export const EmptyState = ({ title, sub, action }:{ title:ReactNode; sub?:ReactNode; action?:ReactNode }) =>
+export const EmptyState = ({ title, sub, action, visual }:{ title:ReactNode; sub?:ReactNode; action?:ReactNode; visual?:ReactNode }) =>
   <div className="px-6 py-10 text-center">
+    {visual && <div className="mx-auto mb-3 flex h-28 max-w-44 items-center justify-center" aria-hidden>{visual}</div>}
     <div className="text-row font-medium">{title}</div>
     {sub && <div className="mx-auto mt-1.5 max-w-64 text-sub leading-[1.45] text-muted">{sub}</div>}
     {action && <div className="mt-4 flex justify-center">{action}</div>}
@@ -48,9 +49,28 @@ export const SkeletonRows = ({ rows = 3 }:{ rows?:number }) =>
 /** Сообщение об ошибке запроса с повтором — единый вид для всех экранов. */
 export const ErrorNote = ({ error, onRetry }:{ error:unknown; onRetry?:() => void }) =>
   <div className="rounded-lg border border-bad-tint-2 bg-bad-tint px-[15px] py-3">
-    <div className="text-row font-medium text-bad-strong">Не удалось загрузить</div>
+    <div className="flex items-center gap-2 text-row font-medium text-bad-strong"><IconConnection size={19}/>Не удалось загрузить</div>
     <div className="mt-1 text-sub leading-[1.4] text-bad-strong/80">
       {error instanceof Error ? error.message : 'Проверьте соединение и попробуйте снова'}
     </div>
     {onRetry && <button type="button" className="tap mt-2 text-act font-semibold text-bad-strong" onClick={onRetry}>Повторить</button>}
   </div>
+
+export type IllustrationName = 'pickup-point' | 'team' | 'schedule' | 'finance' | 'setup-complete'
+
+/** Генеративная spot-иллюстрация: фиксированная рамка не даёт контенту прыгать при загрузке. */
+export function Illustration({ name, className }:{ name:IllustrationName; className?:string }) {
+  return <picture className={cn('block size-full', className)}>
+    <source srcSet={`/illustrations/${name}-512.webp`} type="image/webp"/>
+    <img
+      src={`/illustrations/${name}-512.png`}
+      alt=""
+      aria-hidden="true"
+      width="512"
+      height="512"
+      loading="lazy"
+      decoding="async"
+      className="size-full object-contain"
+    />
+  </picture>
+}

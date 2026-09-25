@@ -5,7 +5,7 @@ import { Card, Hero } from '../shared/kit/Card'
 import { List, ListRow, Pill } from '../shared/kit/ListRow'
 import { SectionTitle } from '../shared/kit/Text'
 import { Button } from '../shared/kit/Button'
-import { EmptyState, SkeletonRows } from '../shared/kit/Misc'
+import { EmptyState, Illustration, SkeletonRows } from '../shared/kit/Misc'
 import { deductionTitles as titles, deductionTones as tones, eventText } from '../shared/deductions'
 import { ownerLossOf } from '../entities/calculations'
 import { rubles } from '../shared/money'
@@ -17,6 +17,7 @@ import { useMonthTotals } from '../features/money/useMonthTotals'
 import { useOrg } from '../app/OrgContext'
 import { useNav } from '../app/nav'
 import { useSheets } from '../app/sheets'
+import { IconBox, IconCheck, IconClock, IconDeduction, IconWarning } from '../shared/kit/icons'
 
 /**
  * Удержание WB: сумма, состояние и история решений.
@@ -93,13 +94,15 @@ export default function Deduction() {
       {events.isLoading
         ? <SkeletonRows rows={2}/>
         : !events.data?.length
-          ? <EmptyState title="Событий пока нет" sub="Здесь появятся смены статуса и решения по удержанию"/>
-          : <List>
+          ? <EmptyState visual={<Illustration name="finance"/>} title="Событий пока нет" sub="Здесь появятся смены статуса и решения по удержанию"/>
+          : <List className="relative before:absolute before:top-6 before:bottom-6 before:left-[33px] before:w-px before:bg-line-strong">
             {events.data.map(event => <ListRow
               key={event.id}
+              leading={<EventIcon type={event.eventType}/>}
               title={<span className={event.eventType === 'EMPLOYEE_DISAGREE' ? 'text-bad' : undefined}>{eventText(event, nameOf)}</span>}
               sub={dayLabel(event.createdAt)}
               align="start"
+              className="relative"
             />)}
           </List>}
     </Card>
@@ -130,4 +133,11 @@ export default function Deduction() {
       })}
     >Удалить удержание</Button>
   </Screen>
+}
+
+function EventIcon({ type }:{ type:string }) {
+  if (type === 'EMPLOYEE_DISAGREE') return <IconBox tone="bad" size={36}><IconWarning size={18}/></IconBox>
+  if (type === 'STATUS_CHANGED') return <IconBox tone="ok" size={36}><IconCheck size={18}/></IconBox>
+  if (type === 'IMPORTED') return <IconBox tone="info" size={36}><IconDeduction size={18}/></IconBox>
+  return <IconBox tone="neutral" size={36}><IconClock size={18}/></IconBox>
 }

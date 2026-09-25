@@ -7,7 +7,7 @@ import { Card, StatTile, StatTiles } from '../../shared/kit/Card'
 import { List, ListRow, Pill } from '../../shared/kit/ListRow'
 import { SectionTitle } from '../../shared/kit/Text'
 import { TextButton } from '../../shared/kit/Button'
-import { EmptyState, ErrorNote, SkeletonRows } from '../../shared/kit/Misc'
+import { EmptyState, ErrorNote, Illustration, SkeletonRows } from '../../shared/kit/Misc'
 import { c } from '../../shared/kit/tokens'
 import { rubles } from '../../shared/money'
 import { plural } from '../../shared/format'
@@ -23,6 +23,7 @@ import { useOrg } from '../../app/OrgContext'
 import { useNav } from '../../app/nav'
 import { useSheets } from '../../app/sheets'
 import { NotLinked } from './NotLinked'
+import { IconBox, IconDeduction, IconMoney, IconSchedule } from '../../shared/kit/icons'
 
 /**
  * Главная сотрудника: когда и где следующая смена, сколько заработано и что впереди.
@@ -139,7 +140,7 @@ export default function MeHome() {
       {next.loading
         ? <SkeletonRows rows={3}/>
         : !next.upcoming.length
-          ? <EmptyState title="Смен пока нет" sub="Когда владелец поставит вас в график, смены появятся здесь"/>
+          ? <EmptyState visual={<Illustration name="schedule"/>} title="Смен пока нет" sub="Когда владелец поставит вас в график, смены появятся здесь"/>
           : <List>
             {next.upcoming.slice(0, 5).map(row => {
               const with_ = next.partners(row)
@@ -175,9 +176,10 @@ function Welcome() {
   }
   return <Card className="mb-3 px-[15px] pt-3.5 pb-2">
     <div className="text-row font-semibold">Это ваш кабинет</div>
-    <div className="mt-1 text-sub leading-[1.45] text-muted">
-      Здесь ваши смены, заработок и удержания. Не можете выйти — нажмите на смену, владелец увидит заявку.
-      Не согласны с удержанием — откройте его в «Деньгах» и напишите почему.
+    <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px] leading-[1.25] text-muted">
+      <div><IconBox tone="accent" size={32}><IconSchedule size={17}/></IconBox><div className="mt-1.5">Смены и заявки</div></div>
+      <div><IconBox tone="ok" size={32}><IconMoney size={17}/></IconBox><div className="mt-1.5">Заработок</div></div>
+      <div><IconBox tone="warn" size={32}><IconDeduction size={17}/></IconBox><div className="mt-1.5">Удержания</div></div>
     </div>
     <div className="mt-1 text-right"><TextButton onClick={dismiss}>Понятно</TextButton></div>
   </Card>

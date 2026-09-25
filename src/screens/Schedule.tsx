@@ -8,7 +8,7 @@ import { Avatar, List, ListRow } from '../shared/kit/ListRow'
 import { SectionTitle } from '../shared/kit/Text'
 import { Button, TextButton } from '../shared/kit/Button'
 import { Segmented } from '../shared/kit/Segmented'
-import { Chip, EmptyState, ErrorNote, SkeletonRows } from '../shared/kit/Misc'
+import { Chip, EmptyState, ErrorNote, Illustration, SkeletonRows } from '../shared/kit/Misc'
 import { MonthCalendar, type CalendarDay } from '../shared/kit/MonthCalendar'
 import { useLayout } from '../shared/kit/layout'
 import DaySheet from '../sheets/DaySheet'
@@ -26,6 +26,7 @@ import { useOrg } from '../app/OrgContext'
 import { useNav } from '../app/nav'
 import { useSheets } from '../app/sheets'
 import { Chevron } from '../shared/kit/icons'
+import { IconSchedule, IconSend, IconWarning } from '../shared/kit/icons'
 
 /**
  * График за месяц.
@@ -152,7 +153,7 @@ export default function Schedule() {
   const openDay = (point:string, date:string) => open('day', { pointId: point, date, pointLabel: pointName(point) })
 
   const links = <div className="mt-4">
-    <Button block variant="secondary" onClick={() => push('/sched/share')}>Поделиться</Button>
+    <Button block variant="secondary" onClick={() => push('/sched/share')}><span className="inline-flex items-center justify-center gap-2"><IconSend/>Поделиться</span></Button>
   </div>
 
   const board = <>
@@ -166,7 +167,7 @@ export default function Schedule() {
     />
 
     <Button block className="mb-2" onClick={() => buildFrom(continueFrom)}>
-      {continueFrom ? `Продолжить график с ${dayLabel(continueFrom)}` : 'Заполнить график'}
+      <span className="inline-flex items-center justify-center gap-2"><IconSchedule/>{continueFrom ? `Продолжить график с ${dayLabel(continueFrom)}` : 'Заполнить график'}</span>
     </Button>
     <div className="mb-3 text-sub text-muted">{pointId
       ? 'Нажмите на день, чтобы поставить или заменить человека.'
@@ -241,6 +242,7 @@ export default function Schedule() {
       <Card>
         {dayShifts.length === 0
           ? <EmptyState
+            visual={<Illustration name="schedule"/>}
             title="В этот день никто не выходит"
             sub={pointId ? `ПВЗ «${pointName(pointId)}» останется без сотрудника` : 'Ни на одном ПВЗ нет смены'}
           />
@@ -306,7 +308,9 @@ function Legend({ people }:{ people:string[] }) {
   return <div className="mt-2.5 text-lbl text-muted">
     <div className="flex flex-wrap gap-x-3 gap-y-1">
       {LEGEND.map(item => <span key={item.tone} className="flex items-center gap-1.5">
-        <span aria-hidden className="size-2.5 rounded-[3px] border" style={{ background: tones[item.tone].bg, borderColor: tones[item.tone].fg }}/>
+        {item.tone === 'warn' || item.tone === 'bad'
+          ? <span style={{ color: tones[item.tone].fg }}><IconWarning size={13}/></span>
+          : <span aria-hidden className="size-2.5 rounded-[3px] border" style={{ background: tones[item.tone].bg, borderColor: tones[item.tone].fg }}/>}
         {item.label}
       </span>)}
     </div>

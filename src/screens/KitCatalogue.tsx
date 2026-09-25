@@ -6,12 +6,17 @@ import { SectionTitle, Label, Num } from '../shared/kit/Text'
 import { Button, TextButton, ActionTile } from '../shared/kit/Button'
 import { Segmented, Stepper } from '../shared/kit/Segmented'
 import { TextField, MoneyField, TextArea, Banner } from '../shared/kit/Field'
-import { Chip, EmptyState, Skeleton, SkeletonRows, ErrorNote } from '../shared/kit/Misc'
+import { Chip, EmptyState, Illustration, Skeleton, SkeletonRows, ErrorNote } from '../shared/kit/Misc'
 import { Fab } from '../shared/kit/TabBar'
 import { toastDone, toastError, toastWarn } from '../shared/kit/Toaster'
 import { c, tone } from '../shared/kit/tokens'
 import { useSheets } from '../app/sheets'
 import { useNav } from '../app/nav'
+import {
+  IconAdvance, IconBox, IconCategory, IconDeduction, IconExpense, IconIncome,
+  IconInvite, IconPoint, IconRecurring, IconSchedule, IconSettings, IconTelegram,
+  StatusIcon,
+} from '../shared/kit/icons'
 
 /**
  * Каталог кита — рабочий стенд дизайн-системы, не часть продукта.
@@ -66,11 +71,22 @@ export default function KitCatalogue() {
 
     <SectionTitle>Быстрые действия</SectionTitle>
     <div className="grid grid-cols-2 gap-2">
-      <ActionTile sign="+" label="Добавить доход" tone={{ bg: c.okTint2, fg: c.ok }} onClick={() => toastDone('Доход добавлен')}/>
-      <ActionTile sign="−" label="Добавить расход" tone={{ bg: c.badTint2, fg: c.badStrong }} onClick={() => toastWarn('Расход за прошлый месяц')}/>
-      <ActionTile sign="WB" label="Добавить удержание" tone={{ bg: c.accentTint, fg: c.accent }} onClick={() => toastError('Не удалось сохранить')}/>
-      <ActionTile sign="₽" label="Выдать аванс" tone={{ bg: c.infoTint2, fg: c.info }} onClick={() => open('confirm', { text: 'Выдать аванс всем сотрудникам за сентябрь?', yesLabel: 'Выдать', onYes: () => toastDone('Аванс выдан') })}/>
+      <ActionTile icon={<IconIncome/>} label="Добавить доход" tone={{ bg: c.okTint2, fg: c.ok }} onClick={() => toastDone('Доход добавлен')}/>
+      <ActionTile icon={<IconExpense/>} label="Добавить расход" tone={{ bg: c.badTint2, fg: c.badStrong }} onClick={() => toastWarn('Расход за прошлый месяц')}/>
+      <ActionTile icon={<IconDeduction/>} label="Добавить удержание" tone={{ bg: c.accentTint, fg: c.accent }} onClick={() => toastError('Не удалось сохранить')}/>
+      <ActionTile icon={<IconAdvance/>} label="Выдать аванс" tone={{ bg: c.infoTint2, fg: c.info }} onClick={() => open('confirm', { text: 'Выдать аванс всем сотрудникам за сентябрь?', yesLabel: 'Выдать', onYes: () => toastDone('Аванс выдан') })}/>
     </div>
+
+    <SectionTitle>Иконки и состояния</SectionTitle>
+    <Card className="p-4">
+      <div className="flex flex-wrap gap-3">
+        <IconBox tone="accent"><IconPoint/></IconBox><IconBox><IconSettings/></IconBox>
+        <IconBox tone="info"><IconTelegram/></IconBox><IconBox tone="warn"><IconRecurring/></IconBox>
+        <IconBox tone="ok"><IconSchedule/></IconBox><IconBox tone="accent"><IconInvite/></IconBox>
+        <IconBox tone="info"><IconCategory/></IconBox>
+        <StatusIcon status="done"/><StatusIcon status="warning"/><StatusIcon status="error"/><StatusIcon status="waiting"/><StatusIcon status="locked"/>
+      </div>
+    </Card>
 
     <SectionTitle>Управление</SectionTitle>
     <div className="flex items-center gap-3">
@@ -115,6 +131,7 @@ export default function KitCatalogue() {
     <div className="mt-2"><ErrorNote error={new Error('Проверьте соединение')} onRetry={() => {}}/></div>
     <Card className="mt-2">
       <EmptyState
+        visual={<Illustration name="finance"/>}
         title="Операций за сентябрь нет"
         sub="Доходы и расходы появятся здесь после первой записи"
         action={<Button onClick={() => {}}>Добавить доход</Button>}

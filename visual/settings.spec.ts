@@ -83,14 +83,16 @@ test.describe('настройки', () => {
     expect(slots.slot_config).toEqual({ def: 1, wd: { 5: 2 } })
   })
 
-  test('регулярные расходы: «Оплачено» — RPC подтверждения', async ({ page }) => {
-    const recorded = await stubSupabase(page)
+  test('постоянные расходы считаются автоматически без подтверждения', async ({ page }) => {
+    await stubSupabase(page)
     await page.goto('/money/recurring')
     await page.waitForSelector('[data-screen]')
     await shot(page, 'recurring')
 
-    await page.getByRole('button', { name: 'Оплачено' }).first().click()
-    await expect.poll(() => recorded.filter(row => row.table === 'rpc/confirm_recurring_expense').length).toBe(1)
+    await expect(page.getByText('Аренда')).toBeVisible()
+    await expect(page.getByText('Уборка')).toBeVisible()
+    await expect(page.getByText('51 000 ₽')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Оплачено' })).toHaveCount(0)
   })
 
   test('журнал операций открывает шторку правки', async ({ page }) => {
