@@ -22,7 +22,7 @@ type Filter = 'all' | EntryKind
  * ту же шторку, что и добавление, — поправить сумму или удалить ошибочную запись.
  */
 export default function Operations() {
-  const { month, pointId, pointName } = useOrg()
+  const { month, pointId, pointName, pointTitle } = useOrg()
   const { back, canBack } = useNav()
   const { open } = useSheets()
   const [filter, setFilter] = useState<Filter>('all')
@@ -43,7 +43,7 @@ export default function Operations() {
   return <Screen
     header={<Header title="Операции" onBack={canBack ? back : undefined}/>}
     filters={<FilterRow>
-      <Chip onClick={() => open('pvzPick')}>{pointId ? pointName(pointId) : 'Все ПВЗ'}</Chip>
+      <Chip onClick={() => open('pvzPick')}>{pointTitle}</Chip>
       <Chip onClick={() => open('monthPick')}>{monthLabel(month).split(' ')[0]}</Chip>
       {category && <Chip active onClick={() => setCategory(undefined)}>{category} ✕</Chip>}
     </FilterRow>}

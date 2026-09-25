@@ -37,12 +37,27 @@ test.describe('настройка пункта', () => {
     await shot(page, 'setup')
   })
 
+  test('пустой месяц: вместо полоски — следующий шаг крупно, без графика доходов', async ({ page }) => {
+    await stubSupabase(page, { rpc: { setup_progress: fresh } })
+    // Маршрут, заведённый позже, перехватывает раньше общего: у нового владельца нет ни операций, ни смен.
+    for (const table of ['income_entries', 'expense_entries', 'shifts']) {
+      await page.route(`**/rest/v1/${table}**`, route => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }))
+    }
+    await page.goto('/home')
+    await page.waitForSelector('[data-screen]')
+
+    await expect(page.getByText('Настройка пункта · 1 из 6')).toBeVisible()
+    await page.getByRole('button', { name: 'Добавить сотрудника', exact: true }).click()
+    await expect(page).toHaveURL(/\/people\/new$/)
+  })
+
   test('график закрыт без сотрудников, задание ведёт на свой экран', async ({ page }) => {
     await stubSupabase(page, { rpc: { setup_progress: fresh } })
     await page.goto('/home/setup')
     await page.waitForSelector('[data-screen]')
 
-    await expect(page.getByText('Сначала добавьте сотрудников')).toBeVisible()
+    // Та же подпись у приглашения в «Дополнительно» — оно тоже ждёт сотрудников.
+    await expect(page.getByText('Сначала добавьте сотрудников')).toHaveCount(2)
     await page.getByRole('button', { name: 'Добавить сотрудника' }).click()
     await expect(page).toHaveURL(/\/people\/new$/)
   })

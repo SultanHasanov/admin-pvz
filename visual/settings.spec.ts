@@ -271,5 +271,7 @@ test.describe('вход и регистрация', () => {
       p_name: 'ИП Ковалёв А. С.', p_point_name: 'ПВЗ Ленина 12', p_point_address: 'ПВЗ Ленина 12',
     })
     expect(recorded.filter(row => row.table === 'shifts')).toHaveLength(0)
+    // Дальше — задания настройки, а не пустая главная.
+    await page.waitForURL('**/home/setup')
   })
 })

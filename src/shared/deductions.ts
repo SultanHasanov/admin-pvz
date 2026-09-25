@@ -14,6 +14,16 @@ export const deductionTitles:Record<DeductionStatus, string> = {
 }
 
 /**
+ * Восемь статусов — для базы и расчёта. Владельцу нужно одно: что с удержанием делать.
+ * «Решить» — ждёт его решения, «Ждём WB» — возражение отправлено, «Закрыто» — деньги ясны.
+ */
+export type DeductionStage = 'decide' | 'wb' | 'closed'
+
+export const deductionStage = (status:DeductionStatus):DeductionStage =>
+  status === 'NEW' || status === 'INVESTIGATING' || status === 'PENDING' ? 'decide'
+    : status === 'DISPUTED' ? 'wb' : 'closed'
+
+/**
  * Строка истории удержания. Реплику сотрудника показываем с именем — владелец должен
  * видеть, кто возразил, а не безличное «EMPLOYEE_DISAGREE».
  */

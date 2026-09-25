@@ -5,6 +5,7 @@ import { Card } from '../shared/kit/Card'
 import { Avatar, List, ListRow } from '../shared/kit/ListRow'
 import { SectionTitle } from '../shared/kit/Text'
 import { Chip, EmptyState, ErrorNote, SkeletonRows } from '../shared/kit/Misc'
+import { Button } from '../shared/kit/Button'
 import { Fab } from '../shared/kit/TabBar'
 import { Switch } from '../shared/kit/Switch'
 import { initials } from '../shared/shifts'
@@ -29,7 +30,7 @@ import { useSheets } from '../app/sheets'
  * переключатель в группе «Отключённые» возвращает человека.
  */
 export default function People() {
-  const { month, pointId, pointName } = useOrg()
+  const { month, pointId, pointName, pointTitle } = useOrg()
   const { push } = useNav()
   const { open } = useSheets()
   // Десктоп: список стоит слева от карточки, и открытый сотрудник подсвечен.
@@ -56,7 +57,7 @@ export default function People() {
 
   return <Screen
     filters={<FilterRow>
-      <Chip onClick={() => open('pvzPick')}>{pointId ? pointName(pointId) : 'Все ПВЗ'}</Chip>
+      <Chip onClick={() => open('pvzPick')}>{pointTitle}</Chip>
       <Chip onClick={() => open('monthPick')}>{period}</Chip>
     </FilterRow>}
   >
@@ -68,6 +69,7 @@ export default function People() {
       <EmptyState
         title="Сотрудников пока нет"
         sub={pointId ? `На ПВЗ «${pointName(pointId)}» никто не привязан` : 'Добавьте первого сотрудника, чтобы вести график и зарплату'}
+        action={<Button variant="secondary" onClick={() => push('/people/new')}>Добавить сотрудника</Button>}
       />
     </Card>}
 

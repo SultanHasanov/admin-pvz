@@ -24,6 +24,11 @@ interface OrgValue {
   pointName:(id:string | null | undefined) => string
   /** ПВЗ, в который пишем новую запись: выбранный или единственный. */
   defaultPointId:string
+  /**
+   * Подпись фильтра в шапке. При одной точке — её название, а не «Все ПВЗ»:
+   * «все» из одного пункта только сбивают с толку.
+   */
+  pointTitle:string
 }
 
 const OrgContext = createContext<OrgValue | null>(null)
@@ -54,6 +59,7 @@ export function OrgProvider({ children }:{ children:ReactNode }) {
     setScheduleMonth,
     pointName: id => list.find(p => p.id === id)?.name ?? '—',
     defaultPointId: pointId || (list.length === 1 ? list[0].id : ''),
+    pointTitle: list.find(p => p.id === (pointId || (list.length === 1 ? list[0].id : '')))?.name ?? 'Все ПВЗ',
   }), [list, points.isLoading, pointId, setPointId, month, setMonth, scheduleMonth])
 
   return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>

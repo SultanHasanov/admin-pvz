@@ -24,7 +24,7 @@ type Key = 'profit' | 'income' | 'expenses' | 'payroll' | 'tax'
  */
 export default function Metric() {
   const { key = 'profit' } = useParams<{ key:Key }>()
-  const { month, pointName, points, pointId } = useOrg()
+  const { month, pointName, points, pointId, pointTitle } = useOrg()
   const { back, canBack, push } = useNav()
   const { open } = useSheets()
   const totals = useMonthTotals()
@@ -34,7 +34,7 @@ export default function Metric() {
   const header = <Header title="Расчёт" onBack={canBack ? back : undefined}/>
   // Пункт и месяц — прямо здесь: доход вписывают по пунктам, не уходя на главную.
   const filters = <FilterRow>
-    <Chip onClick={() => open('pvzPick')}>{pointId ? pointName(pointId) : 'Все ПВЗ'}</Chip>
+    <Chip onClick={() => open('pvzPick')}>{pointTitle}</Chip>
     <Chip onClick={() => open('monthPick')}>{monthLabel(month).split(' ')[0]}</Chip>
   </FilterRow>
 

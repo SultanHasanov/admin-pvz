@@ -2,7 +2,7 @@ import { Bell, Screen, FilterRow } from '../shared/kit/Screen'
 import { Card, Hero, HeroTile, HeroTiles } from '../shared/kit/Card'
 import { List, ListRow, Avatar, Dot } from '../shared/kit/ListRow'
 import { SectionTitle } from '../shared/kit/Text'
-import { ActionTile } from '../shared/kit/Button'
+import { ActionTile, Button, TextButton } from '../shared/kit/Button'
 import { Chip, EmptyState, ErrorNote, SkeletonRows } from '../shared/kit/Misc'
 import { IncomeChart } from '../shared/kit/Chart'
 import { Fab } from '../shared/kit/TabBar'
@@ -14,6 +14,8 @@ import { useAlerts } from '../features/home/useAlerts'
 import { badgeOf } from '../entities/notifications'
 import { useToday } from '../features/home/useToday'
 import { SetupStrip } from '../features/setup/SetupStrip'
+import { SetupNext } from '../features/setup/SetupNext'
+import { useSetup } from '../features/setup/useSetup'
 import { useOrg } from '../app/OrgContext'
 import { useNav } from '../app/nav'
 import { useSheets } from '../app/sheets'
@@ -23,7 +25,7 @@ import { useSheets } from '../app/sheets'
  * и кто сегодня на точках. Порядок блоков — как в прототипе: сначала итог, потом причины.
  */
 export default function Home() {
-  const { month, pointId, pointName } = useOrg()
+  const { month, pointId, pointName, pointTitle } = useOrg()
   const { push } = useNav()
   const { open } = useSheets()
   const totals = useMonthTotals()
@@ -31,6 +33,12 @@ export default function Home() {
   // прочитанная дырка в графике никуда не делась, прятать её из списка нельзя.
   const { items: alerts, unread } = useAlerts()
   const today = useToday()
+  const setup = useSetup()
+
+  // Новый владелец: в месяце ни операции, ни смены. Нули и пустой график ему ничего
+  // не говорят — вместо узкой полоски показываем следующий шаг настройки крупно.
+  const empty = !totals.loading && !totals.transactions.length && !totals.shifts.length
+  const guide = empty && setup.available && !setup.hidden && setup.next
 
   const period = monthLabel(month).split(' ')[0]
 
@@ -50,19 +58,28 @@ export default function Home() {
 
   return <Screen
     filters={<FilterRow className="items-center">
-      <Chip onClick={() => open('pvzPick')}>{pointId ? pointName(pointId) : 'Все ПВЗ'}</Chip>
+      <Chip onClick={() => open('pvzPick')}>{pointTitle}</Chip>
       <Chip onClick={() => open('monthPick')}>{period}</Chip>
       <div className="ml-auto flex-none"><Bell count={badgeOf(unread.length)} onClick={() => open('notifs')}/></div>
     </FilterRow>}
   >
     {totals.error && <div className="mb-3"><ErrorNote error={totals.error}/></div>}
 
-    <SetupStrip/>
+    {guide
+      ? <div className="mb-3"><SetupNext
+        step={guide}
+        label={`Настройка пункта · ${setup.done} из ${setup.total}`}
+        footer={<div className="mt-1 text-center"><TextButton onClick={() => push('/home/setup')}>Все задания</TextButton></div>}
+      /></div>
+      : <SetupStrip/>}
 
     <Hero
       label={`Чистая прибыль · ${period}`}
       value={totals.loading ? '—' : rubles(totals.profit)}
-      note={`Доход ${rubles(totals.summary.income)} − расходы, зарплаты, налог и убытки WB`}
+      // Налог выключен — прибыль без него, и об этом надо сказать, а не молча показывать «Налог 0%».
+      note={totals.taxRate
+        ? `Доход ${rubles(totals.summary.income)} − расходы, зарплаты, налог и убытки WB`
+        : `Доход ${rubles(totals.summary.income)} − расходы, зарплаты и убытки WB · налог не учитывается`}
       onClick={() => push('/home/metric/profit')}
     >
       <HeroTiles>
@@ -76,12 +93,12 @@ export default function Home() {
       </HeroTiles>
     </Hero>
 
-    <IncomeChart
+    {!empty && <IncomeChart
       values={totals.incomeByDay}
       month={month}
       total={rubles(totals.summary.income)}
       format={rubles}
-    />
+    />}
 
     <SectionTitle count={alerts.length}>Требуют внимания</SectionTitle>
     <Card>
@@ -112,7 +129,11 @@ export default function Home() {
       {today.loading
         ? <SkeletonRows rows={2}/>
         : today.rows.length === 0
-          ? <EmptyState title="Пунктов выдачи пока нет" sub="Добавьте первый ПВЗ, чтобы вести график и деньги"/>
+          ? <EmptyState
+            title="Пунктов выдачи пока нет"
+            sub="Добавьте первый ПВЗ, чтобы вести график и деньги"
+            action={<Button variant="secondary" onClick={() => push('/more/points/new')}>Добавить пункт</Button>}
+          />
           : <List>
             {today.rows.map(row => <ListRow
               key={row.pointId}

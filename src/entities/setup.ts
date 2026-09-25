@@ -11,11 +11,16 @@ export interface SetupProgress {
   shifts:boolean
   income:boolean
   expense:boolean
+  invite:boolean
+  tax:boolean
+  payDays:boolean
+  telegram:boolean
   /** Владелец убрал список с главной. */
   hidden:boolean
 }
 
 export type SetupStepId = 'points' | 'employees' | 'defaultRate' | 'shifts' | 'income' | 'expense'
+  | 'invite' | 'tax' | 'payDays' | 'telegram'
 
 /**
  * `next` — первое невыполненное задание, его показываем крупно с кнопкой.
@@ -33,6 +38,11 @@ export interface SetupStepInfo {
   /** Без чего задание недоступно. */
   needs?:SetupStepId
   lockedSub?:string
+  /**
+   * Совет, а не шаг: не входит в «N из M», не становится следующим и не мешает
+   * «Пункт настроен». Без него работать можно, с ним — удобнее.
+   */
+  optional?:boolean
 }
 
 export interface SetupStep extends SetupStepInfo {
@@ -50,6 +60,13 @@ export const SETUP_STEPS:readonly SetupStepInfo[] = [
   },
   { id: 'income', title: 'Внести первый доход', sub: 'Выплата маркетплейса или другой доход', action: 'Добавить доход' },
   { id: 'expense', title: 'Внести первый расход', sub: 'Аренда, связь, расходники', action: 'Добавить расход' },
+  {
+    id: 'invite', title: 'Пригласить сотрудника в приложение', sub: 'Он будет видеть свои смены, заработок и удержания', action: 'Пригласить',
+    needs: 'employees', lockedSub: 'Сначала добавьте сотрудников', optional: true,
+  },
+  { id: 'tax', title: 'Указать налог', sub: 'Без него чистая прибыль считается без налога', action: 'Указать налог', optional: true },
+  { id: 'payDays', title: 'Задать дни выплат', sub: 'Напомним об авансе и зарплате вовремя', action: 'Задать дни', optional: true },
+  { id: 'telegram', title: 'Подключить Telegram-бота', sub: 'Напоминания о сменах в группу пункта', action: 'Подключить', optional: true },
 ]
 
 export function stepsOf(progress:SetupProgress):SetupStep[] {
@@ -57,12 +74,15 @@ export function stepsOf(progress:SetupProgress):SetupStep[] {
   return SETUP_STEPS.map(step => {
     if (progress[step.id]) return { ...step, status: 'done' as const }
     if (step.needs && !progress[step.needs]) return { ...step, status: 'locked' as const }
-    if (nextGiven) return { ...step, status: 'todo' as const }
+    if (nextGiven || step.optional) return { ...step, status: 'todo' as const }
     nextGiven = true
     return { ...step, status: 'next' as const }
   })
 }
 
-export const countDone = (steps:readonly SetupStep[]) => steps.filter(step => step.status === 'done').length
+/** Основные задания — те, что считаются в «N из M». */
+export const required = (steps:readonly SetupStep[]) => steps.filter(step => !step.optional)
+
+export const countDone = (steps:readonly SetupStep[]) => required(steps).filter(step => step.status === 'done').length
 
 export const nextStep = (steps:readonly SetupStep[]) => steps.find(step => step.status === 'next')

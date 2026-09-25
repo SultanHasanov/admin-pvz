@@ -17,3 +17,6 @@ supabase/.temp
 .vercel
 .env*
 !.env.example
+
+# Материалы для видео: не часть приложения
+brag-output/

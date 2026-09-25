@@ -76,7 +76,8 @@ export default function Onboarding({ session, onDone }:{ session:Session | null;
     try { localStorage.removeItem(DRAFT) } catch { /* приватный режим */ }
     if (message) toastDone(message)
     await onDone()
-    navigate('/home', { replace: true })
+    // Сразу в задания настройки: там весь путь дальше, а не пустая главная.
+    navigate('/home/setup', { replace: true })
   }
 
   const next = () => run(async () => {
@@ -123,7 +124,7 @@ export default function Onboarding({ session, onDone }:{ session:Session | null;
         fullName, phone, pickupPointIds: [pointId!],
         paymentType: 'SHIFT', rateKopecks: parseMoney(rate), monthlyNormDays: 22,
       })
-      await finish(`Готово. ${fullName.trim().split(' ')[0]} добавлен — график составьте в разделе «График»`)
+      await finish(`${fullName.trim().split(' ')[0]} добавлен. Осталось несколько шагов — они ниже`)
     }
   })
 

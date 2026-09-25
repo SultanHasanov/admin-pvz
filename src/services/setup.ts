@@ -14,6 +14,10 @@ export async function getSetupProgress():Promise<SetupProgress | null> {
     shifts: Boolean(row.shifts),
     income: Boolean(row.income),
     expense: Boolean(row.expense),
+    invite: Boolean(row.invite),
+    tax: Boolean(row.tax),
+    payDays: Boolean(row.pay_days),
+    telegram: Boolean(row.telegram),
     hidden: Boolean(row.hidden),
   }
 }

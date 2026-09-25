@@ -30,7 +30,8 @@ export async function getPayoutSettings():Promise<PayoutSettings | null> {
 export async function savePayoutDays(advanceDay:number, payday:number) {
   const organization_id = await organizationId()
   const { error } = await client().from('payout_settings').upsert(
-    { organization_id, advance_day: advanceDay, payday },
+    // updated_at — по нему «Настройка пункта» отличает заданные дни от умолчаний (миграция 0027).
+    { organization_id, advance_day: advanceDay, payday, updated_at: new Date().toISOString() },
     { onConflict: 'organization_id' },
   )
   if (error) throw error

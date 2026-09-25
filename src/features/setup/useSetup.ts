@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { countDone, nextStep, stepsOf } from '../../entities/setup'
+import { countDone, nextStep, required, stepsOf } from '../../entities/setup'
 import { keys, scope } from '../../services/queries'
 import { getSetupProgress, setSetupHidden } from '../../services/setup'
 import { useAnySheetOpen } from '../../app/sheets'
@@ -38,7 +38,7 @@ export function useSetup() {
     error: query.error,
     steps,
     done: countDone(steps),
-    total: steps.length,
+    total: required(steps).length,
     next: nextStep(steps),
     hidden: query.data?.hidden ?? true,
     setHidden: (hidden:boolean) => hide.mutate(hidden),

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Screen, FilterRow } from '../shared/kit/Screen'
 import { Card, Hero } from '../shared/kit/Card'
@@ -13,6 +14,7 @@ import type { DeductionStatus } from '../entities/types'
 import { initials } from '../shared/shifts'
 import { rubles } from '../shared/money'
 import { dayLabel, monthLabel } from '../shared/dates'
+import { deductionStage, type DeductionStage } from '../shared/deductions'
 import { useMonthTotals } from '../features/money/useMonthTotals'
 import { useSalarySheets } from '../features/money/useSalarySheets'
 import { useOrg } from '../app/OrgContext'
@@ -46,7 +48,7 @@ export default function Money({ tab: pinned }:{
   const navigate = useNavigate()
   const tab = pinned ?? (params.get('tab') as Tab) ?? 'fin'
   const { id: selected } = useParams()
-  const { month, pointId, pointName } = useOrg()
+  const { month, pointId, pointName, pointTitle } = useOrg()
   const { push } = useNav()
   const { open } = useSheets()
   const totals = useMonthTotals()
@@ -62,7 +64,7 @@ export default function Money({ tab: pinned }:{
 
   return <Screen
     filters={<FilterRow>
-      <Chip onClick={() => open('pvzPick')}>{pointId ? pointName(pointId) : 'Все ПВЗ'}</Chip>
+      <Chip onClick={() => open('pvzPick')}>{pointTitle}</Chip>
       <Chip onClick={() => open('monthPick')}>{period}</Chip>
     </FilterRow>}
   >
@@ -94,6 +96,7 @@ function FinanceTab({ totals, period, pointName }:{
   period:string
   pointName:(id:string | null | undefined) => string
 }) {
+  const { open } = useSheets()
   const operations = [...totals.transactions].sort((a, b) => b.date.localeCompare(a.date))
 
   return <>
@@ -111,7 +114,11 @@ function FinanceTab({ totals, period, pointName }:{
     <SectionTitle count={operations.length}>Операции</SectionTitle>
     <Card>
       {operations.length === 0
-        ? <EmptyState title="Операций за месяц нет" sub="Доходы и расходы появятся здесь после первой записи"/>
+        ? <EmptyState
+          title="Операций за месяц нет"
+          sub="Доходы и расходы появятся здесь после первой записи"
+          action={<Button variant="secondary" onClick={() => open('op', { kind: 'INCOME' })}>Добавить доход</Button>}
+        />
         : <DataList
           rows={operations}
           rowKey={operation => `${operation.kind}-${operation.id}`}
@@ -146,6 +153,7 @@ function PayrollTab({ salary, period, onOpen, onPayAll }:{
   onOpen:(employeeId:string) => void
   onPayAll:(kind:'ADVANCE' | 'PAYMENT') => void
 }) {
+  const { push } = useNav()
   return <>
     <Hero
       label={`К выплате за ${period}`}
@@ -161,7 +169,11 @@ function PayrollTab({ salary, period, onOpen, onPayAll }:{
     <SectionTitle count={salary.sheets.length}>Ведомость</SectionTitle>
     <Card>
       {salary.sheets.length === 0
-        ? <EmptyState title="Начислений за месяц нет" sub="Ведомость появится, когда сотрудники отработают смены"/>
+        ? <EmptyState
+          title="Начислений за месяц нет"
+          sub="Ведомость появится, когда сотрудники отработают смены по графику"
+          action={<Button variant="secondary" onClick={() => push('/sched/wizard')}>Составить график</Button>}
+        />
         : <DataList
           rows={salary.sheets}
           rowKey={sheet => sheet.employeeId}
@@ -200,8 +212,12 @@ function DeductionsTab({ totals, selected, onOpen, pointName }:{
   onOpen:(id:string) => void
   pointName:(id:string | null | undefined) => string
 }) {
-  const rows = [...totals.deductions].sort((a, b) => (b.eventAt ?? b.createdAt).localeCompare(a.eventAt ?? a.createdAt))
+  const all = [...totals.deductions].sort((a, b) => (b.eventAt ?? b.createdAt).localeCompare(a.eventAt ?? a.createdAt))
   const loss = totals.summary.confirmedLosses
+  const { open } = useSheets()
+  const [stage, setStage] = useState<DeductionStage | 'all'>('all')
+  const count = (value:DeductionStage) => all.filter(row => deductionStage(row.status) === value).length
+  const rows = stage === 'all' ? all : all.filter(row => deductionStage(row.status) === stage)
 
   return <>
     <Card className="p-[13px]">
@@ -210,10 +226,28 @@ function DeductionsTab({ totals, selected, onOpen, pointName }:{
       <div className="mt-1 text-sub text-muted">Подтверждённые WB и отнесённые на владельца</div>
     </Card>
 
+    {!!all.length && <Segmented
+      className="mt-3"
+      value={stage}
+      onChange={setStage}
+      options={[
+        { value: 'all', label: 'Все' },
+        { value: 'decide', label: `Решить ${count('decide') || ''}`.trim() },
+        { value: 'wb', label: 'Ждём WB' },
+        { value: 'closed', label: 'Закрыто' },
+      ]}
+    />}
+
     <SectionTitle count={rows.length}>Удержания</SectionTitle>
     <Card>
-      {rows.length === 0
-        ? <EmptyState title="Удержаний за месяц нет" sub="Загрузятся из кабинета WB или их можно добавить вручную"/>
+      {rows.length === 0 && all.length
+        ? <EmptyState title={stage === 'decide' ? 'Решать нечего' : stage === 'wb' ? 'Ответа WB никто не ждёт' : 'Закрытых пока нет'}/>
+        : rows.length === 0
+        ? <EmptyState
+          title="Удержаний за месяц нет"
+          sub="Загрузятся из кабинета WB или их можно добавить вручную"
+          action={<Button variant="secondary" onClick={() => open('newDed')}>Добавить удержание</Button>}
+        />
         : <List>
           {rows.map(deduction => <ListRow
             key={deduction.id}

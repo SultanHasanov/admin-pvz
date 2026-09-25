@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import dayjs from 'dayjs'
 import { useQuery } from '@tanstack/react-query'
 import type { Shift } from '../../entities/types'
@@ -5,6 +6,7 @@ import { Screen, Header } from '../../shared/kit/Screen'
 import { Card, StatTile, StatTiles } from '../../shared/kit/Card'
 import { List, ListRow, Pill } from '../../shared/kit/ListRow'
 import { SectionTitle } from '../../shared/kit/Text'
+import { TextButton } from '../../shared/kit/Button'
 import { EmptyState, ErrorNote, SkeletonRows } from '../../shared/kit/Misc'
 import { c } from '../../shared/kit/tokens'
 import { rubles } from '../../shared/money'
@@ -64,6 +66,7 @@ export default function MeHome() {
 
   return <Screen header={header}>
     {my.error && <div className="mb-3"><ErrorNote error={my.error}/></div>}
+    <Welcome/>
 
     <div className="rounded-xl bg-ink p-[17px] text-white">
       <div className="lbl text-white/55">Следующая смена</div>
@@ -155,4 +158,27 @@ export default function MeHome() {
           </List>}
     </Card>
   </Screen>
+}
+
+/**
+ * Первое знакомство с кабинетом: что здесь есть и что можно сделать самому. Показываем
+ * один раз на устройстве — это подсказка, а не данные, терять её не страшно.
+ */
+const WELCOME = 'pvz.me.welcome'
+
+function Welcome() {
+  const [seen, setSeen] = useState(() => { try { return localStorage.getItem(WELCOME) === '1' } catch { return false } })
+  if (seen) return null
+  const dismiss = () => {
+    setSeen(true)
+    try { localStorage.setItem(WELCOME, '1') } catch { /* приватный режим */ }
+  }
+  return <Card className="mb-3 px-[15px] pt-3.5 pb-2">
+    <div className="text-row font-semibold">Это ваш кабинет</div>
+    <div className="mt-1 text-sub leading-[1.45] text-muted">
+      Здесь ваши смены, заработок и удержания. Не можете выйти — нажмите на смену, владелец увидит заявку.
+      Не согласны с удержанием — откройте его в «Деньгах» и напишите почему.
+    </div>
+    <div className="mt-1 text-right"><TextButton onClick={dismiss}>Понятно</TextButton></div>
+  </Card>
 }

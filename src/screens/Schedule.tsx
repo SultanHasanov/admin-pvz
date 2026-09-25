@@ -37,7 +37,9 @@ import { Chevron } from '../shared/kit/icons'
 export default function Schedule() {
   const [params] = useSearchParams()
   // Стрелки листают только график; месяц главной меняется выбором в шапке.
-  const { scheduleMonth: month, setScheduleMonth, pointId, points, pointName } = useOrg()
+  // Одна точка — считаем выбранной: иначе у нового владельца «Все ПВЗ» прячет месяц,
+  // «Изменить» и день справа, хотя выбирать ему не из чего. Фильтр в шапке при этом не трогаем.
+  const { scheduleMonth: month, setScheduleMonth, defaultPointId: pointId, points, pointName, pointTitle } = useOrg()
   const { open } = useSheets()
   const { push } = useNav()
   const { desktop } = useLayout()
@@ -266,7 +268,7 @@ export default function Schedule() {
     </>
 
   const filters = <FilterRow>
-    <Chip onClick={() => open('pvzPick')}>{pointId ? pointName(pointId) : 'Все ПВЗ'}</Chip>
+    <Chip onClick={() => open('pvzPick')}>{pointTitle}</Chip>
     <Chip onClick={() => open('monthPick')}>{period}</Chip>
   </FilterRow>
 
