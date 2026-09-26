@@ -1,22 +1,24 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
 import dayjs from 'dayjs'
 import { Screen, FilterRow } from '../shared/kit/Screen'
 import { Card } from '../shared/kit/Card'
-import { Avatar, List, ListRow } from '../shared/kit/ListRow'
+import { List, ListRow } from '../shared/kit/ListRow'
 import { SectionTitle } from '../shared/kit/Text'
-import { Button, TextButton } from '../shared/kit/Button'
+import { Button } from '../shared/kit/Button'
 import { Segmented } from '../shared/kit/Segmented'
-import { Chip, EmptyState, ErrorNote, Illustration, SkeletonRows } from '../shared/kit/Misc'
+import { Chip, EmptyState, ErrorNote, SkeletonRows } from '../shared/kit/Misc'
 import { MonthCalendar, type CalendarDay } from '../shared/kit/MonthCalendar'
+import { PeriodNav } from '../shared/kit/PeriodNav'
 import { useLayout } from '../shared/kit/layout'
 import DaySheet from '../sheets/DaySheet'
 import { WeekMatrix, type MatrixCell } from '../shared/kit/WeekMatrix'
 import { tone as tones, type Tone } from '../shared/kit/tokens'
-import { initials, shiftState } from '../shared/shifts'
-import { payModeTitles } from '../shared/salary'
-import { dayLabel, monthLabel, monthStart, timeLabel, today as todayDate, weekStartOf } from '../shared/dates'
+import { initials } from '../shared/shifts'
+import { plural } from '../shared/format'
+import { currentMonth, dayLabel, monthLabel, monthStart, timeLabel, today as todayDate, weekLabel, weekStartOf } from '../shared/dates'
+import type { Shift } from '../entities/types'
 import { keys } from '../services/queries'
 import { listEmployees } from '../services/employees'
 import { listShifts, listShiftsRange } from '../services/shifts'
@@ -25,43 +27,65 @@ import { slotsForDay } from '../entities/slots'
 import { useOrg } from '../app/OrgContext'
 import { useNav } from '../app/nav'
 import { useSheets } from '../app/sheets'
-import { Chevron } from '../shared/kit/icons'
-import { IconSchedule, IconSend, IconWarning } from '../shared/kit/icons'
+import { IconSchedule, IconSend } from '../shared/kit/icons'
+
+type Mode = 'month' | 'week'
+const dateOf = (shift:Shift) => shift.workDate ?? dayjs(shift.startsAt).format('YYYY-MM-DD')
+const isWorking = (shift:Shift) => shift.status !== 'REPLACED' && shift.status !== 'NO_SHOW'
 
 /**
- * График за месяц.
+ * График.
  *
- * Вид зависит от фильтра, как в прототипе: на одной точке — сетка месяца с инициалами,
- * на всех точках — матрица «неделя × ПВЗ», потому что месяц на три точки в 390px
- * не помещается и превращается в кашу. Отдельный режим «Неделя» даёт подробности по дням.
+ * Переключатель всегда «Месяц / Неделя», при любом фильтре. Месяц — сетка одной точки:
+ * месяц на три точки в 390px не помещается и превращается в кашу, поэтому при «Все ПВЗ»
+ * вместо сетки просим выбрать точку. Неделя — список дней одной точки или матрица
+ * «неделя × ПВЗ» для всех.
+ *
+ * Неделя грузится по своим датам, а не из месяца: иначе дни соседнего месяца на стыке
+ * выглядели пустыми и красными, хотя смены там стоят.
+ *
+ * На телефоне нажатие на день сразу открывает шторку дня; на десктопе день открывается
+ * справа от сетки, без шторки.
  */
 export default function Schedule() {
   const [params] = useSearchParams()
-  // Стрелки листают только график; месяц главной меняется выбором в шапке.
   // Одна точка — считаем выбранной: иначе у нового владельца «Все ПВЗ» прячет месяц,
-  // «Изменить» и день справа, хотя выбирать ему не из чего. Фильтр в шапке при этом не трогаем.
+  // хотя выбирать ему не из чего. Фильтр в шапке при этом не трогаем.
   const { scheduleMonth: month, setScheduleMonth, defaultPointId: pointId, points, pointName, pointTitle } = useOrg()
   const { open } = useSheets()
   const { push } = useNav()
   const { desktop } = useLayout()
-  const monthShifts = useQuery({ queryKey: keys.shifts(month, pointId), queryFn: () => listShifts(month, pointId || undefined) })
-  const totals = { shifts: monthShifts.data ?? [], loading: monthShifts.isLoading, error: monthShifts.error }
-  const employees = useQuery({ queryKey: keys.employees(), queryFn: () => listEmployees() })
-
   const today = todayDate()
-  const [mode, setMode] = useState<'month' | 'week'>('month')
-  const [picked, setPicked] = useState<string | undefined>(() => params.get('d') ?? undefined)
-  const [weekStart, setWeekStart] = useState(() => weekStartOf(
-    month === today.slice(0, 7) ? today : monthStart(month)))
+  const activePoints = points.filter(point => !point.archivedAt)
+  const point = points.find(item => item.id === pointId)
 
-  // Месяц меняется из шторки: матрица недели и выбранный день должны пойти за ним.
+  const [mode, setMode] = useState<Mode>(() => pointId ? 'month' : 'week')
+  const [picked, setPicked] = useState<string | undefined>()
+  const [weekStart, setWeekStart] = useState(() => weekStartOf(month === today.slice(0, 7) ? today : monthStart(month)))
+  const weekEnd = dayjs(weekStart).add(6, 'day').format('YYYY-MM-DD')
+
+  // Месяц сменили стрелками или в шапке — неделя встаёт в него. Если неделя уже в этом
+  // месяце (её пролистали и месяц пошёл следом), не трогаем.
   useEffect(() => {
-    setWeekStart(weekStartOf(month === today.slice(0, 7) ? today : monthStart(month)))
+    if (dayjs(weekStart).add(3, 'day').format('YYYY-MM') !== month) {
+      setWeekStart(weekStartOf(month === today.slice(0, 7) ? today : monthStart(month)))
+    }
     setPicked(current => current?.startsWith(month) ? current : undefined)
   }, [month]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const period = monthLabel(month).split(' ')[0]
-  const shiftMonth = (step:number) => setScheduleMonth(dayjs(`${month}-01`).add(step, 'month').format('YYYY-MM'))
+  const monthShifts = useQuery({
+    queryKey: keys.shifts(month, pointId),
+    queryFn: () => listShifts(month, pointId),
+    enabled: !!pointId && mode === 'month',
+  })
+  const weekShifts = useQuery({
+    queryKey: keys.shiftsRange(weekStart, weekEnd, pointId),
+    queryFn: () => listShiftsRange(weekStart, weekEnd, pointId || undefined),
+    enabled: mode === 'week',
+  })
+  const current = mode === 'month' ? monthShifts : weekShifts
+  const employees = useQuery({ queryKey: keys.employees(), queryFn: () => listEmployees() })
+  const nameOf = (id:string) => employees.data?.find(employee => employee.id === id)?.fullName ?? 'Сотрудник'
 
   // Куда продолжать: день после последней запланированной смены пункта.
   const horizon = dayjs(today).add(120, 'day').format('YYYY-MM-DD')
@@ -70,247 +94,213 @@ export default function Schedule() {
     queryFn: () => listShiftsRange(today, horizon, pointId),
     enabled: !!pointId,
   })
-  const lastPlanned = (ahead.data ?? []).filter(shift => shift.status !== 'REPLACED' && shift.status !== 'NO_SHOW')
-    .map(shift => shift.workDate ?? dayjs(shift.startsAt).format('YYYY-MM-DD')).sort().at(-1)
+  const lastPlanned = (ahead.data ?? []).filter(isWorking).map(dateOf).sort().at(-1)
   const continueFrom = lastPlanned ? dayjs(lastPlanned).add(1, 'day').format('YYYY-MM-DD') : undefined
   const buildFrom = (date?:string) => push(pointId ? `/sched/build?point=${pointId}${date ? `&from=${date}` : ''}` : '/sched/build')
-  const nameOf = (id:string) => employees.data?.find(employee => employee.id === id)?.fullName ?? 'Сотрудник'
+
+  const openDay = (id:string, date:string) => open('day', { pointId: id, date, pointLabel: pointName(id) })
+  // Десктоп показывает день справа, телефон — шторкой: подсказка «нажмите на день» теперь правда.
+  const pickDay = (date:string) => { if (desktop) setPicked(date); else if (pointId) openDay(pointId, date) }
+
+  // `/sched?d=…&pvz=…` с главной: «что сегодня на этой точке» — сразу день этой точки.
+  const linked = useRef(false)
+  useEffect(() => {
+    const date = params.get('d'), pvz = params.get('pvz') || pointId
+    if (linked.current || !date || !pvz) return
+    linked.current = true
+    if (desktop && pvz === pointId) setPicked(date)
+    else openDay(pvz, date)
+  }, [params, pointId, desktop]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // В клетке телефона помещается пять букв имени; на десктопе — имя целиком и инициал
   // фамилии, чтобы двух Ирин на одной точке можно было различить.
-  const cellName = (fullName:string) => {
-    const [first, last] = fullName.split(' ')
-    return desktop ? `${first}${last ? ` ${last[0]}.` : ''}` : first.slice(0, 5)
+  const cellName = (shift:Shift) => {
+    const [first, last] = nameOf(shift.employeeId).split(' ')
+    return `${desktop ? `${first}${last ? ` ${last[0]}.` : ''}` : first.slice(0, 5)}${shift.payMode === 'HALF' ? ' ½' : ''}`
   }
-  const activePoints = points.filter(point => !point.archivedAt)
 
   const byDate = useMemo(() => {
-    const map = new Map<string, typeof totals.shifts>()
-    for (const shift of totals.shifts) {
-      const date = dayjs(shift.startsAt).format('YYYY-MM-DD')
-      map.set(date, [...(map.get(date) ?? []), shift])
-    }
+    const map = new Map<string, Shift[]>()
+    for (const shift of current.data ?? []) map.set(dateOf(shift), [...(map.get(dateOf(shift)) ?? []), shift])
     return map
-  }, [totals.shifts])
+  }, [current.data])
 
-  // Сетка месяца — только когда выбрана одна точка: иначе в клетке пришлось бы
-  // показывать сумму по трём ПВЗ, и пустой день одной из них потерялся бы.
   const monthDays = useMemo(() => {
     const first = dayjs(monthStart(month))
     const result = new Map<string, CalendarDay>()
     for (let index = 0; index < first.daysInMonth(); index += 1) {
       const date = first.add(index, 'day').format('YYYY-MM-DD')
-      const shifts = (byDate.get(date) ?? []).filter(shift => !pointId || shift.pickupPointId === pointId)
-      const view = dayView(shifts, date, today, nameOf)
-      const working = shifts.filter(shift => shift.status !== 'REPLACED' && shift.status !== 'NO_SHOW')
-      const names = working.slice(0, desktop ? 3 : 2).map(shift => `${cellName(nameOf(shift.employeeId))}${shift.payMode === 'HALF' ? ' ½' : ''}`)
-      const need = pointId ? slotsForDay(points.find(point => point.id === pointId)?.slotConfig, date) : 1
-      const missing = date >= today && names.length < need
-      result.set(date, {
-        date, ...view,
-        tone: missing ? 'bad' : names.length ? 'neutral' : view.tone,
-        strong: missing || view.strong,
-        vacant: missing,
-        lines: missing ? names.length ? [names[0], 'ещё 1'] : ['НУЖЕН'] : names.length ? names : shifts.some(shift => shift.status === 'NO_SHOW') ? ['не выш.'] : view.lines,
-      })
+      const need = slotsForDay(point?.slotConfig, date)
+      result.set(date, { date, ...dayView(byDate.get(date) ?? [], date, today, nameOf, { need, label: cellName, max: desktop ? 3 : 2 }) })
     }
     return result
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [byDate, month, today, employees.data, pointId, points, desktop])
+  }, [byDate, month, today, employees.data, point, desktop])
 
-  const matrixRows = useMemo(() => activePoints.map(point => {
+  const weekDates = Array.from({ length: 7 }, (_, index) => dayjs(weekStart).add(index, 'day').format('YYYY-MM-DD'))
+
+  const matrixRows = useMemo(() => activePoints.map(item => {
     const cells = new Map<string, MatrixCell>()
-    for (let index = 0; index < 7; index += 1) {
-      const date = dayjs(weekStart).add(index, 'day').format('YYYY-MM-DD')
-      const shifts = (byDate.get(date) ?? []).filter(shift => shift.pickupPointId === point.id)
-      const view = dayView(shifts, date, today, nameOf)
-      cells.set(date, { label: shifts.length ? view.lines[0] ?? '·' : 'нет', tone: view.tone, strong: view.strong })
+    for (const date of weekDates) {
+      const shifts = (byDate.get(date) ?? []).filter(shift => shift.pickupPointId === item.id)
+      cells.set(date, dayView(shifts, date, today, nameOf, { need: slotsForDay(item.slotConfig, date) }))
     }
-    return { id: point.id, label: point.name.replace(/^ПВЗ\s+/, ''), cells }
+    return { id: item.id, label: item.name.replace(/^ПВЗ\s+/, ''), cells }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [activePoints, byDate, weekStart, today, employees.data])
 
   // Кто стоит за инициалами недели: «ИС» без расшифровки владелец угадывает, а не читает.
   const weekPeople = useMemo(() => {
     const ids = new Set<string>()
-    for (let index = 0; index < 7; index += 1) {
-      const date = dayjs(weekStart).add(index, 'day').format('YYYY-MM-DD')
-      for (const shift of byDate.get(date) ?? []) if (shift.status !== 'REPLACED') ids.add(shift.employeeId)
-    }
-    return [...ids].map(id => nameOf(id)).sort((a, b) => a.localeCompare(b, 'ru'))
+    for (const date of weekDates) for (const shift of byDate.get(date) ?? []) if (shift.status !== 'REPLACED') ids.add(shift.employeeId)
+    return [...ids].map(nameOf).sort((a, b) => a.localeCompare(b, 'ru'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [byDate, weekStart, employees.data])
 
-  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, index) => {
-    const date = dayjs(weekStart).add(index, 'day').format('YYYY-MM-DD')
-    const shifts = byDate.get(date) ?? []
-    return { date, shifts, view: dayView(shifts, date, today, nameOf) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [weekStart, byDate, today, employees.data])
+  const days = [...monthDays.values()]
+  const gaps = days.filter(day => day.vacant).length
+  const pastEmpty = days.filter(day => day.date < today && !(byDate.get(day.date) ?? []).some(isWorking)).length
 
-  const gaps = [...monthDays.values()].filter(day => day.vacant).length
-  const gapUnit = gaps % 10 === 1 && gaps % 100 !== 11 ? 'день' : gaps % 10 >= 2 && gaps % 10 <= 4 && (gaps % 100 < 12 || gaps % 100 > 14) ? 'дня' : 'дней'
-  const dayShifts = picked ? (byDate.get(picked) ?? []) : []
-  const openDay = (point:string, date:string) => open('day', { pointId: point, date, pointLabel: pointName(point) })
+  const shiftMonth = (step:number) => setScheduleMonth(dayjs(`${month}-01`).add(step, 'month').format('YYYY-MM'))
+  const shiftWeek = (step:number) => {
+    const next = dayjs(weekStart).add(step, 'week').format('YYYY-MM-DD')
+    setWeekStart(next)
+    // Месяц в шапке идёт за неделей — по четвергу, как считают недели в календаре.
+    const nextMonth = dayjs(next).add(3, 'day').format('YYYY-MM')
+    if (nextMonth !== month) setScheduleMonth(nextMonth)
+  }
 
-  const links = <div className="mt-4">
-    <Button block variant="secondary" onClick={() => push('/sched/share')}><span className="inline-flex items-center justify-center gap-2"><IconSend/>Поделиться</span></Button>
-  </div>
+  const legend = <Legend people={pointId ? [] : weekPeople}/>
+
+  const monthView = !pointId
+    ? <Card>
+      <EmptyState
+        title="Месяц показывается для одного ПВЗ"
+        sub="Для всех точек сразу есть неделя. Чтобы увидеть месяц, выберите ПВЗ."
+        action={<Button variant="secondary" onClick={() => open('pvzPick', { withAll: false })}>Выбрать ПВЗ</Button>}
+      />
+    </Card>
+    : <>
+      <PeriodNav unit="month" label={monthLabel(month)} onStep={shiftMonth}/>
+      {!!gaps && !monthShifts.isLoading && <div role="status" className="mb-2 rounded-md border border-bad bg-bad-tint px-3 py-2 text-sub font-medium text-bad-strong">
+        {gaps} {plural(gaps, 'день', 'дня', 'дней')} без сотрудника. Нажмите на день с пунктирной рамкой, чтобы поставить человека.
+      </div>}
+      {monthShifts.isLoading
+        ? <Card><SkeletonRows rows={5}/></Card>
+        : <MonthCalendar month={month} days={monthDays} selected={desktop ? picked : undefined} onPick={pickDay}/>}
+      {!monthShifts.isLoading && <>
+        {legend}
+        {!gaps && !pastEmpty && <div className="mt-2 text-sub text-muted">Каждый день месяца закрыт сменой</div>}
+        {!gaps && !!pastEmpty && <div className="mt-2 text-sub text-muted">Без смен прошло {pastEmpty} {plural(pastEmpty, 'день', 'дня', 'дней')}</div>}
+      </>}
+    </>
+
+  const weekView = <>
+    <PeriodNav unit="week" label={weekLabel(weekStart)} onStep={shiftWeek}/>
+    {weekShifts.isLoading
+      ? <Card><SkeletonRows rows={5}/></Card>
+      : pointId
+        ? <Card>
+          <List>
+            {weekDates.map(date => {
+              const shifts = (byDate.get(date) ?? []).filter(shift => shift.status !== 'REPLACED')
+              const need = slotsForDay(point?.slotConfig, date)
+              const view = dayView(shifts, date, today, nameOf, { need })
+              const working = shifts.filter(isWorking)
+              const missing = need - working.length
+              return <ListRow
+                key={date}
+                leading={<div className="w-8 flex-none text-center">
+                  <div className="font-mono text-axis text-muted">{dayjs(date).format('dd')}</div>
+                  <div className={`mx-auto flex h-6 min-w-6 items-center justify-center text-title leading-none font-semibold tabular-nums ${date === today ? 'rounded-full bg-accent px-1 text-white' : ''}`}>
+                    {dayjs(date).date()}
+                  </div>
+                </div>}
+                title={working.length
+                  ? working.map(shift => nameOf(shift.employeeId)).join(', ')
+                  : view.vacant
+                    ? <span className="font-semibold text-bad-strong">Нужен сотрудник</span>
+                    : <span className="text-muted">{shifts.length ? 'Не вышел' : 'Никто не работал'}</span>}
+                sub={view.vacant && working.length
+                  ? <span className="font-medium text-bad-strong">Не хватает ещё {missing} {plural(missing, 'сотрудника', 'сотрудников', 'сотрудников')}</span>
+                  : working.map(shift => `${timeLabel(shift.startsAt)}–${timeLabel(shift.endsAt)}${shift.payMode === 'HALF' ? ' · ½ смены' : ''}`).join(' · ') || undefined}
+                chevron
+                className={view.vacant ? 'border-l-[3px] border-bad bg-bad-tint/60' : undefined}
+                align="start"
+                onClick={() => pickDay(date)}
+              />
+            })}
+          </List>
+        </Card>
+        // В матрице клетка — это конкретная точка в конкретном дне, поэтому
+        // открываем сразу день этой точки, а не общий список.
+        : <WeekMatrix weekStart={weekStart} rows={matrixRows} onPick={openDay}/>}
+    {!weekShifts.isLoading && !pointId && legend}
+  </>
 
   const board = <>
     <Segmented
       className="mb-3"
       value={mode}
       onChange={setMode}
-      options={pointId
-        ? [{ value: 'month', label: 'Месяц' }, { value: 'week', label: 'Неделя' }]
-        : [{ value: 'month', label: 'ПВЗ за неделю' }, { value: 'week', label: 'Дни недели' }]}
+      options={[{ value: 'month', label: 'Месяц' }, { value: 'week', label: 'Неделя' }]}
     />
-
-    <Button block className="mb-2" onClick={() => buildFrom(continueFrom)}>
+    {current.error && <div className="mb-3"><ErrorNote error={current.error}/></div>}
+    {mode === 'month' ? monthView : weekView}
+    <Button block className="mt-4" onClick={() => buildFrom(continueFrom)}>
       <span className="inline-flex items-center justify-center gap-2"><IconSchedule/>{continueFrom ? `Продолжить график с ${dayLabel(continueFrom)}` : 'Заполнить график'}</span>
     </Button>
-    <div className="mb-3 text-sub text-muted">{pointId
-      ? 'Нажмите на день, чтобы поставить или заменить человека.'
-      : 'Нажмите на клетку, чтобы поставить человека. Месяц целиком — у одного ПВЗ, выберите его вверху.'}</div>
-
-    {totals.error && <div className="mb-3"><ErrorNote error={totals.error}/></div>}
-
-    {totals.loading
-      ? <Card><SkeletonRows rows={5}/></Card>
-      : mode === 'week'
-        ? <Card>
-          <List>
-            {weekDays.map(day => <ListRow
-              key={day.date}
-              leading={<div className="w-8 flex-none text-center">
-                <div className="font-mono text-axis text-muted-soft">{dayjs(day.date).format('dd')}</div>
-                <div className="text-title font-semibold tabular-nums" style={{ color: day.date === today ? 'var(--color-accent)' : undefined }}>
-                  {dayjs(day.date).date()}
-                </div>
-              </div>}
-              title={day.shifts.length
-                ? [...new Set(day.shifts.map(shift => nameOf(shift.employeeId)))].join(', ')
-                : <span className="font-semibold text-bad-strong">Нужен сотрудник</span>}
-              sub={day.shifts.length
-                ? day.shifts.map(shift => `${pointName(shift.pickupPointId)} ${timeLabel(shift.startsAt)}`).join(' · ')
-                : 'Смена не занята'}
-              pill={{ label: day.shifts.length ? `${day.shifts.length} смен` : day.date >= today ? 'назначить' : 'пусто', tone: day.shifts.length ? 'neutral' : day.date >= today ? 'bad' : 'neutral' }}
-              className={!day.shifts.length && day.date >= today ? 'border-l-[3px] border-bad bg-bad-tint/60' : undefined}
-              align="start"
-              onClick={() => { setPicked(day.date); setMode('month') }}
-            />)}
-          </List>
-        </Card>
-        : pointId
-          ? <>
-            {!!gaps && <div role="status" className="mb-2 rounded-md border border-bad bg-bad-tint px-3 py-2 text-sub font-medium text-bad-strong">
-              {gaps} {gapUnit} без сотрудника. Нажмите на день с красной рамкой, чтобы назначить.
-            </div>}
-            <div className="mb-2 flex items-center justify-between">
-              <button type="button" aria-label="Предыдущий месяц" className="tap flex size-11 items-center justify-center rounded-md border border-line bg-surface text-accent" onClick={() => shiftMonth(-1)}><Chevron dir="left" size={22}/></button>
-              <span className="text-row font-semibold">{monthLabel(month)}</span>
-              <button type="button" aria-label="Следующий месяц" className="tap flex size-11 items-center justify-center rounded-md border border-line bg-surface text-accent" onClick={() => shiftMonth(1)}><Chevron size={22}/></button>
-            </div>
-            <MonthCalendar month={month} days={monthDays} selected={picked} onPick={setPicked}/>
-          </>
-          : <WeekMatrix
-            weekStart={weekStart}
-            rows={matrixRows}
-            onWeek={setWeekStart}
-            // В матрице клетка — это конкретная точка в конкретном дне, поэтому
-            // открываем сразу день этой точки, а не общий список.
-            onPick={(point, date) => openDay(point, date)}
-          />}
-
-    {!totals.loading && mode === 'month' && <Legend people={pointId ? [] : weekPeople}/>}
-
-    {!totals.loading && mode === 'month' && pointId && !gaps && <div className="mt-2 text-sub text-muted">Каждый день месяца закрыт сменой</div>}
+    <Button block variant="secondary" className="mt-2" onClick={() => push('/sched/share')}>
+      <span className="inline-flex items-center justify-center gap-2"><IconSend/>Поделиться</span>
+    </Button>
   </>
 
-  // Другой график с выбранного дня: мастер подхватит прежнюю очередь, останется поменять нужное.
-  const newFromDay = pointId && picked && picked >= today && <Button block variant="secondary" className="mt-2" onClick={() => buildFrom(picked)}>
-    Новый график с {dayLabel(picked)}
-  </Button>
-
-  const dayPanel = picked && !totals.loading && <>
-      <SectionTitle
-        count={dayShifts.length}
-        action={pointId
-          ? <TextButton onClick={() => openDay(pointId, picked)}>Изменить</TextButton>
-          : undefined}
-      >{dayLabel(picked)}</SectionTitle>
-      <Card>
-        {dayShifts.length === 0
-          ? <EmptyState
-            visual={<Illustration name="schedule"/>}
-            title="В этот день никто не выходит"
-            sub={pointId ? `ПВЗ «${pointName(pointId)}» останется без сотрудника` : 'Ни на одном ПВЗ нет смены'}
-          />
-          : <List>
-            {dayShifts.map(shift => <ListRow
-              key={shift.id}
-              leading={<Avatar initials={initials(nameOf(shift.employeeId))}/>}
-              title={nameOf(shift.employeeId)}
-              sub={`${pointName(shift.pickupPointId)} · ${shift.payMode === 'HALF' ? '½ оплаты' : shift.payMode === 'FULL' ? 'весь день' : payModeTitles[shift.payMode]}`}
-              right={`${timeLabel(shift.startsAt)}–${timeLabel(shift.endsAt)}`}
-              rightSub={shiftState(shift, today).title}
-              rightSubTone={shiftState(shift, today).tone}
-              chevron
-              onClick={() => openDay(shift.pickupPointId, picked)}
-            />)}
-          </List>}
-      </Card>
-
-      {!dayShifts.length && <Button
-        block
-        className="mt-3"
-        onClick={() => openDay(pointId || activePoints[0]?.id || '', picked)}
-      >Поставить сотрудника</Button>}
-      {newFromDay}
-    </>
-
+  // Год в чипе — только когда он не текущий: «Январь» рядом с декабрём иначе читается как прошлый.
+  const period = monthLabel(month).split(' ')[0] + (month.slice(0, 4) === currentMonth().slice(0, 4) ? '' : ` ${month.slice(0, 4)}`)
   const filters = <FilterRow>
     <Chip onClick={() => open('pvzPick')}>{pointTitle}</Chip>
-    <Chip onClick={() => open('monthPick')}>{period}</Chip>
+    <Chip onClick={() => open('monthPick', { value: month, onPick: setScheduleMonth })}>{period}</Chip>
   </FilterRow>
 
-  if (!desktop) return <Screen filters={filters}>{board}{dayPanel}{links}</Screen>
+  // Все ПВЗ: день открывается шторкой конкретной точки, правой колонке показывать нечего.
+  if (!desktop || !pointId) return <Screen wide={desktop} filters={filters}>{board}</Screen>
 
-  // Master–detail десктопа: календарь слева, выбранный день справа, а не под календарём —
+  // Master–detail десктопа: сетка слева, выбранный день справа, а не под ней —
   // на широком экране день под сеткой уезжает за нижний край.
   return <Screen wide filters={filters}>
     <div className="grid grid-cols-[minmax(0,1fr)_340px] items-start gap-6">
-      <div>{board}{links}</div>
+      <div>{board}</div>
       {/* Первый блок колонки встаёт вровень с переключателем слева — без отступа заголовка раздела. */}
       <div className="sticky top-0 [&>:first-child]:mt-0">
-        {/* День точки правится прямо здесь — то же содержимое, что в шторке дня на телефоне. */}
-        {picked && pointId
+        {picked
           ? <>
             <SectionTitle>{dayLabel(picked)} · {dayjs(picked).format('dddd')}</SectionTitle>
             <DaySheet key={`${pointId}-${picked}`} inline pointId={pointId} date={picked}/>
-            {newFromDay}
           </>
-          : dayPanel || <Card><EmptyState title="Выберите день" sub="Смены дня появятся здесь — без шторки поверх календаря"/></Card>}
+          : <Card><EmptyState title="Выберите день" sub="Смены дня появятся здесь — без шторки поверх сетки"/></Card>}
       </div>
     </div>
   </Screen>
 }
 
-const LEGEND:{ tone:Tone; label:string }[] = [
+const LEGEND:{ tone:Tone; label:string; dashed?:boolean }[] = [
   { tone: 'accent', label: 'по плану' },
   { tone: 'ok', label: 'отработана' },
-  { tone: 'warn', label: 'неполная' },
-  { tone: 'bad', label: 'нет человека' },
+  { tone: 'warn', label: '½ смены или часы' },
+  { tone: 'bad', label: 'не вышел' },
+  { tone: 'bad', label: 'нужен сотрудник', dashed: true },
 ]
 
-/** Расшифровка сетки: цвета клеток и, в матрице всех ПВЗ, чьи это инициалы. */
+/** Расшифровка сетки: ровно те клетки, что бывают в сетке, и, в матрице всех ПВЗ, чьи это инициалы. */
 function Legend({ people }:{ people:string[] }) {
   return <div className="mt-2.5 text-lbl text-muted">
     <div className="flex flex-wrap gap-x-3 gap-y-1">
-      {LEGEND.map(item => <span key={item.tone} className="flex items-center gap-1.5">
-        {item.tone === 'warn' || item.tone === 'bad'
-          ? <span style={{ color: tones[item.tone].fg }}><IconWarning size={13}/></span>
-          : <span aria-hidden className="size-2.5 rounded-[3px] border" style={{ background: tones[item.tone].bg, borderColor: tones[item.tone].fg }}/>}
+      {LEGEND.map(item => <span key={item.label} className="flex items-center gap-1.5">
+        <span
+          aria-hidden
+          className={`size-3 rounded-[3px] ${item.dashed ? 'border-[1.5px] border-dashed' : 'border'}`}
+          style={{ background: tones[item.tone].bg, borderColor: tones[item.tone].fg }}
+        />
         {item.label}
       </span>)}
     </div>

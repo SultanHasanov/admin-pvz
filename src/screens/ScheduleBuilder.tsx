@@ -153,9 +153,10 @@ export default function ScheduleBuilder() {
       const missing = draft && planned.length < draft.required
       result.set(date, {
         date,
-        lines: missing ? [...names.slice(0, 1), 'своб.'] : names.length ? names.slice(0, 2) : ['нет'],
-        tone: replaced ? 'warn' : missing ? 'bad' : changed ? 'accent' : saved.length ? 'neutral' : 'neutral',
+        lines: missing ? (names.length ? [names[0], 'нужен'] : ['пусто']) : names.slice(0, 2),
+        tone: replaced ? 'warn' : missing ? 'bad' : changed ? 'accent' : 'neutral',
         strong: Boolean(replaced || missing),
+        vacant: Boolean(missing),
       })
     }
     return result
@@ -276,7 +277,7 @@ export default function ScheduleBuilder() {
     const missing = incomplete.findIndex(Boolean) as -1 | 0 | 1
     if (missing === -1) { setStep(2); return }
     setTriedNext(true)
-    const who = seats === 2 ? `Отметьте двух менеджеров: ${groupName(missing).toLowerCase()}` : `Выберите: ${groupName(missing).toLowerCase()}`
+    const who = seats === 2 ? `Отметьте двух сотрудников: ${groupName(missing).toLowerCase()}` : `Выберите: ${groupName(missing).toLowerCase()}`
     toastError(people.length < seats * 2 ? `${who}. Не хватает сотрудников — добавьте их ниже` : who)
     document.getElementById(`guide-group-${missing}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
@@ -308,7 +309,7 @@ export default function ScheduleBuilder() {
       </button>}
       {/* Правило показываем, когда прежний график уже прочитан: иначе подстановка пришла бы поверх выбора человека. */}
       {target && inferredFor !== target && !history.error ? <Card className="mt-3"><SkeletonRows rows={4}/></Card> : <>
-      <div className="mt-3 text-sub text-muted">Сколько менеджеров одновременно нужно в обычный день?</div>
+      <div className="mt-3 text-sub text-muted">Сколько сотрудников одновременно нужно в обычный день?</div>
       <ChoiceChips value={String(seats)} onPick={value => chooseSeats(Number(value) as Seats)} options={[{ value: '1', label: 'Один' }, { value: '2', label: 'Двое' }]}/>
       <SectionTitle>2. График работы</SectionTitle>
       <ChoiceChips value={firstRun === secondRun && firstRun <= 3 ? String(firstRun) : 'custom'} onPick={value => {
@@ -328,7 +329,7 @@ export default function ScheduleBuilder() {
         return <div key={teamIndex} id={`guide-group-${teamIndex}`} className="scroll-mt-4"><Card className={`mb-3 p-3 ${flagged ? '!border-2 !border-bad' : ''}`}>
           <div role="group" aria-label={groupName(teamIndex)}>
             <div className="font-semibold">{groupName(teamIndex)}</div>
-            <div className="mt-1 text-sub text-muted">{seats === 2 ? `Отметьте двух менеджеров · выбрано ${chosen.length} из 2` : 'Выберите сотрудника'}</div>
+            <div className="mt-1 text-sub text-muted">{seats === 2 ? `Отметьте двух сотрудников · выбрано ${chosen.length} из 2` : 'Выберите сотрудника'}</div>
             {!people.length && <div className="mt-3 text-sub text-bad">Для этого ПВЗ пока нет активных сотрудников.</div>}
             <div className="mt-2 grid gap-1">
               {people.map(person => {
@@ -348,13 +349,13 @@ export default function ScheduleBuilder() {
         </Card></div>
       })}
       {people.length < seats * 2 && <>
-        <Banner tone="info">{seats === 1 ? 'Для такого графика нужно два сотрудника.' : 'Для такого графика нужно 4 менеджера.'} Не хватает {seats * 2 - people.length}, добавьте прямо здесь.</Banner>
+        <Banner tone="info">{seats === 1 ? 'Для такого графика нужно два сотрудника.' : 'Для такого графика нужно 4 сотрудника.'} Не хватает {seats * 2 - people.length}, добавьте прямо здесь.</Banner>
         <QuickAddEmployee pointId={target} onAdded={addToFreeSlot}/>
       </>}
       {seats === 2 && <>
-        <SectionTitle>Оплата двух менеджеров</SectionTitle>
+        <SectionTitle>Оплата двух сотрудников</SectionTitle>
         <ChoiceChips value={payMode} onPick={setPayMode} options={[{ value: 'FULL', label: 'Каждому полная смена' }, { value: 'HALF', label: 'Каждому ½ смены' }]}/>
-        <div className="mt-2 text-sub text-muted">У каждого своя ставка. «½ смены» даёт половину его ставки; часы между менеджерами не делятся.</div>
+        <div className="mt-2 text-sub text-muted">У каждого своя ставка. «½ смены» даёт половину его ставки; часы между сотрудниками не делятся.</div>
       </>}
       <SectionTitle>4. Как идёт график сейчас</SectionTitle>
       <div className="mb-3 text-sub text-muted">Укажите день и кто в него работает — как в вашей тетради. Дальше очередь продолжится сама.</div>
@@ -389,7 +390,7 @@ export default function ScheduleBuilder() {
 
     {step === 2 && <>
       <SectionTitle action={<TextButton onClick={() => setStep(1)}>Изменить правило</TextButton>}>Неделя с {shortDate(sourceWeek)}</SectionTitle>
-      <div className="text-sub text-muted">Неделя заполнена автоматически. Нажмите на день, чтобы заменить человека или изменить нужное число менеджеров.</div>
+      <div className="text-sub text-muted">Неделя заполнена автоматически. Нажмите на день, чтобы заменить человека или изменить нужное число сотрудников.</div>
       <Card className="mt-3 p-2">
         {Array.from({ length: 7 }, (_, offset) => {
           const date = dayjs(sourceWeek).add(offset, 'day').format('YYYY-MM-DD')
@@ -405,7 +406,7 @@ export default function ScheduleBuilder() {
               <span className={day.employeeIds.filter(Boolean).length < day.required ? 'text-bad' : 'text-muted'}>{day.employeeIds.filter(Boolean).length}/{day.required}</span>
             </button>
             {editing === date && <div className="px-3 pb-3">
-              <div className="text-sub text-muted">Сколько менеджеров нужно в этот день?</div>
+              <div className="text-sub text-muted">Сколько сотрудников нужно в этот день?</div>
               <ChoiceChips value={String(day.required)} onPick={value => {
                 const required = Number(value) as Seats
                 editDay(date, { required, employeeIds: required === 1 ? day.employeeIds.slice(0, 1) : [day.employeeIds[0] ?? null, day.employeeIds[1] ?? null], payMode: required === 1 ? 'FULL' : payMode })
@@ -442,7 +443,7 @@ export default function ScheduleBuilder() {
         <button type="button" aria-label="Следующий месяц" className="tap flex size-11 items-center justify-center rounded-md border border-line bg-surface text-accent" onClick={() => setPreviewMonth(dayjs(`${previewMonth}-01`).add(1, 'month').format('YYYY-MM'))}><Chevron size={22}/></button>
       </div>}>{monthLabel(previewMonth)}</SectionTitle>
       <MonthCalendar month={previewMonth} days={calendar} selectedDates={selectedWeekDates} onPick={date => selectWeek(weekStartOf(date))}/>
-      <div className="mt-2 text-sub text-muted">Выбрано недель: {targetWeeks.length}. Розовый — новая смена, жёлтый — замена, «своб.» — не хватает менеджера.</div>
+      <div className="mt-2 text-sub text-muted">Выбрано недель: {targetWeeks.length}. Цветом акцента — новые смены, жёлтым — замены, пунктирной рамкой — дни, где не хватает сотрудника.</div>
       {!!targetWeeks.length && <div className="mt-2 flex flex-wrap gap-2">{targetWeeks.map(week => <Button key={week} variant="secondary" className="!p-2 !text-sub" onClick={() => selectWeek(week)}>С {shortDate(week)} ×</Button>)}</div>}
       <Card className="mt-3 p-3">
         <div className="font-semibold">Добавится {plan.toAdd.length} · заменится {plan.conflicts.length} · снимется {toRemove.length}</div>

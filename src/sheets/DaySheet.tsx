@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Button } from '../shared/kit/Button'
+import { Button, TextButton } from '../shared/kit/Button'
 import { ChoiceChips } from '../shared/kit/PickList'
 import { Card } from '../shared/kit/Card'
 import { Avatar, List, ListRow } from '../shared/kit/ListRow'
@@ -8,7 +9,8 @@ import { EmptyState, SkeletonRows } from '../shared/kit/Misc'
 import { initials, shiftState } from '../shared/shifts'
 import { payModeTitles } from '../shared/salary'
 import { rubles } from '../shared/money'
-import { timeLabel, today } from '../shared/dates'
+import { dayLabel, timeLabel, today } from '../shared/dates'
+import { plural } from '../shared/format'
 import type { Shift } from '../entities/types'
 import { keys, scope } from '../services/queries'
 import { listEmployees } from '../services/employees'
@@ -20,6 +22,7 @@ import { useOrg } from '../app/OrgContext'
 import { slotsForDay } from '../entities/slots'
 import { setSlotConfig } from '../services/points'
 import { useSheets } from '../app/sheets'
+import { depthOf, useNav } from '../app/nav'
 import { toastWarn } from '../shared/kit/Toaster'
 
 /**
@@ -31,6 +34,9 @@ import { toastWarn } from '../shared/kit/Toaster'
  * `inline` — то же содержимое в правой колонке графика на десктопе, без шторки вокруг.
  * Закрывать там нечего, а «Кого поставить» открывается новой шторкой, а не подменой:
  * подменять нечего, и шторка без записи в истории потом не закрылась бы.
+ *
+ * Число мест на день меняют редко, поэтому выбор спрятан за «Изменить»: раньше он стоял
+ * открытым и сохранялся от случайного нажатия. У прошедшего дня его нет вовсе.
  */
 export default function DaySheet({ pointId, date, inline }:{
   pointId:string
@@ -39,6 +45,10 @@ export default function DaySheet({ pointId, date, inline }:{
   inline?:boolean
 }) {
   const [requestedSeats, setRequestedSeats] = useState<number | null>(null)
+  const [editingSeats, setEditingSeats] = useState(false)
+  const { push } = useNav()
+  const navigate = useNavigate()
+  const location = useLocation()
   const { pointName, points } = useOrg()
   const { open, replace } = useSheets()
   const totals = useMonthTotals()
@@ -87,10 +97,9 @@ export default function DaySheet({ pointId, date, inline }:{
       ? <Card><SkeletonRows rows={2}/></Card>
       : <Card>
         {rows.length === 0
-          ? <EmptyState
-            title="Смена не занята"
-            sub={`${pointName(pointId)} в этот день останется без сотрудника`}
-          />
+          ? past
+            ? <EmptyState title="В этот день никто не работал"/>
+            : <EmptyState title="Нужен сотрудник" sub={`${pointName(pointId)} в этот день останется без сотрудника`}/>
           : <List>
             {rows.map(shift => {
               const rules = totals.rules.filter(rule => rule.employeeId === shift.employeeId)
@@ -101,7 +110,7 @@ export default function DaySheet({ pointId, date, inline }:{
                   tone={shift.status === 'NO_SHOW' ? 'bad' : 'accent'}
                 />}
                 title={nameOf(shift.employeeId)}
-                sub={`${timeLabel(shift.startsAt)}–${timeLabel(shift.endsAt)} · ${shift.payMode === 'HALF' ? '½ оплаты' : shift.payMode === 'FULL' ? 'весь день' : payModeTitles[shift.payMode]}`}
+                sub={`${timeLabel(shift.startsAt)}–${timeLabel(shift.endsAt)} · ${shift.payMode === 'HALF' ? '½ смены' : shift.payMode === 'FULL' ? 'весь день' : payModeTitles[shift.payMode]}`}
                 right={rubles(shift.status === 'NO_SHOW' || shift.status === 'REPLACED' ? 0 : accrueShifts([shift], rules))}
                 rightSub={shiftState(shift, today()).title}
                 rightSubTone={shiftState(shift, today()).tone}
@@ -111,7 +120,7 @@ export default function DaySheet({ pointId, date, inline }:{
                   rows: [
                     ...(canSwap(shift) ? [{ title: 'Заменить', sub: 'Не может выйти — найти, кто выйдет вместо', onClick: () => swap(shift.id) }] : []),
                     { title: 'Изменить сотрудника', sub: 'Смена останется на этом месте', onClick: () => open('cand', { pointId, date, shiftId: shift.id }) },
-                    { title: 'Изменить оплату', sub: 'Весь день, ½ оплаты или часы', onClick: () => open('partial', { shiftId: shift.id, payMode: shift.payMode, startsAt: shift.startsAt }) },
+                    { title: 'Изменить оплату', sub: 'Весь день, ½ смены или часы', onClick: () => open('partial', { shiftId: shift.id, payMode: shift.payMode, startsAt: shift.startsAt }) },
                     { title: 'Убрать из графика', tone: 'bad' as const, onClick: () => remove.mutate(shift.id) },
                   ],
                 })}
@@ -125,33 +134,54 @@ export default function DaySheet({ pointId, date, inline }:{
         </div>}
       </Card>}
 
-    {!shifts.isLoading && free > 0 && rows.length > 0 && <div className="mt-2 text-sub text-bad">Место свободно: {free}. Можно добавить сотрудника на этот день.</div>}
-
-    <div className="mt-3 text-sub text-muted">Сколько человек нужно именно в этот день?</div>
-    <ChoiceChips value={String(required)} onPick={value => {
-      const count = Number(value)
-      setRequestedSeats(count)
-      capacity.mutate(count)
-    }} options={[{ value: '1', label: 'Один' }, { value: '2', label: 'Двое' }]}/>
-
-    {past && !rows.length && <div className="mt-2 text-sub leading-[1.4] text-muted">
-      День уже прошёл — поставить смену задним числом можно, но она не изменит закрытый расчёт.
+    {!shifts.isLoading && !past && free > 0 && rows.length > 0 && <div className="mt-2 text-sub font-medium text-bad-strong">
+      Не хватает ещё {free} {plural(free, 'сотрудника', 'сотрудников', 'сотрудников')}.
     </div>}
 
-    <Button
-      block
-      className="mt-3"
-      disabled={shifts.isLoading || capacity.isPending || free === 0}
-      onClick={() => {
-        if (!totals.staff.some(person => person.pickupPointIds.includes(pointId))) {
-          toastWarn('На этом ПВЗ нет сотрудников')
-          return
-        }
-        const cand = { pointId, date, seats: required }
-        if (inline) open('cand', cand)
-        else replace('cand', cand)
-      }}
-    >{free > 1 ? 'Добавить сотрудников' : 'Добавить сотрудника'}</Button>
+    {!past && (editingSeats
+      ? <>
+        <div className="mt-3 text-sub text-muted">Сколько человек нужно в этот день?</div>
+        <ChoiceChips value={String(required)} onPick={value => {
+          const count = Number(value)
+          setRequestedSeats(count)
+          setEditingSeats(false)
+          capacity.mutate(count)
+        }} options={[{ value: '1', label: 'Один' }, { value: '2', label: 'Двое' }]}/>
+      </>
+      : <div className="mt-3 flex items-center justify-between gap-2 text-sub text-muted">
+        <span>Нужно в этот день: {required === 1 ? 'один сотрудник' : `${required} ${plural(required, 'сотрудник', 'сотрудника', 'сотрудников')}`}</span>
+        <TextButton onClick={() => setEditingSeats(true)}>Изменить</TextButton>
+      </div>)}
+
+    {past && !rows.length && <div className="mt-2 text-sub leading-[1.4] text-muted">
+      День уже прошёл. Смену можно поставить задним числом — зарплата пересчитается сама.
+    </div>}
+
+    {free === 0 && !shifts.isLoading
+      ? !past && <div className="mt-3 text-sub text-muted">Все места на день заняты. Чтобы поставить ещё одного, увеличьте число мест.</div>
+      : <Button
+        block
+        className="mt-3"
+        disabled={shifts.isLoading || capacity.isPending}
+        onClick={() => {
+          if (!totals.staff.some(person => person.pickupPointIds.includes(pointId))) {
+            toastWarn('На этом ПВЗ нет сотрудников')
+            return
+          }
+          const cand = { pointId, date, seats: required }
+          if (inline) open('cand', cand)
+          else replace('cand', cand)
+        }}
+      >{free > 1 ? 'Добавить сотрудников' : 'Добавить сотрудника'}</Button>}
+
+    {/* Другой график с этого дня: мастер подхватит прежнюю очередь, останется поменять нужное. */}
+    {/* Из шторки уходим заменой её записи в истории: «закрыть и перейти» гонялись бы,
+        и запоздавший шаг назад отменил бы переход. «Назад» из мастера вернёт на график. */}
+    {!past && <Button block variant="secondary" className="mt-2" onClick={() => {
+      const to = `/sched/build?point=${pointId}&from=${date}`
+      if (inline) push(to)
+      else navigate(to, { replace: true, state: { depth: depthOf(location.state) + 1 } })
+    }}>Новый график с {dayLabel(date)}</Button>}
     {/* Отдельной «Закрыть» нет: у шторки есть крестик и жест вниз, вторая кнопка
         закрытия спорила с главным действием. */}
   </>

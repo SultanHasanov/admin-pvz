@@ -16,8 +16,22 @@ describe('день в сетке', () => {
     expect(dayView([shift('e1', '2026-09-22')], '2026-09-22', today, nameOf).tone).toBe('accent')
   })
 
-  it('пустой будущий день — красный', () => {
-    expect(dayView([], '2026-09-22', today, nameOf)).toEqual({ tone: 'bad', lines: ['нет'], strong: true })
+  it('пустой будущий день — красный, «пусто»', () => {
+    expect(dayView([], '2026-09-22', today, nameOf)).toEqual({ tone: 'bad', lines: ['пусто'], strong: true, vacant: true })
+  })
+
+  it('два места и один человек — тоже дыра', () => {
+    expect(dayView([shift('e1', '2026-09-22')], '2026-09-22', today, nameOf, { need: 2 }))
+      .toEqual({ tone: 'bad', lines: ['ОС', 'нужен'], strong: true, vacant: true })
+  })
+
+  it('невыход в прошлом — красный, без «нужен»', () => {
+    expect(dayView([shift('e1', '2026-09-10', 'NO_SHOW')], '2026-09-10', today, nameOf))
+      .toEqual({ tone: 'bad', lines: ['не вышел'], strong: true })
+  })
+
+  it('прошедший день со сменой — отработан', () => {
+    expect(dayView([shift('e1', '2026-09-10')], '2026-09-10', today, nameOf).tone).toBe('ok')
   })
 
   it('пустой прошлый день — нейтральный, без тревоги', () => {

@@ -8,7 +8,7 @@ test('пустой будущий день заметен в календаре 
   await page.goto('/sched')
 
   await expect(page.getByRole('status')).toContainText('день без сотрудника')
-  const empty = page.getByRole('button', { name: '19 сентября: НУЖЕН', exact: true })
+  const empty = page.getByRole('button', { name: '19 сентября: пусто', exact: true })
   await expect(empty).toBeVisible()
   await page.screenshot({ path: 'visual/shots/app/sched-vacancy.png' })
 

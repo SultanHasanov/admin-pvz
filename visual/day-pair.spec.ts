@@ -2,11 +2,14 @@ import { expect, test } from '@playwright/test'
 import { stubSupabase } from './stub'
 
 test('в день с двумя местами назначаются два сотрудника за один раз', async ({ page }) => {
+  // 19 сентября должно быть впереди: у прошедшего дня число мест не меняют.
+  await page.clock.setFixedTime(new Date('2026-09-18T10:00:00+03:00'))
   const recorded = await stubSupabase(page)
   await page.goto('/sched')
   await page.waitForFunction(() => '__openSheet' in window)
   await page.evaluate(() => (window as unknown as { __openSheet:(type:string, props:unknown) => void })
     .__openSheet('day', { pointId: 'p1', date: '2026-09-19' }))
+  await page.getByRole('dialog').getByRole('button', { name: 'Изменить', exact: true }).click()
   await page.getByRole('button', { name: 'Двое', exact: true }).click()
   await page.getByRole('button', { name: 'Добавить сотрудников' }).click()
 

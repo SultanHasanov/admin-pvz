@@ -109,8 +109,8 @@ test('график: день правится прямо в колонке — �
   await page.waitForSelector('[data-screen]')
 
   await page.getByRole('button', { name: /^18 сентября/ }).click()
-  // Шторки дня нет: смены дня и выбор числа мест — в правой колонке.
-  await expect(page.getByText('Сколько человек нужно именно в этот день?')).toBeVisible()
+  // Шторки дня нет: смены дня и число мест — в правой колонке.
+  await expect(page.getByText(/^Нужно в этот день:/)).toBeVisible()
   await expect(page.getByRole('dialog')).toHaveCount(0)
 
   await page.getByText('Запланирована').first().click()

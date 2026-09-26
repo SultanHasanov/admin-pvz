@@ -9,20 +9,22 @@ export interface CalendarDay {
   /** Что написать под числом: имена вышедших или действие для незакрытого места. */
   lines:string[]
   tone:Tone
-  /** Пустая клетка требует внимания — её рамку рисуем сплошным цветом тона. */
+  /** Клетка требует внимания — её рамку рисуем сплошным цветом тона. */
   strong?:boolean
-  /** Незакрытое место выделяется независимо от цветового статуса смены. */
+  /** Незакрытое место: пунктирная рамка, чтобы его не спутать с цветом плана. */
   vacant?:boolean
 }
 
 const WEEKDAYS = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'вс']
 
 /**
- * Сетка месяца. Клетка 52px — минимальная, в которую влезают число и строка инициалов,
+ * Сетка месяца. Клетка 52px — минимальная, в которую влезают число и две строки имён,
  * и при этом семь колонок помещаются в 390px без горизонтальной прокрутки.
  *
  * На десктопе колонки те же семь, но клетка выше и шире: в неё помещаются три строки
  * с именами целиком, и график читается без нажатия на день.
+ *
+ * Сегодня — залитый кружок под числом: одного цвета цифры мало, акцент тот же, что у плана.
  */
 export function MonthCalendar({ month, days, selected, selectedDates, onPick }:{
   month:string
@@ -42,10 +44,7 @@ export function MonthCalendar({ month, days, selected, selectedDates, onPick }:{
 
   return <div className="rounded-lg border border-line bg-surface px-[11px] pt-3 pb-[13px]">
     <div className="mb-[5px] grid grid-cols-7 gap-[3px]">
-      {WEEKDAYS.map((day, index) => <div
-        key={day}
-        className={cn('text-center font-mono text-axis', index > 4 ? 'text-muted-faint' : 'text-muted')}
-      >{day}</div>)}
+      {WEEKDAYS.map(day => <div key={day} className="text-center font-mono text-axis text-muted">{day}</div>)}
     </div>
 
     <div className="grid grid-cols-7 gap-[3px]">
@@ -61,28 +60,32 @@ export function MonthCalendar({ month, days, selected, selectedDates, onPick }:{
           key={date}
           type="button"
           aria-label={`${day.format('D MMMM')}${entry?.lines.length ? `: ${entry.lines.join(', ')}` : ': свободно'}`}
+          aria-current={isToday ? 'date' : undefined}
           className={cn(
             'tap flex min-w-0 flex-col gap-px rounded-md',
             roomy ? 'h-[84px] items-start justify-start px-2 pt-1.5 hover:brightness-[0.97]' : 'h-[52px] items-center justify-center',
-            entry?.vacant ? 'border-[2.5px]' : 'border-[1.5px]',
-            date > today && 'opacity-90',
+            entry?.vacant ? 'border-2 border-dashed' : 'border-[1.5px]',
           )}
           style={{
             background: entry ? palette.bg : undefined,
             borderColor: isSelected ? 'var(--color-ink)' : entry?.strong ? palette.fg : entry ? palette.line : 'var(--color-cell-line)',
-            boxShadow: isSelected && entry?.vacant ? 'inset 0 0 0 2px var(--color-bad)' : undefined,
+            boxShadow: isSelected ? '0 0 0 1px var(--color-ink)' : undefined,
           }}
           onClick={() => { if (onPick) { haptics.tap(); onPick(date) } }}
         >
           <div
-            className={cn('leading-[1.1] font-semibold tabular-nums', roomy ? 'mb-0.5 text-sub' : 'text-tiny')}
-            style={{ color: isToday ? 'var(--color-accent)' : entry ? palette.fg : 'var(--color-muted)' }}
+            className={cn(
+              'flex items-center justify-center leading-none font-semibold tabular-nums',
+              roomy ? 'mb-0.5 h-5 min-w-5 text-sub' : 'h-4 min-w-4 text-tiny',
+              isToday && 'rounded-full bg-accent px-1 text-white',
+            )}
+            style={{ color: isToday ? undefined : entry ? palette.fg : 'var(--color-muted)' }}
           >{day.date()}</div>
           {entry?.lines.slice(0, roomy ? 3 : 2).map(line => <div
             key={line}
             className={cn(
-              'font-semibold',
-              roomy ? 'w-full truncate text-left text-[11px] leading-[1.3]' : 'text-[9px] leading-[1.25]',
+              'max-w-full truncate font-semibold',
+              roomy ? 'w-full text-left text-[11px] leading-[1.3]' : 'text-[10px] leading-[1.2]',
               entry.vacant && 'font-bold',
             )}
             style={{ color: palette.fg }}

@@ -18,7 +18,7 @@ export const screens:ScreenShot[] = [
   { name: 'metric-profit', path: '/home/metric/profit', proto: 'metric' },
   { name: 'sched', path: '/sched', proto: 'sched' },
   { name: 'sched-build', path: '/sched/build' },
-  { name: 'sched-week', path: '/sched', proto: 'sched', click: 'button:has-text("Дни недели")' },
+  { name: 'sched-week', path: '/sched', proto: 'sched', click: 'button:has-text("Неделя")' },
   { name: 'people', path: '/people', proto: 'people' },
   { name: 'employee', path: '/people/e1', proto: 'emp' },
   { name: 'money-fin', path: '/money?tab=fin', proto: 'money' },

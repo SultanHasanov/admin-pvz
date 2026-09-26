@@ -107,9 +107,9 @@ test.describe('запись из шторок', () => {
     await page.goto('/sched')
     await page.waitForSelector('[data-screen]')
 
-    // В матрице «Все ПВЗ» пустая клетка подписана «нет» — открываем именно её.
-    await page.getByRole('button', { name: 'нет' }).first().click()
-    await page.waitForSelector('text=Смена не занята')
+    // В матрице «Все ПВЗ» пустая клетка подписана «пусто» — открываем именно её.
+    await page.getByRole('button', { name: /: пусто$/ }).first().click()
+    await page.getByRole('dialog').getByText('Нужен сотрудник', { exact: true }).waitFor()
     await page.screenshot({ path: 'visual/shots/app/sheet-day.png' })
 
     await page.getByRole('button', { name: 'Добавить сотрудника' }).click()

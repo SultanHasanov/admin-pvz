@@ -12,7 +12,7 @@ test('календарь графика листается по месяцам �
   await expect(page.getByText('Сентябрь 2026', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Следующий месяц' }).click()
   await expect(page.getByText('Октябрь 2026', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Октябрь ▾' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Октябрь', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Предыдущий месяц' }).click()
   await expect(page.getByText('Сентябрь 2026', { exact: true })).toBeVisible()
 })

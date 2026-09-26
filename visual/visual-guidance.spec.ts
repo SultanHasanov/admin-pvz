@@ -33,7 +33,7 @@ test.describe('визуальные подсказки пустых состоя
     await stubSupabase(page, { point: 'p1' })
     await emptyTable(page, 'shifts')
     await page.goto('/sched?d=2026-09-18&pvz=p1')
-    await page.getByText('В этот день никто не выходит').scrollIntoViewIfNeeded()
+    await page.getByRole('dialog').getByText('В этот день никто не работал').waitFor()
     await shot(page, 'empty-schedule')
   })
 
