@@ -1,5 +1,5 @@
 import dayjs from 'dayjs'
-import type { Marketplace, Transaction } from './types'
+import type { IncomeScheduleSettings, Marketplace, Transaction } from './types'
 import { SHORT_MONTHS, weekLabel } from '../shared/dates'
 
 /**
@@ -14,7 +14,9 @@ import { SHORT_MONTHS, weekLabel } from '../shared/dates'
  * (понедельник у WB, 10-е или 20-е у Ozon). По этой паре запись и узнаётся.
  */
 export const PAYOUT_CATEGORY:Record<Marketplace, string> = { WB: 'Выручка WB', OZON: 'Выручка Ozon' }
-const CATEGORIES = Object.values(PAYOUT_CATEGORY)
+export const CUSTOM_PAYOUT_CATEGORY = 'Выручка по датам'
+const CATEGORIES = [...Object.values(PAYOUT_CATEGORY), CUSTOM_PAYOUT_CATEGORY]
+export type IncomePeriodMode = 'WEEKLY' | 'CUSTOM'
 
 export const scheduleLabel = (marketplace:Marketplace) =>
   marketplace === 'OZON' ? 'Ozon — выплата 10–15 и 20–25 числа' : 'WB — выплата каждый понедельник за прошлую неделю'
@@ -22,6 +24,8 @@ export const scheduleLabel = (marketplace:Marketplace) =>
 export interface PayoutPeriod {
   id:string
   marketplace:Marketplace
+  mode?:IncomePeriodMode
+  category?:string
   /** Дата записи и день, с которого выплату ждём. */
   date:string
   title:string
@@ -35,7 +39,7 @@ const short = (date:dayjs.Dayjs) => `${date.date()} ${SHORT_MONTHS[date.month()]
 function wbPeriod(monday:string):PayoutPeriod {
   const covered = weekLabel(dayjs(monday).subtract(7, 'day').format('YYYY-MM-DD'))
   return {
-    id: `WB-${monday}`, marketplace: 'WB', date: monday,
+    id: `WB-${monday}`, marketplace: 'WB', mode: 'WEEKLY', category: PAYOUT_CATEGORY.WB, date: monday,
     title: `Выплата ${short(dayjs(monday))}`, sub: `за ${covered}`,
     description: `Выплата WB за ${covered}`,
   }
@@ -45,10 +49,38 @@ function ozonPeriod(month:string, from:number):PayoutPeriod {
   const start = dayjs(`${month}-${String(from).padStart(2, '0')}`)
   const window = `${from}–${from + 5} ${SHORT_MONTHS[start.month()]}`
   return {
-    id: `OZON-${start.format('YYYY-MM-DD')}`, marketplace: 'OZON', date: start.format('YYYY-MM-DD'),
+    id: `OZON-${start.format('YYYY-MM-DD')}`, marketplace: 'OZON', category: PAYOUT_CATEGORY.OZON, date: start.format('YYYY-MM-DD'),
     title: `Выплата ${window}`, sub: 'Ozon, два раза в месяц',
     description: `Выплата Ozon ${window}`,
   }
+}
+
+/** Даты месяца с прижатием 29–31 к его концу и без дублей. */
+export function customDatesOfMonth(month:string, days:number[]) {
+  const end = dayjs(`${month}-01`).endOf('month').date()
+  return [...new Set(days.map(day => Math.min(Math.max(day, 1), end)))].sort((a, b) => a - b)
+    .map(day => dayjs(`${month}-01`).date(day).format('YYYY-MM-DD'))
+}
+
+export function customPeriodsOfMonth(month:string, days:number[]):PayoutPeriod[] {
+  const dates = customDatesOfMonth(month, days)
+  const previousMonth = dayjs(`${month}-01`).subtract(1, 'month').format('YYYY-MM')
+  const previousDates = customDatesOfMonth(previousMonth, days)
+  return dates.map((date, index) => {
+    const previous = index ? dates[index - 1] : previousDates.at(-1)!
+    const coveredFrom = dayjs(previous)
+    const coveredTo = dayjs(date).subtract(1, 'day')
+    const covered = `${short(coveredFrom)} – ${short(coveredTo)}`
+    return {
+      id: `CUSTOM-${date}`, marketplace: 'WB', mode: 'CUSTOM', category: CUSTOM_PAYOUT_CATEGORY, date,
+      title: `Выплата ${short(dayjs(date))}`, sub: `за ${covered}`,
+      description: `Выплата по датам за ${covered}`,
+    }
+  })
+}
+
+export function schedulePeriodsOfMonth(settings:IncomeScheduleSettings, mode:IncomePeriodMode, month:string) {
+  return mode === 'WEEKLY' ? periodsOfMonth('WB', month) : customPeriodsOfMonth(month, settings.customDays)
 }
 
 /** Периоды выплат месяца. У WB — понедельники месяца: неделя на стыке идёт в месяц своего понедельника. */
@@ -71,10 +103,11 @@ export interface MatchedPeriod { period:PayoutPeriod; entry?:Transaction }
  * прежняя сумма «за месяц», запись не того маркетплейса, второй раз вписанный период.
  */
 export function matchPeriods(periods:PayoutPeriod[], entries:Transaction[], pointId:string, marketplace:Marketplace) {
-  const own = entries.filter(entry => isPayoutEntry(entry) && entry.pickupPointId === pointId)
+  const categories = new Set(periods.map(period => period.category ?? PAYOUT_CATEGORY[marketplace]))
+  const own = entries.filter(entry => isPayoutEntry(entry) && entry.pickupPointId === pointId && categories.has(entry.category))
   const used = new Set<string>()
   const matched:MatchedPeriod[] = periods.map(period => {
-    const entry = own.find(row => !used.has(row.id) && row.category === PAYOUT_CATEGORY[marketplace] && row.date === period.date)
+    const entry = own.find(row => !used.has(row.id) && row.category === (period.category ?? PAYOUT_CATEGORY[marketplace]) && row.date === period.date)
     if (entry) used.add(entry.id)
     return { period, entry }
   })
@@ -86,9 +119,38 @@ export const periodState = ({ period, entry }:MatchedPeriod, today:string):Perio
   entry ? 'done' : period.date <= today ? 'due' : 'future'
 
 /** Период по его id — для шторки ввода суммы. */
-export function periodById(id:string):PayoutPeriod | null {
+export function periodById(id:string, customDays:number[] = [10, 25]):PayoutPeriod | null {
   const [marketplace, date] = [id.split('-')[0] as Marketplace, id.slice(id.indexOf('-') + 1)]
+  if (id.startsWith('CUSTOM-')) return customPeriodsOfMonth(date.slice(0, 7), customDays).find(period => period.id === id) ?? null
   return periodsOfMonth(marketplace, date.slice(0, 7)).find(period => period.id === id) ?? null
+}
+
+/** Напоминание по включённым общим режимам дохода. */
+export function scheduledIncomeReminder({ today, points, entries, settings }:{
+  today:string
+  points:{ id:string; name:string }[]
+  entries:Transaction[]
+  settings:IncomeScheduleSettings
+}):PayoutReminder | null {
+  const modes:IncomePeriodMode[] = [
+    ...(settings.weeklyEnabled ? ['WEEKLY' as const] : []),
+    ...(settings.customEnabled ? ['CUSTOM' as const] : []),
+  ]
+  const months = [dayjs(today).subtract(1, 'month').format('YYYY-MM'), today.slice(0, 7)]
+  const missing = points.flatMap(point => modes.flatMap(mode => {
+    const due = months.flatMap(month => schedulePeriodsOfMonth(settings, mode, month)).filter(period => period.date <= today)
+    return matchPeriods(due, entries, point.id, 'WB').matched
+      .filter(row => !row.entry).map(row => ({ point, period: row.period }))
+  }))
+  if (!missing.length) return null
+  const first = missing.sort((a, b) => a.period.date.localeCompare(b.period.date))[0]
+  const shown = missing.slice(0, 2).map(item => `${item.point.name} — ${item.period.mode === 'CUSTOM' ? 'по датам' : item.period.sub}`).join(' · ')
+  return {
+    refId: missing.map(item => item.period.id).sort().join('|'),
+    title: 'Внесите доход', sub: missing.length > 2 ? `${shown} и ещё ${missing.length - 2}` : shown,
+    pointId: first.point.id, periodId: first.period.id,
+    date: missing.map(item => item.period.date).sort().at(-1)!,
+  }
 }
 
 export interface PayoutReminder {

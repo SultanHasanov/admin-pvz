@@ -47,6 +47,7 @@ export const keys = {
   requests: (scope:'open' | 'all') => ['shift-requests', scope] as const,
   notificationReads: ['notification-reads'] as const,
   payoutSettings: ['payout-settings'] as const,
+  incomeSchedule: ['income-schedule'] as const,
 
   // Фаза 6: кабинет сотрудника, приглашения, части удержаний.
   /** OWNER / MANAGER / EMPLOYEE — какую оболочку открыть. */
@@ -92,4 +93,5 @@ export const scope = {
   telegram: ['telegram-integrations'],
   telegramBot: ['telegram-bot'],
   setup: ['setup-progress'],
+  incomeSchedule: ['income-schedule'],
 } as const satisfies Record<string, readonly [string]>

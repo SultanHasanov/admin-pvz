@@ -1,11 +1,23 @@
 import { describe, expect, it } from 'vitest'
 import type { Transaction } from './types'
-import { matchPeriods, PAYOUT_CATEGORY, payoutReminder, periodById, periodState, periodsOfMonth, splitMonth } from './payouts'
+import { customDatesOfMonth, customPeriodsOfMonth, matchPeriods, PAYOUT_CATEGORY, payoutReminder, periodById, periodState, periodsOfMonth, splitMonth } from './payouts'
 
 const income = (id:string, pointId:string, date:string, category = PAYOUT_CATEGORY.WB):Transaction =>
   ({ id, kind: 'INCOME', pickupPointId: pointId, date, category, amountKopecks: 100000 })
 
 describe('периоды выплат', () => {
+  it('пользовательские дни образуют периоды от предыдущей выплаты', () => {
+    const periods = customPeriodsOfMonth('2026-09', [10, 25])
+    expect(periods.map(period => [period.id, period.date, period.sub])).toEqual([
+      ['CUSTOM-2026-09-10', '2026-09-10', 'за 25 авг – 9 сент'],
+      ['CUSTOM-2026-09-25', '2026-09-25', 'за 10 сент – 24 сент'],
+    ])
+    expect(periodById('CUSTOM-2026-09-25', [10, 25])?.category).toBe('Выручка по датам')
+  })
+
+  it('29–31 числа прижимаются к концу короткого месяца без дублей', () => {
+    expect(customDatesOfMonth('2027-02', [10, 30, 31])).toEqual(['2027-02-10', '2027-02-28'])
+  })
   it('WB — понедельники месяца, за прошлую неделю', () => {
     const periods = periodsOfMonth('WB', '2026-09')
     expect(periods.map(period => period.date)).toEqual(['2026-09-07', '2026-09-14', '2026-09-21', '2026-09-28'])

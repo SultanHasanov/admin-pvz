@@ -14,7 +14,7 @@ export function useRunStep() {
     if (id === 'points') push('/more/points')
     else if (id === 'employees') push('/people/new')
     else if (id === 'defaultRate') open('setRate')
-    else if (id === 'shifts') push('/sched/wizard')
+    else if (id === 'shifts') push('/sched/build')
     else if (id === 'income') open('op', { kind: 'INCOME' })
     else if (id === 'expense') open('op', { kind: 'EXPENSE' })
     else if (id === 'invite') push('/people')

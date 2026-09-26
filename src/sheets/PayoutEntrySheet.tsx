@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '../shared/kit/Button'
 import { MoneyField } from '../shared/kit/Field'
-import { EmptyState } from '../shared/kit/Misc'
+import { EmptyState, SkeletonRows } from '../shared/kit/Misc'
 import { parseMoney, rubles } from '../shared/money'
 import { matchPeriods, PAYOUT_CATEGORY, periodById } from '../entities/payouts'
+import { getIncomeSchedule } from '../services/incomeSchedule'
 import { keys, scope } from '../services/queries'
 import { createTransaction, listTransactions } from '../services/finance'
 import { useWrite } from '../features/write'
@@ -20,7 +21,8 @@ export default function PayoutEntrySheet({ pointId, periodId, close }:{ pointId:
   const { replace } = useSheets()
   const [amount, setAmount] = useState('')
   const point = points.find(item => item.id === pointId)
-  const period = periodById(periodId)
+  const settings = useQuery({ queryKey: keys.incomeSchedule, queryFn: getIncomeSchedule })
+  const period = periodById(periodId, settings.data?.customDays)
   const month = period?.date.slice(0, 7) ?? ''
 
   // Свежие записи месяца: период мог заполниться в другой вкладке, пока шторка была открыта.
@@ -39,7 +41,7 @@ export default function PayoutEntrySheet({ pointId, periodId, close }:{ pointId:
       const fresh = await listTransactions(month, pointId)
       if (matchPeriods([period!], fresh, pointId, period!.marketplace).matched[0].entry) throw new Error('За этот период уже вписано — откройте запись')
       await createTransaction({
-        kind: 'INCOME', pickupPointId: pointId, category: PAYOUT_CATEGORY[period!.marketplace],
+        kind: 'INCOME', pickupPointId: pointId, category: period!.category ?? PAYOUT_CATEGORY[period!.marketplace],
         amountKopecks: kopecks, date: period!.date, description: period!.description,
       })
     },
@@ -48,6 +50,7 @@ export default function PayoutEntrySheet({ pointId, periodId, close }:{ pointId:
     onDone: close,
   })
 
+  if (settings.isPending) return <SkeletonRows rows={2}/>
   if (!period || !point) return <EmptyState title="Период не найден"/>
 
   return <>

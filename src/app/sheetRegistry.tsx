@@ -124,6 +124,7 @@ export const sheetRegistry:Partial<Record<SheetType, SheetDef>> = {
   setTax: { title: () => 'Ставка налога', component: load(() => import('../sheets/settings/SetTaxSheet')) },
   setRate: { title: () => 'Ставка по умолчанию', component: load(() => import('../sheets/settings/SetRateSheet')) },
   setPayDays: { title: () => 'Дни выплат', component: load(() => import('../sheets/settings/SetPayDaysSheet')) },
+  setIncomeSchedule: { title: () => 'График доходов', component: load(() => import('../sheets/settings/SetIncomeScheduleSheet')) },
   newCat: { title: () => 'Новая категория', component: load(() => import('../sheets/settings/CategorySheet')) },
   renameCat: { title: () => 'Переименовать категорию', component: load(() => import('../sheets/settings/CategorySheet')) },
   newRecur: { title: props => props.cost ? 'Постоянный расход' : 'Новый постоянный расход', component: load(() => import('../sheets/settings/NewRecurSheet')) },

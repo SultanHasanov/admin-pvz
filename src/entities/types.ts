@@ -50,6 +50,8 @@ export interface RecurringExpenseOccurrence { id:string; recurringExpenseId:stri
 export interface ShiftRequest { id:string; employeeId:string; pickupPointId:string|null; kind:ShiftRequestKind; dateFrom:string; dateTo:string; reason:string|null; status:ShiftRequestStatus; substituteEmployeeId:string|null; resolutionComment:string|null; resolvedAt:string|null; createdAt:string }
 /** Дни выплат организации (миграция 0016). Экран настройки появится в фазе 7. */
 export interface PayoutSettings { advanceDay:number|null; payday:number|null; advanceMode:'FIXED'|'CALC'|'MANUAL'; advanceSumKopecks:number }
+/** Как владелец вносит доход маркетплейса. Настройка одна на организацию. */
+export interface IncomeScheduleSettings { weeklyEnabled:boolean; customEnabled:boolean; customDays:number[] }
 export interface TaxSettings { rate:number; enabled:boolean }
 export interface DashboardSummary { income:number; expenses:number; payroll:number; tax:number; confirmedLosses:number; shifts:number }
 export interface SalarySheet { employeeId:string; accrued:number; bonuses:number; penalties:number; deductions:number; paid:number; balance:number; shifts:number }

@@ -1,5 +1,5 @@
 import type { PickupPoint, Transaction } from '../../entities/types'
-import { matchPeriods, periodsOfMonth, periodState } from '../../entities/payouts'
+import { matchPeriods, periodsOfMonth, periodState, type PayoutPeriod } from '../../entities/payouts'
 import { Card } from '../../shared/kit/Card'
 import { TextButton } from '../../shared/kit/Button'
 import { List, ListRow } from '../../shared/kit/ListRow'
@@ -14,18 +14,19 @@ import { useSheets } from '../../app/sheets'
  * Записи вне периодов (прежняя сумма «за месяц», повтор) показаны отдельно: это
  * почти наверняка дубль, и владелец решает сам, удалять ли.
  */
-export function PointPayouts({ point, month, entries }:{ point:PickupPoint; month:string; entries:Transaction[] }) {
+export function PointPayouts({ point, month, entries, periods, scheduleLabel }:{ point:PickupPoint; month:string; entries:Transaction[]; periods?:PayoutPeriod[]; scheduleLabel?:string }) {
   const { open } = useSheets()
   const marketplace = point.marketplace ?? 'WB'
   const now = today()
-  const { matched, stray } = matchPeriods(periodsOfMonth(marketplace, month), entries, point.id, marketplace)
+  const shownPeriods = periods ?? periodsOfMonth(marketplace, month)
+  const { matched, stray } = matchPeriods(shownPeriods, entries, point.id, marketplace)
   const total = [...matched.flatMap(row => row.entry ? [row.entry] : []), ...stray].reduce((sum, entry) => sum + entry.amountKopecks, 0)
 
   return <Card className="mb-3">
     <div className="flex items-start gap-3 border-b border-line-soft px-[15px] py-3">
       <div className="min-w-0 flex-1">
         <div className="truncate text-row font-semibold">{point.name}</div>
-        <div className="mt-0.5 text-sub text-muted">{marketplace === 'OZON' ? 'Ozon · 10–15 и 20–25 числа' : 'WB · каждый понедельник'}</div>
+        <div className="mt-0.5 text-sub text-muted">{scheduleLabel ?? 'Каждый понедельник'}</div>
       </div>
       <div className="text-row font-semibold tabular-nums">{rubles(total)}</div>
     </div>
@@ -46,7 +47,7 @@ export function PointPayouts({ point, month, entries }:{ point:PickupPoint; mont
         />
       })}
     </List>
-    {matched.some(row => !row.entry) && <div className="border-t border-line-soft px-[15px] py-2.5">
+    {periods === undefined && shownPeriods[0]?.mode !== 'CUSTOM' && matched.some(row => !row.entry) && <div className="border-t border-line-soft px-[15px] py-2.5">
       <TextButton onClick={() => open('payoutMonth', { pointId: point.id, month })}>Вписать весь месяц одной суммой</TextButton>
     </div>}
     {!!stray.length && <div className="border-t border-line-soft">

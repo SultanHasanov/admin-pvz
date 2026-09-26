@@ -10,6 +10,7 @@ interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'cla
   block?:boolean
   className?:string
   children:ReactNode
+  icon?:ReactNode
 }
 
 const variants:Record<Variant, string> = {
@@ -23,7 +24,7 @@ const variants:Record<Variant, string> = {
  * Кнопка действия. Padding 16px и кегль 16px — из футера шторки прототипа:
  * это же и минимальная цель для пальца, и защита от зума поля рядом на iOS.
  */
-export function Button({ variant = 'primary', block, className, onClick, children, ...rest }:ButtonProps) {
+export function Button({ variant = 'primary', block, className, onClick, children, icon, ...rest }:ButtonProps) {
   return <button
     type="button"
     className={cn(
@@ -34,7 +35,7 @@ export function Button({ variant = 'primary', block, className, onClick, childre
     )}
     onClick={event => { haptics.tap(); onClick?.(event) }}
     {...rest}
-  >{children}</button>
+  ><span className="inline-flex items-center justify-center gap-2">{icon}{children}</span></button>
 }
 
 /**
@@ -61,23 +62,30 @@ export function TextButton({ children, onClick, tone = 'accent', className }:{
 }
 
 /** Плитка быстрого действия: смысловая иконка в цветном квадрате и подпись. */
-export function ActionTile({ icon, sign, label, tone, onClick }:{
+export function ActionTile({ icon, sign, label, tone, onClick, layout = 'vertical' }:{
   icon?:ReactNode
   /** @deprecated Оставлен для совместимости старых экранов; новые плитки используют icon. */
   sign?:ReactNode
   label:ReactNode
   tone:{ bg:string; fg:string }
   onClick:() => void
+  layout?:'vertical' | 'horizontal'
 }) {
   return <button
     type="button"
-    className="tap rounded-[15px] border border-line bg-surface px-[14px] py-[13px] text-left active:border-accent"
+    className={cn(
+      'tap rounded-[15px] border border-line bg-surface px-[14px] py-[13px] text-left active:border-accent',
+      layout === 'horizontal' && 'flex min-h-[72px] items-center gap-3',
+    )}
     onClick={() => { haptics.tap(); onClick() }}
   >
     <div
-      className="mb-[9px] flex size-[26px] items-center justify-center rounded-[9px] text-[15px] font-semibold"
+      className={cn(
+        'flex size-[26px] flex-none items-center justify-center rounded-[9px] text-[15px] font-semibold',
+        layout === 'vertical' && 'mb-[9px]',
+      )}
       style={{ background: tone.bg, color: tone.fg }}
     >{icon ?? sign}</div>
-    <div className="text-act leading-[1.25] font-medium">{label}</div>
+    <div className="min-w-0 text-act leading-[1.25] font-medium">{label}</div>
   </button>
 }

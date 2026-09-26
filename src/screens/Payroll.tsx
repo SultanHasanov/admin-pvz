@@ -19,6 +19,7 @@ import { useSalarySheets } from '../features/money/useSalarySheets'
 import { useOrg } from '../app/OrgContext'
 import { useNav } from '../app/nav'
 import { useSheets } from '../app/sheets'
+import { IconAdvance, IconBox, IconDeduction, IconIncome, IconPayout, IconSchedule, IconSettings } from '../shared/kit/icons'
 
 /** Неполный выход — главное, что владелец ищет глазами в списке смен. */
 const kindOf = (shift:Shift) => shift.payMode === 'HALF' ? '½ смены' : shift.payMode === 'HOURS' ? 'по часам' : 'полная'
@@ -77,17 +78,17 @@ export default function Payroll() {
   </Screen>
 
   const chain = [
-    { op: '', title: `${worked.length} ${plural(worked.length, 'смена', 'смены', 'смен')} × ставка`, sub: 'по ставке на дату смены', value: sheet?.accrued ?? 0, tone: '' },
-    { op: '+', title: 'Премии', sub: bonuses.map(row => row.comment).filter(Boolean).join(', ') || (bonuses.length ? `${bonuses.length} шт.` : 'нет'), value: sheet?.bonuses ?? 0, tone: 'text-ok' },
+    { op: '', icon: <IconSchedule size={16}/>, title: `${worked.length} ${plural(worked.length, 'смена', 'смены', 'смен')} × ставка`, sub: 'по ставке на дату смены', value: sheet?.accrued ?? 0, tone: '' },
+    { op: '+', icon: <IconIncome size={16}/>, title: 'Премии', sub: bonuses.map(row => row.comment).filter(Boolean).join(', ') || (bonuses.length ? `${bonuses.length} шт.` : 'нет'), value: sheet?.bonuses ?? 0, tone: 'text-ok' },
     {
-      op: '−', title: 'Вычеты',
+      op: '−', icon: <IconDeduction size={16}/>, title: 'Вычеты',
       sub: [
         deductions.length ? `${deductions.length} ${plural(deductions.length, 'удержание', 'удержания', 'удержаний')} WB` : '',
         penalties.length ? `${penalties.length} ${plural(penalties.length, 'штраф', 'штрафа', 'штрафов')}` : '',
       ].filter(Boolean).join(' · ') || 'нет',
       value: withheld, tone: 'text-bad-strong',
     },
-    { op: '−', title: 'Выплачено', sub: 'аванс и выплаты', value: sheet?.paid ?? 0, tone: '' },
+    { op: '−', icon: <IconPayout size={16}/>, title: 'Выплачено', sub: 'аванс и выплаты', value: sheet?.paid ?? 0, tone: '' },
   ]
 
   const lines = [
@@ -123,7 +124,7 @@ export default function Payroll() {
       </div>
 
       {chain.map(row => <div key={row.title} className="flex items-center gap-2.5 border-t border-line-soft py-[11px]">
-        <div className="w-[15px] flex-none font-mono text-[13px] text-muted-soft">{row.op}</div>
+        <IconBox tone={row.tone === 'text-ok' ? 'ok' : row.tone ? 'bad' : 'neutral'} size={32}>{row.icon}</IconBox>
         <div className="min-w-0 flex-1">
           <div className="text-row font-medium">{row.title}</div>
           <div className="mt-0.5 truncate text-mono text-muted">{row.sub}</div>
@@ -192,9 +193,10 @@ export default function Payroll() {
     </Card>
 
     <div className="mt-[13px] flex gap-2">
-      <Button className="flex-1" variant="secondary" onClick={() => open('payout', { kind: 'ADVANCE', employeeId: id })}>Аванс</Button>
+      <Button icon={<IconAdvance size={18}/>} className="flex-1" variant="secondary" onClick={() => open('payout', { kind: 'ADVANCE', employeeId: id })}>Аванс</Button>
       <Button
         className="flex-1"
+        icon={<IconPayout size={18}/>}
         onClick={() => {
           if (!monthEnded) { toastWarn(`Остаток можно выплатить после ${lastDay.format('D MMMM')}`); return }
           open('payout', { kind: 'PAYMENT', employeeId: id })
@@ -205,6 +207,6 @@ export default function Payroll() {
       type="button"
       className="tap mt-2 w-full rounded-md border border-dashed border-line-hard py-3.5 text-center text-row font-medium text-accent"
       onClick={() => open('adj', { employeeId: id })}
-    >Добавить премию или штраф</button>
+    ><span className="inline-flex items-center justify-center gap-2"><IconSettings size={18}/>Премия / штраф</span></button>
   </Screen>
 }

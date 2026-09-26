@@ -13,6 +13,7 @@ import { useMonthTotals } from '../features/money/useMonthTotals'
 import { useAlerts } from '../features/home/useAlerts'
 import { badgeOf } from '../entities/notifications'
 import { useToday } from '../features/home/useToday'
+import { useOperationalTasks } from '../features/home/useOperationalTasks'
 import { SetupStrip } from '../features/setup/SetupStrip'
 import { SetupNext } from '../features/setup/SetupNext'
 import { useSetup } from '../features/setup/useSetup'
@@ -38,6 +39,7 @@ export default function Home() {
   const { items: alerts, unread } = useAlerts()
   const today = useToday()
   const setup = useSetup()
+  const operational = useOperationalTasks()
 
   // Новый владелец: в месяце ни операции, ни смены. Нули и пустой график ему ничего
   // не говорят — вместо узкой полоски показываем следующий шаг настройки крупно.
@@ -54,10 +56,10 @@ export default function Home() {
   ]
 
   const quick = [
-    { icon: <IconIncome size={18}/>, label: 'Добавить доход', tone: { bg: c.okTint2, fg: c.ok }, onClick: () => open('op', { kind: 'INCOME' }) },
-    { icon: <IconExpense size={18}/>, label: 'Добавить расход', tone: { bg: c.badTint2, fg: c.badStrong }, onClick: () => open('op', { kind: 'EXPENSE' }) },
-    { icon: <IconDeduction size={18}/>, label: 'Добавить удержание', tone: { bg: c.accentTint, fg: c.accent }, onClick: () => open('newDed') },
-    { icon: <IconAdvance size={18}/>, label: 'Выдать аванс', tone: { bg: c.infoTint2, fg: c.info }, onClick: () => open('payout', { kind: 'ADVANCE' }) },
+    { icon: <IconIncome size={18}/>, label: 'Доход', tone: { bg: c.okTint2, fg: c.ok }, onClick: () => open('op', { kind: 'INCOME' }) },
+    { icon: <IconExpense size={18}/>, label: 'Расход', tone: { bg: c.badTint2, fg: c.badStrong }, onClick: () => open('op', { kind: 'EXPENSE' }) },
+    { icon: <IconDeduction size={18}/>, label: 'Удержание', tone: { bg: c.accentTint, fg: c.accent }, onClick: () => open('newDed') },
+    { icon: <IconAdvance size={18}/>, label: 'Аванс', tone: { bg: c.infoTint2, fg: c.info }, onClick: () => open('payout', { kind: 'ADVANCE' }) },
   ]
 
   return <Screen
@@ -75,7 +77,17 @@ export default function Home() {
         label={`Настройка пункта · ${setup.done} из ${setup.total}`}
         footer={<div className="mt-1 text-center"><TextButton onClick={() => push('/home/setup')}>Все задания</TextButton></div>}
       /></div>
-      : <SetupStrip/>}
+      : setup.done < setup.total ? <SetupStrip/> : operational.tasks.length > 0 ? <Card className="mb-3">
+        <div className="border-b border-line-soft px-[15px] py-3 text-row font-semibold">Сейчас нужно</div>
+        <List>{operational.tasks.map(task => <ListRow
+          key={task.id}
+          leading={<IconBox tone={task.kind === 'income' ? 'warn' : 'bad'}>{task.kind === 'income' ? <IconIncome/> : <IconSchedule/>}</IconBox>}
+          title={task.title} sub={task.sub} chevron align="start"
+          onClick={() => task.kind === 'income'
+            ? open('payoutEntry', { pointId: task.pointId, periodId: task.periodId })
+            : push(`/sched/build?point=${task.pointId}&from=${task.date}`)}
+        />)}</List>
+      </Card> : null}
 
     <Hero
       label={`Чистая прибыль · ${period}`}

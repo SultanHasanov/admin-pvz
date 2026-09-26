@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef } from 'react'
 import { useQueries, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
-import { payoutReminder } from '../../entities/payouts'
+import { scheduledIncomeReminder } from '../../entities/payouts'
 import { buildFeed, payoutAlert, unreadOf, type FeedItem, type FeedRead } from '../../entities/notifications'
 import { rubles } from '../../shared/money'
 import { today } from '../../shared/dates'
@@ -11,6 +11,7 @@ import { listTransactions } from '../../services/finance'
 import { listShiftRequests } from '../../services/requests'
 import { listNotificationReads, markNotificationsRead } from '../../services/notifications'
 import { getPayoutSettings } from '../../services/payoutSettings'
+import { getIncomeSchedule } from '../../services/incomeSchedule'
 import { useMonthTotals } from '../money/useMonthTotals'
 import { useSalarySheets } from '../money/useSalarySheets'
 import { groupHoles, useHoles } from '../schedule/useHoles'
@@ -39,7 +40,7 @@ export function useAlerts() {
   // Выплата WB считается от настоящего сегодня, а не от месяца, открытого в шапке.
   const thisMonth = today().slice(0, 7)
   const lastMonth = dayjs(today()).subtract(1, 'month').format('YYYY-MM')
-  const [deductions, requests, reads, payout, incomeNow, incomeBefore] = useQueries({
+  const [deductions, requests, reads, payout, incomeNow, incomeBefore, incomeSchedule] = useQueries({
     queries: [
       { queryKey: keys.newDeductions, queryFn: () => listNewDeductions(10) },
       { queryKey: keys.requests('open'), queryFn: () => listShiftRequests(['SENT']) },
@@ -47,6 +48,7 @@ export function useAlerts() {
       { queryKey: keys.payoutSettings, queryFn: getPayoutSettings },
       { queryKey: keys.transactions(thisMonth, ''), queryFn: () => listTransactions(thisMonth) },
       { queryKey: keys.transactions(lastMonth, ''), queryFn: () => listTransactions(lastMonth) },
+      { queryKey: keys.incomeSchedule, queryFn: getIncomeSchedule },
     ],
   })
 
@@ -95,13 +97,14 @@ export function useAlerts() {
         unpaid,
       }) : null,
 
-      wbPayout: incomeNow.data && incomeBefore.data ? payoutReminder({
+      wbPayout: incomeNow.data && incomeBefore.data && incomeSchedule.data ? scheduledIncomeReminder({
         today: today(),
         points: points.filter(point => !point.archivedAt && (!pointId || point.id === pointId)),
         entries: [...incomeNow.data, ...incomeBefore.data],
+        settings: incomeSchedule.data,
       }) : null,
     })
-  }, [holes, deductions.data, requests.data, payout.data, salary.sheets, month, pointId, pointName, nameOf, points, incomeNow.data, incomeBefore.data])
+  }, [holes, deductions.data, requests.data, payout.data, salary.sheets, month, pointId, pointName, nameOf, points, incomeNow.data, incomeBefore.data, incomeSchedule.data])
 
   const unread = useMemo(() => unreadOf(items, reads.data ?? []), [items, reads.data])
 

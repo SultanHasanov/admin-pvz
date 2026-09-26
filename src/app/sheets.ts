@@ -19,7 +19,7 @@ export type SheetType =
   // люди и заявки
   | 'rate' | 'req' | 'cantWork'
   // настройки
-  | 'setOrg' | 'setTax' | 'setRate' | 'setPayDays' | 'pointRate'
+  | 'setOrg' | 'setTax' | 'setRate' | 'setPayDays' | 'setIncomeSchedule' | 'pointRate'
 
 /**
  * Параметры шторок. Карта растёт по мере появления шторок; у ещё не описанных
